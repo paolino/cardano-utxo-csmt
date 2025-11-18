@@ -19,6 +19,9 @@ hlint:
     #!/usr/bin/env bash
     hlint app src test CI/rewrite-libs
 
+bench:
+    #!/usr/bin/env bash
+    cabal bench
 unit match="":
     #!/usr/bin/env bash
     # shellcheck disable=SC2050
@@ -42,8 +45,8 @@ CI:
     just build
     just unit
     cabal-fmt -c cardano-utxo-csmt.cabal CI/rewrite-libs/rewrite-libs.cabal
-    fourmolu -m check src app test CI/rewrite-libs
-    hlint -c src app test CI/rewrite-libs
+    fourmolu -m check src app test test-lib CI/rewrite-libs
+    hlint -c src app test test-lib CI/rewrite-libs
 
 build-linux:
     #!/usr/bin/env bash
@@ -54,19 +57,11 @@ build-macos:
     nix build .#macos64.tarball
 build-docker tag='latest':
     #!/usr/bin/env bash
-    nix build .#proxy-docker-image
+    nix build .#docker-image
     docker load < result
     version=$(nix eval --raw .#version)
-    docker image tag ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-proxy:"$version" \
-        "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-proxy:{{ tag }}"
-    docker image tag ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-proxy:"$version" \
-        "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-proxy:latest"
-    nix build .#source-docker-image
-    docker load < result
-    docker image tag ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-source:"$version" \
-        "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-source:{{ tag }}"
-    docker image tag ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-source:"$version" \
-        "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-source:latest"
+    docker image tag ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt:"$version" \
+        "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt:{{ tag }}"
 
 start-docker bg="false":
     #!/usr/bin/env bash
@@ -92,10 +87,7 @@ stop-docker:
 
 push-docker tag='latest':
     #!/usr/bin/env bash
-    docker push "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-source:{{ tag }}"
-    docker push "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-source:latest"
-    docker push "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-proxy:{{ tag }}"
-    docker push "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt-proxy:latest"
+    docker push "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt:{{ tag }}"
 
 release version arch:
     #!/usr/bin/env bash
