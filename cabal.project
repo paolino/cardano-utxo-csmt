@@ -1,0 +1,14 @@
+index-state: 2025-10-01T00:00:00Z
+
+index-state:
+  , hackage.haskell.org 2025-10-01T00:00:00Z
+
+packages:
+  .
+  CI/rewrite-libs
+
+source-repository-package
+  type: git
+  location: https://github.com/paolino/csmt
+  tag: 3e45abeb12aba0b5ca8a4f4f2da6b82ae7de37c9
+  --sha256: sha256-ST3iRdyxXrcyNaKjSWvEPvFTbhsV2lNNuUUG2C18bwo=
