@@ -5,10 +5,10 @@ where
 
 import CSMT.Backend.RocksDB
     ( RunRocksDB (RunRocksDB)
-    , rocksDBCSMT
+    , rocksDBBackend
     , withRocksDB
     )
-import CSMT.Hashes (insert)
+import CSMT.Hashes (insert, mkHash)
 import Codec.CBOR.Decoding
     ( Decoder
     , decodeBreakOr
@@ -147,7 +147,7 @@ insertUTxO
 insertUTxO (RunRocksDB run) mDB = S.mapM_ $ \(txin, term) -> do
     let key = toStrictByteString $ encodeTerm txin
         value' = toStrictByteString $ encodeTerm term
-    run $ insert rocksDBCSMT key value'
+    run $ insert (rocksDBBackend mkHash) key value'
     case mDB of
         Just db -> put db key value'
         Nothing -> return ()
@@ -160,26 +160,6 @@ start = parse Right d decodeMapLenIndef
     d _ s r _ () = do
         S.yield r
         Right <$> s
-
--- data TxIn = TxIn
---     { _txId :: ByteString
---     , _txIx :: Word32
---     }
-
--- instance Show TxIn where
---     show (TxIn txId txIx) =
---         BC.unpack $ convertToBase Base16 txId <> "#" <> BC.pack (show txIx)
-
--- decodeTxIn :: Decoder s TxIn
--- decodeTxIn = do
---     decodeListLenOf 2
---     TxIn <$> decodeBytes <*> decodeWord32
-
--- _encodeTxIn :: TxIn -> Encoding
--- _encodeTxIn (TxIn txId txIx) =
---     encodeListLen 2
---         <> encodeBytes txId
---         <> encodeWord32 txIx
 
 elements
     :: Stream (Of ByteString) IO (Either DeserialiseFailure r)

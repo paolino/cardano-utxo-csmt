@@ -10,5 +10,5 @@ packages:
 source-repository-package
   type: git
   location: https://github.com/paolino/csmt
-  tag: 3e45abeb12aba0b5ca8a4f4f2da6b82ae7de37c9
-  --sha256: sha256-ST3iRdyxXrcyNaKjSWvEPvFTbhsV2lNNuUUG2C18bwo=
+  tag: 634b75618d8fddf4e77c47889ac752a0de8f9d4c
+  --sha256: sha256-6ia6pFfIYmgmNueDJTLN1sv6XYDRvrjq3Z51LL6nIaI=
