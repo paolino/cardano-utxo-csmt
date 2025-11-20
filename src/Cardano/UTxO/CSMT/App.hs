@@ -25,7 +25,7 @@ import Control.Monad.ST (RealWorld, stToIO)
 import Data.ByteString (ByteString)
 import Data.Function ((&))
 import Data.Functor (($>))
-import Database.RocksDB (Config (..), DB, put, withDB)
+import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 import OptEnvConf (Parser, runParser, setting)
 import OptEnvConf.Setting
     ( auto
@@ -47,7 +47,6 @@ import System.IO (IOMode (..), withFile)
 data Option = Option
     { optInputFile :: FilePath
     , optCSMTPath :: FilePath
-    , optKVDBPath :: Maybe FilePath
     , optMaxEntries :: Maybe Int
     }
 
@@ -73,18 +72,6 @@ optCSMTPathParser =
         , option
         ]
 
-optKVDBPathParser :: Parser (Maybe FilePath)
-optKVDBPathParser =
-    setting
-        [ short 'k'
-        , long "kvdb-path"
-        , help "Path to the KVDB database (optional)"
-        , metavar "DIR"
-        , reader (Just <$> str)
-        , option
-        , value Nothing
-        ]
-
 optMaxEntriesParser :: Parser (Maybe Int)
 optMaxEntriesParser =
     setting
@@ -104,54 +91,64 @@ main = do
             $ Option
                 <$> optInputFileParser
                 <*> optCSMTPathParser
-                <*> optKVDBPathParser
                 <*> optMaxEntriesParser
     readUTxOCBORIncremental options
-
-kvConfig :: Config
-kvConfig =
-    Config
-        { createIfMissing = True
-        , errorIfExists = False
-        , paranoidChecks = False
-        , maxFiles = Nothing
-        , prefixLength = Nothing
-        , bloomFilter = False
-        }
 
 readUTxOCBORIncremental :: Option -> IO ()
 readUTxOCBORIncremental
     Option
         { optInputFile
         , optCSMTPath
-        , optKVDBPath
         , optMaxEntries
         } =
-        withOptionalDB $ \mKVDB -> do
-            withRocksDB optCSMTPath $ \run -> do
-                withFile optInputFile ReadMode $ \handle ->
-                    SB.hGetContents handle
-                        & SB.toChunks
-                        & start
-                        & elements
-                        & part
-                        & insertUTxO run mKVDB
+        withRocksDB optCSMTPath $ \run -> do
+            withFile optInputFile ReadMode $ \handle ->
+                SB.hGetContents handle
+                    & SB.toChunks
+                    & start
+                    & elements
+                    & reportEvery 10000
+                    & part
+                    & insertUTxO run
       where
-        withOptionalDB f = case optKVDBPath of
-            Just path -> withDB path kvConfig $ f . Just
-            Nothing -> f Nothing
         part = maybe ($> ()) S.take optMaxEntries
 
 insertUTxO
-    :: RunRocksDB -> Maybe DB -> Stream (Of (Term, Term)) IO () -> IO ()
-insertUTxO (RunRocksDB run) mDB = S.mapM_ $ \(txin, term) -> do
+    :: RunRocksDB -> Stream (Of (Term, Term)) IO () -> IO ()
+insertUTxO (RunRocksDB run) = S.mapM_ $ \(txin, term) -> do
     let key = toStrictByteString $ encodeTerm txin
         value' = toStrictByteString $ encodeTerm term
     run $ insert (rocksDBBackend mkHash) key value'
-    case mDB of
-        Just db -> put db key value'
-        Nothing -> return ()
 
+reportEvery :: Int -> Stream (Of a) IO b -> Stream (Of a) IO b
+reportEvery n s0 = do
+    now <- liftIO getCurrentTime
+    go 0 now s0
+  where
+    go :: Int -> UTCTime -> Stream (Of a) IO b -> Stream (Of a) IO b
+    go i pt s = effect $ do
+        mp <- S.next s
+        pure $ case mp of
+            Left r -> return r
+            Right (x, rest) -> do
+                nt <-
+                    liftIO
+                        $ if (i + 1) `mod` n == 0
+                            then do
+                                ct <- getCurrentTime
+                                let diff = ct `diffUTCTime` pt
+                                putStrLn
+                                    $ "Processed "
+                                        <> show (i + 1)
+                                        <> " UTxOs ("
+                                        <> show @Double
+                                            (fromIntegral n / realToFrac diff)
+                                        <> " UTxOs/second)"
+                                pure ct
+                            else pure pt
+
+                S.yield x
+                go (i + 1) nt rest
 start
     :: Stream (Of ByteString) IO r
     -> Stream (Of ByteString) IO (Either DeserialiseFailure r)
