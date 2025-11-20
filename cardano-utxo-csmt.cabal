@@ -57,7 +57,17 @@ library
   exposed-modules:  Cardano.UTxO.CSMT.App
   build-depends:
     , base
+    , binary
+    , bytestring
+    , cborg
+    , containers
     , csmt
+    , memory
+    , opt-env-conf
+    , rocksdb-haskell-jprupp
+    , serialise
+    , streaming
+    , streaming-bytestring
 
   hs-source-dirs:   src
   default-language: Haskell2010

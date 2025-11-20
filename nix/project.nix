@@ -19,6 +19,7 @@ let
       pkgs.just
       pkgs.nixfmt-classic
       pkgs.shellcheck
+      pkgs.cachix
 
     ];
     shellHook = ''

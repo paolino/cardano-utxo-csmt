@@ -5,3 +5,4 @@ secrets
 result
 .cabal-fmt*
 testdb
+dev-profile*
