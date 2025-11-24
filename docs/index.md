@@ -70,7 +70,8 @@ nix bundle github:paolino/cardano-utxo-csmt -o utxo-csmt
 ## Demo
 
 ```asciinema-player
-{
-"file": "assets/ingestion.cast"
+{ "file": "assets/ingestion.cast"
+, "mkap_theme": "none"
+, "cols": 100
 }
 ```
