@@ -46,13 +46,7 @@ CI:
     fourmolu -m check src app test test-lib
     hlint -c src app test test-lib
 
-build-linux:
-    #!/usr/bin/env bash
-    nix build .#linux64.tarball
 
-build-macos:
-    #!/usr/bin/env bash
-    nix build .#macos64.tarball
 build-docker tag='latest':
     #!/usr/bin/env bash
     nix build .#docker-image

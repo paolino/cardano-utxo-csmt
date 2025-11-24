@@ -8,3 +8,7 @@ testdb
 dev-profile*
 *.bak
 site
+output-docker-image
+.gitignore
+cardano-utxo-csmt-exe-cardano-utxo-csmt-arx
+utxo-csmt

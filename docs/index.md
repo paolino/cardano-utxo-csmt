@@ -20,13 +20,45 @@ Cardano UTxOs CSMT is an HTTP service that
 
 ### Docker images
 
-Images are available as CI artifacts [here](https://github.com/paolino/cardano-utxo-csmt/actions)
+Docker images are available as CI artifacts. Get the latest image from the latest successful run of the `cardano-utxo-csmt-image` workflow.
 
+```bash
+gh run download -n cardano-utxo-csmt-image
+docker load < output-docker-image
+docker run ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt
+```
+
+### Nix
 You can build the project using Nix, more instructions are in the plans.
+
+Setup caching with Cachix:
 
 ```bash
 nix shell nixpkgs#cachix -c cachix use paolino
-nix shell github:paolino/cardano-utxo-csmt --refresh
+```
+
+To get a shell with the project and its dependencies, run:
+
+```bash
+nix shell github:paolino/cardano-utxo-csmt
+```
+
+To build the docker image, run:
+
+
+```bash
+nix build github:paolino/cardano-utxo-csmt#docker-image
+docker load < result
+version=$(nix eval --raw github:paolino/cardano-utxo-csmt#version)
+docker run "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt:$version"
+
+```
+
+To build an arx for linux, run:
+
+```bash
+nix bundle github:paolino/cardano-utxo-csmt -o utxo-csmt
+./utxo-csmt
 ```
 
 ## Current status
