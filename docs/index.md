@@ -34,5 +34,7 @@ nix shell github:paolino/cardano-utxo-csmt --refresh
 ## Demo
 
 ```asciinema-player
-  {"file":"assets/ingestion.cast"}
+{
+"file": "assets/ingestion.cast"
+}
 ```
