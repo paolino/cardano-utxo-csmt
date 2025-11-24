@@ -37,7 +37,7 @@ unit match="":
 
 build:
     #!/usr/bin/env bash
-    cabal build all --enable-tests
+    cabal build all --enable-tests --enable-benchmarks
 
 CI:
     #!/usr/bin/env bash
