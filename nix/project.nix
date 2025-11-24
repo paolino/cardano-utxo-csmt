@@ -1,4 +1,4 @@
-{ indexState, pkgs, ... }:
+{ indexState, pkgs, asciinema, mkdocs, ... }:
 
 let
   libOverlay = { lib, pkgs, ... }: { };
@@ -19,8 +19,12 @@ let
       pkgs.just
       pkgs.nixfmt-classic
       pkgs.shellcheck
-      pkgs.cachix
-
+      pkgs.mkdocs
+      mkdocs.mkdocs-asciinema-player
+      mkdocs.mkdocs-markdown-callouts
+      asciinema.compress
+      asciinema.resize
+      pkgs.asciinema
     ];
     shellHook = ''
       echo "Entering shell for cardano-utxo-csmt CLI development"

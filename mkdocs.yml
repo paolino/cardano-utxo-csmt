@@ -1,0 +1,9 @@
+site_name: Cardano UTXO CSMT Documentation
+site_url: https://github.com/paolino/cardano-utxo-csmt/
+
+markdown_extensions:
+  - callouts
+
+plugins:
+  - search
+  - asciinema-player

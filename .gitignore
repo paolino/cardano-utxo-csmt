@@ -6,3 +6,4 @@ result
 .cabal-fmt*
 testdb
 dev-profile*
+*.bak
