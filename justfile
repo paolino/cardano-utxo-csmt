@@ -7,17 +7,15 @@ format:
     #!/usr/bin/env bash
     # shellcheck disable=SC2034
     for i in {1..3}; do
-        fourmolu -i src app test test-lib bench CI/rewrite-libs
+        fourmolu -i src app test test-lib bench
     done
-    cabal-fmt -i cardano-utxo-csmt.cabal CI/rewrite-libs/rewrite-libs.cabal
+    cabal-fmt -i cardano-utxo-csmt.cabal
     nixfmt ./*.nix
     nixfmt nix/*.nix
-    nixfmt CI/rewrite-libs/*.nix
-    nixfmt CI/rewrite-libs/nix/*.nix
 
 hlint:
     #!/usr/bin/env bash
-    hlint app src test CI/rewrite-libs
+    hlint app src test test-lib bench
 
 bench:
     #!/usr/bin/env bash
@@ -44,9 +42,9 @@ CI:
     set -euo pipefail
     just build
     just unit
-    cabal-fmt -c cardano-utxo-csmt.cabal CI/rewrite-libs/rewrite-libs.cabal
-    fourmolu -m check src app test test-lib CI/rewrite-libs
-    hlint -c src app test test-lib CI/rewrite-libs
+    cabal-fmt -c cardano-utxo-csmt.cabal
+    fourmolu -m check src app test test-lib
+    hlint -c src app test test-lib
 
 build-linux:
     #!/usr/bin/env bash

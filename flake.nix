@@ -28,22 +28,11 @@
             ];
             inherit system;
           };
-          rewrite-libs = import ./CI/rewrite-libs/rewrite-libs.nix {
-            inherit system;
-            inherit (inputs) nixpkgs flake-utils haskellNix;
-          };
           project = import ./nix/project.nix {
             indexState = "2025-08-07T00:00:00Z";
             inherit pkgs;
             mkdocs = mkdocs.packages.${system};
             asciinema = asciinema.packages.${system};
-          };
-
-          linux-artifacts =
-            import ./nix/linux-artifacts.nix { inherit pkgs version project; };
-          macos-artifacts = import ./nix/macos-artifacts.nix {
-            inherit pkgs project version;
-            rewrite-libs = rewrite-libs.packages.default;
           };
 
           docker-image = import ./nix/docker-image.nix {
@@ -55,8 +44,6 @@
           info.packages = { inherit version; };
           fullPackages = lib.mergeAttrsList [
             project.packages
-            linux-artifacts.packages
-            macos-artifacts.packages
             info.packages
             docker.packages
           ];

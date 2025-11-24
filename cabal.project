@@ -5,7 +5,6 @@ index-state:
 
 packages:
   .
-  CI/rewrite-libs
 
 source-repository-package
   type: git
