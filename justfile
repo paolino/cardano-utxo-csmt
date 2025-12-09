@@ -3,6 +3,9 @@
 # shellcheck disable=SC2121
 set unstable := true
 
+default:
+    just --list
+
 format:
     #!/usr/bin/env bash
     # shellcheck disable=SC2034
@@ -101,3 +104,16 @@ integration-all:
     set -euo pipefail
     cabal test cardano-utxo-csmt-integration-test \
         --test-show-details=direct
+
+# Utility to dump UTxO from a preprod cardano node socket and load it into the CSMT UTxO database
+dump-and-load-utxo socket-path address:
+    #!/usr/bin/env bash
+    nix develop -c cardano-cli query utxo \
+        --socket-path "{{ socket-path }}" \
+        --testnet-magic 1 \
+        --address "{{ address }}" \
+        --output-cbor-bin > test/assets/utxo.bin
+    nix shell -c cardano-utxo-csmt \
+        -i test/assets/utxo.bin \
+        -c test/assets/db \
+        -n 5000 # depending on the address this is an arbitrary number
