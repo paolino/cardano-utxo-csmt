@@ -1,27 +1,32 @@
-{ indexState, pkgs, asciinema, mkdocs, ... }:
+{CHaP, indexState, pkgs,  mkdocs, asciinema, ... }:
 
 let
-  libOverlay = { lib, pkgs, ... }: { };
-
+  indexTool = { index-state = indexState; };
+  fix-libs = { lib, pkgs, ... }: {
+    # Use the VRF fork of libsodium
+    # packages.cardano-crypto-praos.components.library.pkgconfig =
+    #   lib.mkForce [ [ pkgs.libsodium-vrf ] ];
+    # packages.cardano-crypto-class.components.library.pkgconfig =
+    #   lib.mkForce [[ pkgs.libsodium-vrf pkgs.secp256k1 pkgs.libblst ]];
+  };
   shell = { pkgs, ... }: {
     tools = {
-      cabal = { index-state = indexState; };
-      cabal-fmt = { index-state = indexState; };
-      haskell-language-server = { index-state = indexState; };
-      hoogle = { index-state = indexState; };
-      fourmolu = { index-state = indexState; };
-      hlint = { index-state = indexState; };
-      implicit-hie = { index-state = indexState; };
+      cabal = indexTool;
+      cabal-fmt = indexTool;
+      haskell-language-server = indexTool;
+      hoogle = indexTool;
+      fourmolu = indexTool;
+      hlint = indexTool;
+      implicit-hie = indexTool;
     };
     withHoogle = true;
     buildInputs = [
-      pkgs.gitAndTools.git
       pkgs.just
       pkgs.nixfmt-classic
       pkgs.shellcheck
       pkgs.mkdocs
-      mkdocs.mkdocs-asciinema-player
-      mkdocs.mkdocs-markdown-callouts
+      mkdocs.asciinema-plugin
+      mkdocs.markdown-callouts
       asciinema.compress
       asciinema.resize
       pkgs.asciinema
@@ -31,24 +36,13 @@ let
     '';
   };
 
-  fullyStaticOptions = { pkgs, ... }:
-    let libs = with pkgs; [ zlib openssl libffi gmp6 ];
-    in {
-      enableShared = false;
-      enableStatic = true;
-      configureFlags = map (l: "--ghc-option=-optl=-L${l}/lib") (libs);
-    };
-  musl = { pkgs, ... }: {
-    packages.cardano-utxo-csmt.components.exes.cardano-utxo-csmt =
-      (fullyStaticOptions { inherit pkgs; });
-    doHaddock = false;
-  };
   mkProject = ctx@{ lib, pkgs, ... }: {
     name = "cardano-utxo-csmt";
     src = ./..;
     compiler-nix-name = "ghc984";
     shell = shell { inherit pkgs; };
-    modules = [ libOverlay ];
+    modules = [ fix-libs ];
+    inputMap = { "https://chap.intersectmbo.org/" = CHaP; };
   };
 
   project = pkgs.haskell-nix.cabalProject' mkProject;
@@ -61,5 +55,4 @@ in {
   packages.bench = project.hsPkgs.cardano-utxo-csmt.components.benchmarks.bench;
   packages.unit-tests =
     project.hsPkgs.cardano-utxo-csmt.components.tests.unit-tests;
-  musl64 = project.projectCross.musl64.hsPkgs;
 }
