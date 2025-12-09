@@ -1,5 +1,6 @@
 {
-  description = "CSMT UTxO, UTxO tracking via compact sparse merkle trees";
+  description =
+    "CSMT UTxO, Cardano UTxO tracking via compact sparse merkle trees";
   nixConfig = {
     extra-substituters = [ "https://cache.iog.io" ];
     extra-trusted-public-keys =
@@ -11,7 +12,7 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     mkdocs.url = "github:paolino/dev-assets?dir=mkdocs";
     asciinema.url = "github:paolino/dev-assets?dir=asciinema";
-    cardano-node-runtime.url = "github:IntersectMBO/cardano-node?ref=10.1.4";
+    cardano-cli.url = "github:IntersectMBO/cardano-cli";
     iohkNix = {
       url = "github:input-output-hk/iohk-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -23,14 +24,13 @@
   };
 
   outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, mkdocs, asciinema
-    , cardano-node-runtime, iohkNix, CHaP, ... }:
+    , cardano-cli, iohkNix, CHaP, ... }:
     let
       version = self.dirtyShortRev or self.shortRev;
       parts = flake-parts.lib.mkFlake { inherit inputs; } {
         systems = [ "x86_64-linux" "aarch64-darwin" ];
         perSystem = { system, ... }:
           let
-            node = cardano-node-runtime.project.${system};
             pkgs = import nixpkgs {
               overlays = [
                 iohkNix.overlays.crypto
@@ -44,6 +44,7 @@
               indexState = "2025-08-07T00:00:00Z";
               inherit CHaP;
               inherit pkgs;
+              cardano-cli = cardano-cli.packages.${system};
               mkdocs = mkdocs.packages.${system};
               asciinema = asciinema.packages.${system};
             };
@@ -55,7 +56,6 @@
 
           in rec {
             packages = {
-              inherit (node.pkgs) cardano-node cardano-cli;
               inherit (project.packages) cardano-utxo-csmt bench unit-tests;
               inherit docker-image;
               default = packages.cardano-utxo-csmt;

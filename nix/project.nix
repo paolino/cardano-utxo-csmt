@@ -1,14 +1,15 @@
-{CHaP, indexState, pkgs,  mkdocs, asciinema, ... }:
+{ CHaP, indexState, pkgs, mkdocs, asciinema, cardano-cli, ... }:
 
 let
   indexTool = { index-state = indexState; };
-  fix-libs = { lib, pkgs, ... }: {
-    # Use the VRF fork of libsodium
-    # packages.cardano-crypto-praos.components.library.pkgconfig =
-    #   lib.mkForce [ [ pkgs.libsodium-vrf ] ];
-    # packages.cardano-crypto-class.components.library.pkgconfig =
-    #   lib.mkForce [[ pkgs.libsodium-vrf pkgs.secp256k1 pkgs.libblst ]];
-  };
+  fix-libs = { lib, pkgs, ... }:
+    {
+      # Use the VRF fork of libsodium
+      # packages.cardano-crypto-praos.components.library.pkgconfig =
+      #   lib.mkForce [ [ pkgs.libsodium-vrf ] ];
+      # packages.cardano-crypto-class.components.library.pkgconfig =
+      #   lib.mkForce [[ pkgs.libsodium-vrf pkgs.secp256k1 pkgs.libblst ]];
+    };
   shell = { pkgs, ... }: {
     tools = {
       cabal = indexTool;
@@ -30,6 +31,7 @@ let
       asciinema.compress
       asciinema.resize
       pkgs.asciinema
+      cardano-cli."cardano-cli:exe:cardano-cli"
     ];
     shellHook = ''
       echo "Entering shell for cardano-utxo-csmt CLI development"
