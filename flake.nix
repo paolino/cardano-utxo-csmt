@@ -41,7 +41,7 @@
               inherit system;
             };
             project = import ./nix/project.nix {
-              indexState = "2025-08-07T00:00:00Z";
+              indexState = "2025-12-07T00:00:00Z";
               inherit CHaP;
               inherit pkgs;
               cardano-cli = cardano-cli.packages.${system};

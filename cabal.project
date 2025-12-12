@@ -1,13 +1,30 @@
-index-state: 2025-10-01T00:00:00Z
+index-state: 2025-12-07T00:00:00Z
 
 index-state:
-  , hackage.haskell.org 2025-10-01T00:00:00Z
+  , hackage.haskell.org 2025-12-07T00:00:00Z
 
 packages:
   .
+
+repository cardano-haskell-packages
+  url: https://chap.intersectmbo.org/
+  secure: True
+  root-keys:
+    3e0cce471cf09815f930210f7827266fd09045445d65923e6d0238a6cd15126f
+    443abb7fb497a134c343faf52f0b659bd7999bc06b7f63fa76dc99d631f9bea1
+    a86a1f6ce86c449c46666bda44268677abf29b5b2d2eb5ec7af903ec2f117a82
+    bcec67e8e99cabfa7764d75ad9b158d72bfacf70ca1d0ec8bc6b4406d1bf8413
+    c00aae8461a256275598500ea0e187588c35a5d5d7454fb57eac18d9edb86a56
+    d4a35cd3121aa00d18544bb0ac01c3e1691d618f462c46129271bccf39f7e8ee
 
 source-repository-package
   type: git
   location: https://github.com/paolino/csmt
   tag: 634b75618d8fddf4e77c47889ac752a0de8f9d4c
   --sha256: sha256-6ia6pFfIYmgmNueDJTLN1sv6XYDRvrjq3Z51LL6nIaI=
+
+source-repository-package
+  type: git
+  location: https://github.com/paolino/cardano-read-ledger
+  tag: 2a9521e9282e4955f5454847c3f87eb7e7ac1730
+  --sha256: sha256-g4pY67U7PqJ8DIKmhYImMs7FW3NmQFKPl4PYqMQT+sE=

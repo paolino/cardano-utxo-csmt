@@ -2,14 +2,12 @@
 
 let
   indexTool = { index-state = indexState; };
-  fix-libs = { lib, pkgs, ... }:
-    {
-      # Use the VRF fork of libsodium
-      # packages.cardano-crypto-praos.components.library.pkgconfig =
-      #   lib.mkForce [ [ pkgs.libsodium-vrf ] ];
-      # packages.cardano-crypto-class.components.library.pkgconfig =
-      #   lib.mkForce [[ pkgs.libsodium-vrf pkgs.secp256k1 pkgs.libblst ]];
-    };
+  fix-libs = { lib, pkgs, ... }: {
+    packages.cardano-crypto-praos.components.library.pkgconfig =
+      lib.mkForce [ [ pkgs.libsodium-vrf ] ];
+    packages.cardano-crypto-class.components.library.pkgconfig =
+      lib.mkForce [[ pkgs.libsodium-vrf pkgs.secp256k1 pkgs.libblst ]];
+  };
   shell = { pkgs, ... }: {
     tools = {
       cabal = indexTool;
@@ -26,6 +24,7 @@ let
       pkgs.nixfmt-classic
       pkgs.shellcheck
       pkgs.mkdocs
+      mkdocs.from-nixpkgs
       mkdocs.asciinema-plugin
       mkdocs.markdown-callouts
       asciinema.compress
