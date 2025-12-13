@@ -56,4 +56,6 @@ in {
   packages.bench = project.hsPkgs.cardano-utxo-csmt.components.benchmarks.bench;
   packages.unit-tests =
     project.hsPkgs.cardano-utxo-csmt.components.tests.unit-tests;
+  packages.cardano-utxo-chainsync =
+    project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-chainsync;
 }

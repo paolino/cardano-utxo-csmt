@@ -54,16 +54,49 @@ common warnings
 library
   import:           warnings
   other-modules:    Paths_cardano_utxo_csmt
-  exposed-modules:  Cardano.UTxO.CSMT.App
+  exposed-modules:
+    Cardano.N2N.Client.Application.BlockFetch
+    Cardano.N2N.Client.Application.ChainSync
+    Cardano.N2N.Client.Application.KeepAlive
+    Cardano.N2N.Client.Application.Metrics
+    Cardano.N2N.Client.Application.Options
+    Cardano.N2N.Client.Application.Run
+    Cardano.N2N.Client.Application.UTxOs
+    Cardano.N2N.Client.Ouroboros.Application
+    Cardano.N2N.Client.Ouroboros.Codecs
+    Cardano.N2N.Client.Ouroboros.Connection
+    Cardano.N2N.Client.Ouroboros.Types
+    Cardano.UTxO.CSMT.App
+
   build-depends:
+    , ansi-terminal
+    , async
     , base
     , bytestring
+    , cardano-ledger-api
+    , cardano-ledger-binary
+    , cardano-ledger-byron
+    , cardano-read-ledger
     , cborg
+    , contra-tracer
     , csmt
+    , memory
+    , network
+    , network-mux
     , opt-env-conf
+    , ouroboros-consensus
+    , ouroboros-consensus-cardano
+    , ouroboros-consensus-protocol
+    , ouroboros-network
+    , ouroboros-network-api
+    , ouroboros-network-framework
+    , ouroboros-network-protocols
+    , serialise
     , streaming
     , streaming-bytestring
+    , strict-stm
     , time
+    , typed-protocols
 
   hs-source-dirs:   src
   default-language: Haskell2010
@@ -73,6 +106,16 @@ executable cardano-utxo-csmt
   import:           warnings
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
   main-is:          app/cli/main.hs
+  build-depends:
+    , base
+    , cardano-utxo-csmt
+
+  default-language: Haskell2010
+
+executable cardano-utxo-chainsync
+  import:           warnings
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
+  main-is:          app/chainsync/main.hs
   build-depends:
     , base
     , cardano-utxo-csmt
