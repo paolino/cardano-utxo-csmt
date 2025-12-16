@@ -75,3 +75,5 @@ nix bundle github:paolino/cardano-utxo-csmt -o utxo-csmt
 , "cols": 100
 }
 ```
+
+<script type="text/javascript">window.$crisp=[];window.CRISP_WEBSITE_ID="72a6d442-f78e-44b5-ac02-fca35c7d3a76";(function(){d=document;s=d.createElement("script");s.src="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();</script>
