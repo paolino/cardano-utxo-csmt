@@ -34,9 +34,11 @@ import Ouroboros.Network.Protocol.BlockFetch.Client
 
 newtype EventQueueLength = EventQueueLength Int
     deriving (Show)
+
 nextChainRange
     :: MonadSTM m
-    => StrictTBQueue m Event -> STM m (ChainRange Point, EventQueueLength)
+    => StrictTBQueue m Event
+    -> STM m (ChainRange Point, EventQueueLength)
 nextChainRange events = do
     xs <- mapMaybe getPoint <$> flushTBQueue events
     case xs of
