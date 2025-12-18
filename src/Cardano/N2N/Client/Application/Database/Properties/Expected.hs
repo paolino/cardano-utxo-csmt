@@ -33,25 +33,27 @@ module Cardano.N2N.Client.Application.Database.Properties.Expected
     , rollbackTip
     , forwardFinality
     , expectedAllOpposites
-    , rollbackFinality
     )
 where
 
 import Cardano.N2N.Client.Application.Database.Interface
     ( Database
     , Dump (..)
+    , Event (..)
     , Operation (..)
+    , ProgressK (..)
+    , Update (..)
+    , UpdateBox (..)
+    , UpdateResult (..)
     , dumpDatabase
     )
 import Cardano.N2N.Client.Application.Database.Interface qualified as Interface
-import Control.Monad (when)
 import Control.Monad.Reader (ReaderT, asks)
 import Control.Monad.State
-    ( MonadState (put)
+    ( MonadState (..)
     , MonadTrans (..)
     , StateT
     , gets
-    , modify
     )
 import Data.Foldable (Foldable (..))
 import Ouroboros.Network.Point (WithOrigin (..))
@@ -104,7 +106,10 @@ emptyExpected =
 type WithExpected m slot key value =
     ReaderT
         (Context m slot key value)
-        (StateT (Expected slot key value) m)
+        (TrackingExpected m slot key value)
+
+type TrackingExpected m slot key value =
+    StateT (Expected slot key value, UpdateBox m slot key value) m
 
 -- | Access the generator from the context
 asksGenerator
@@ -129,7 +134,7 @@ getDump
     :: PropertyConstraints m slot key value
     => PropertyWithExpected m slot key value (Dump slot key value)
 getDump = do
-    keys <- lift . lift $ gets expectedAssocs
+    keys <- lift . lift $ gets $ expectedAssocs . fst
     runDb $ dumpDatabase $ fmap fst keys
 
 -- | Provide an expected opposite operation
@@ -137,13 +142,13 @@ expectedOpposite
     :: (Eq key, Monad m)
     => Operation key value
     -> PropertyWithExpected m slot key value (Operation key value)
-expectedOpposite op = lift . lift $ gets $ \expct -> opposite expct op
+expectedOpposite op = lift . lift $ gets $ \(expct, _) -> opposite expct op
 
 expectedAllOpposites
     :: Monad m
     => PropertyWithExpected m slot key value [Operation key value]
 expectedAllOpposites = do
-    opps <- lift . lift $ gets expectedOpposites
+    opps <- lift . lift $ gets $ \(expct, _) -> expectedOpposites expct
     pure $ concatMap snd opps
 
 -- | Proxy to database 'getTip'
@@ -206,19 +211,23 @@ expectedForward old@Expected{expectedTip, expectedFinality} slot ops
 
 -- | Proxy to database 'forward' that also updates expected state
 forwardTip
-    :: PropertyConstraints m slot key value
+    :: forall m slot key value
+     . PropertyConstraints m slot key value
     => slot
     -> [Operation key value]
     -> PropertyWithExpected m slot key value ()
-forwardTip slot ops = do
-    runDb $ \db -> Interface.forwardTip db slot ops
-    lift . lift $ modify $ \ex -> expectedForward ex slot ops
+forwardTip slot ops = lift . lift $ do
+    (ex, UpdateBox next) <- get
+    truncating next $ \case
+        TakeEvent update -> do
+            cont <- lift $ update (ForwardTip slot ops)
+            put (expectedForward ex slot ops, cont)
 
 expectedRollback
     :: (Eq key, Ord slot)
     => Expected slot key value
     -> WithOrigin slot
-    -> Maybe (Expected slot key value)
+    -> Expected slot key value
 expectedRollback
     old@Expected
         { expectedAssocs = assocs
@@ -227,37 +236,34 @@ expectedRollback
         , expectedTip
         }
     (At slot)
-        | At slot >= expectedTip = Just old
+        | At slot >= expectedTip = old
         | At slot < expectedTip && At slot >= expectedFinality =
             let
                 (ops, newOpposites) = break (\(slt, _) -> slt <= slot) opposites
                 newAssocs = applyOperations assocs $ ops >>= snd
             in
-                Just
-                    Expected
-                        { expectedAssocs = newAssocs
-                        , expectedTip = At slot
-                        , expectedFinality
-                        , expectedOpposites = newOpposites
-                        }
-        | otherwise = Nothing
-expectedRollback Expected{expectedFinality = expectedFinality} Origin
-    | Origin >= expectedFinality = Just emptyExpected
-    | otherwise = Nothing
+                Expected
+                    { expectedAssocs = newAssocs
+                    , expectedTip = At slot
+                    , expectedFinality
+                    , expectedOpposites = newOpposites
+                    }
+        | otherwise = emptyExpected
+expectedRollback _ Origin =
+    emptyExpected
 
 -- | Proxy to database 'rollback' that also updates expected state
 rollbackTip
-    :: PropertyConstraints m slot key value
+    :: forall m slot key value
+     . PropertyConstraints m slot key value
     => WithOrigin slot
-    -> PropertyWithExpected m slot key value Bool
-rollbackTip newTip = do
-    r <- runDb $ \db -> Interface.rollbackTip db newTip
-    when r $ do
-        lift . lift $ modify $ \ex ->
-            case expectedRollback ex newTip of
-                Just ex' -> ex'
-                Nothing -> error "rollback: invalid rollback attempted"
-    pure r
+    -> PropertyWithExpected m slot key value ()
+rollbackTip newTip = lift . lift $ do
+    (ex, UpdateBox next) <- get
+    truncating next $ \case
+        TakeEvent update -> do
+            cont <- lift $ update (RollbackTip newTip)
+            put (expectedRollback ex newTip, cont)
 
 expectedProgressFinality
     :: Ord slot
@@ -280,17 +286,26 @@ expectedProgressFinality
 
 -- | Proxy to database 'progressFinality' that also updates expected state
 forwardFinality
-    :: PropertyConstraints m slot key value
+    :: forall m slot key value
+     . PropertyConstraints m slot key value
     => slot
     -> PropertyWithExpected m slot key value ()
-forwardFinality slot = do
-    runDb $ \db -> Interface.forwardFinality db slot
-    lift . lift $ modify $ \ex -> expectedProgressFinality ex slot
+forwardFinality slot = lift . lift $ do
+    (ex, UpdateBox next) <- get
+    truncating next $ \case
+        TakeEvent update -> do
+            cont <- lift $ update (ForwardFinality slot)
+            put (expectedProgressFinality ex slot, cont)
 
--- | Proxy to database 'rollbackFinality' that also updates expected state
-rollbackFinality
-    :: PropertyConstraints m slot key value
-    => PropertyWithExpected m slot key value ()
-rollbackFinality = do
-    runDb $ \db -> Interface.rollbackFinality db
-    lift . lift $ put emptyExpected
+truncating
+    :: Monad m
+    => UpdateResult p m slot key value
+    -> ( Update 'ProgressT m slot key value
+         -> TrackingExpected m slot key value a
+       )
+    -> TrackingExpected m slot key value a
+truncating (Rewind (Truncate truncateDB)) p = do
+    pe <- lift truncateDB
+    case pe of
+        Progress e -> p e
+truncating (Progress e) p = p e

@@ -11,26 +11,14 @@ module Cardano.N2N.Client.Application.Database.Properties
     , populateWithSomeContent
     , propertyForwardFinalityAfterFinalityReduceTheRollbackWindow
     , propertyForwardFinalityBeyondTipSetsFinalityAsTip
-    , propertyRollbackFinalityTruncatesTheDatabase
+    , propertyRollbackBeforeFinalityTruncatesTheDatabase
     )
 where
-
--- ( propertyInitialTipIsNull
--- , propertyRollbackAfterTipDoesNothing
--- , propertyRollbackToSlotBeforeTipTruncatesSlotsAfterIt
--- , Generator (..)
--- , Context
--- , propertyTruncateAfterTipTruncatesSetsFinalityAsTip
--- , propertyTruncateAtSlotBeforeTheTipMovesFinality
--- , propertyRollbackBeforeFinalityTruncatesTheDatabase
--- , propertyTruncateBeforeFinalitySlotIsNoOp
--- , propertyForwardAfterTipOperatesAsExpected
--- , propertyForwardBeforeTipIsNoOp
--- )
 
 import Cardano.N2N.Client.Application.Database.Interface
     ( Dump (..)
     , Operation (..)
+    , emptyDump
     )
 import Cardano.N2N.Client.Application.Database.Properties.Expected
     ( Generator (..)
@@ -44,7 +32,6 @@ import Cardano.N2N.Client.Application.Database.Properties.Expected
     , getDump
     , getFinality
     , getTip
-    , rollbackFinality
     , rollbackTip
     )
 import Control.Monad (replicateM_)
@@ -116,7 +103,7 @@ propertyTipIsTheNewestSlot
     :: PropertyConstraints m slot key value
     => PropertyWithExpected m slot key value ()
 propertyTipIsTheNewestSlot = do
-    newestSlot <- lift $ gets expectedNewestSlot
+    newestSlot <- lift $ gets (expectedNewestSlot . fst)
     tip <- getTip
     assert
         "Tip should be equal to the newest slot in the expected contents"
@@ -158,7 +145,7 @@ generateOperationsAfter base = do
                   ]
                     <> [ (3, inserting)
                        ]
-    availableKeys <- lift $ gets expectedKeys
+    availableKeys <- lift $ gets (expectedKeys . fst)
     Positive n <- pick arbitrary
     ops <- pick $ go n availableKeys
     pure (slot, ops)
@@ -255,10 +242,7 @@ propertyRollbackAfterTipDoesNothing = do
         Origin -> pick $ genWithOrigin genSlot
         At tipSlot -> pick $ At <$> genSlot `suchThat` (>= tipSlot)
     oldDump <- getDump
-    result <- rollbackTip slotToRollbackTo
-    assert
-        "Rollback at or after tip should succeed"
-        result
+    rollbackTip slotToRollbackTo
     newDump <- getDump
     assert
         "Rollback at or after tip should be no-op"
@@ -281,14 +265,26 @@ propertyRollbackAfterBeforeTipUndoesChanges history@((pastSlot, _) :| _) = do
                 `suchThat` (<= tip)
                 `suchThat` (>= pastSlot)
     let dump = findValue slot Nothing $ toList history <> [(tip, current)]
-    result <- rollbackTip slot
-    assert
-        "Rollback to a slot before tip should succeed"
-        result
+    rollbackTip slot
     finalDump <- getDump
     assert
         "Rollback moves the database to a previous state"
         $ dump == Just finalDump
+
+propertyRollbackBeforeFinalityTruncatesTheDatabase
+    :: PropertyConstraints m slot key value
+    => PropertyWithExpected m slot key value ()
+propertyRollbackBeforeFinalityTruncatesTheDatabase = do
+    Generator{genSlot} <- asksGenerator
+    finalityBefore <- getFinality
+    slot <- case finalityBefore of
+        Origin -> pick $ genWithOrigin genSlot
+        At finalitySlot -> pick $ genWithOrigin genSlot `suchThat` (< At finalitySlot)
+    rollbackTip slot
+    newDump <- getDump
+    assert
+        "Rolling back before finality should truncate the database"
+        $ newDump == emptyDump
 
 -- | Property: forwarding finality before finality is a no-op
 -- forwarding finality should work only if the new slot is after the current finality
@@ -331,14 +327,8 @@ propertyForwardFinalityAfterFinalityReduceTheRollbackWindow history@((pastSlot, 
                 `suchThat` (\s -> At s > finalityBefore)
     let dump = findValue (At slot) Nothing $ toList history <> [(tip, current)]
     forwardFinality slot
-    failure <- rollbackTip finalityBefore
-    assert
-        "Rollback at old finality should fail"
-        $ not failure
-    success <- rollbackTip (At slot)
-    assert
-        "Rollback to forwarded finality should succeed"
-        success
+    rollbackTip finalityBefore
+    rollbackTip (At slot)
     assertingJust "Should have a dump at the new finality slot" dump $ \oldDump -> do
         finalDump <- getDump
         assert
@@ -368,22 +358,3 @@ propertyForwardFinalityBeyondTipSetsFinalityAsTip = do
     assert
         "New database just has finality updated, other contents remain the same"
         $ updated == current{dumpFinality = tip}
-
--- | Property: rolling back finality truncates the database
--- all contents are removed
--- tip and finality are set to Origin
--- opposites are cleared
-propertyRollbackFinalityTruncatesTheDatabase
-    :: PropertyConstraints m slot key value
-    => PropertyWithExpected m slot key value ()
-propertyRollbackFinalityTruncatesTheDatabase = do
-    rollbackFinality
-    dump <- getDump
-    assert
-        "After rolling back finality, the database should be empty"
-        $ dump
-            == Dump
-                { dumpAssocs = []
-                , dumpFinality = Origin
-                , dumpTip = Origin
-                }

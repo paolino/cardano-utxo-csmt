@@ -18,19 +18,13 @@ mkInMemoryDatabaseSimple
     :: Database (State (InMemory slot key value)) slot key value
 mkInMemoryDatabaseSimple =
     Database
-        { forwardTip
-        , rollbackTip
+        { update
         , getValue
         , getTip
         , getFinality
-        , forwardFinality
-        , rollbackFinality
         }
   where
-    forwardTip _slot _ops = undefined
-    rollbackTip _slot = undefined
+    update = undefined
     getValue _key = undefined
     getTip = undefined
     getFinality = undefined
-    forwardFinality _slot = undefined
-    rollbackFinality = undefined
