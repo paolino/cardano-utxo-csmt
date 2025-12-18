@@ -16,7 +16,7 @@ import Cardano.N2N.Client.Application.BlockFetch
     )
 import Cardano.N2N.Client.Application.ChainSync
     ( Follower (..)
-    , FollowerResult (..)
+    , ProgressOrRewind (..)
     , mkChainSyncApplication
     )
 import Cardano.N2N.Client.Application.Metrics
@@ -29,6 +29,7 @@ import Cardano.N2N.Client.Application.Options
     )
 import Cardano.N2N.Client.Application.UTxOs (Change (..), uTxOs)
 import Cardano.N2N.Client.Ouroboros.Connection (runNodeApplication)
+import Cardano.N2N.Client.Ouroboros.Types (Intersector (..))
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (..)
     , modifyTVar
@@ -42,6 +43,8 @@ import Data.ByteString (ByteString, toStrict)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.Function (on)
 import OptEnvConf (runParser)
+import Ouroboros.Consensus.Block (WithOrigin (Origin))
+import Ouroboros.Network.Block qualified as Network
 import Paths_cardano_utxo_csmt (version)
 import System.IO
     ( BufferMode (..)
@@ -89,6 +92,13 @@ application
         withRocksDB dbPath $ \(RunRocksDB run) -> do
             let deleteKey key = run $ deleting key
                 insertKey key value' = run $ inserting key value'
+                blockIntersector =
+                    Intersector
+                        { intersectFound = \_point -> do
+                            pure blockFollower
+                        , intersectNotFound = do
+                            pure (blockIntersector, [Network.Point Origin])
+                        }
                 blockFollower =
                     Follower
                         { rollForward = \block -> do
@@ -102,13 +112,13 @@ application
                             putStrLn "rewind not supported"
                             pure $ Progress blockFollower
                         }
-            (blockFetchApplication, headerFollower) <-
+            (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
                     (contramap BlockFetchMetrics tracer)
-                    blockFollower
+                    blockIntersector
             let chainFollowingApplication =
                     mkChainSyncApplication
-                        headerFollower
+                        headerIntersector
                         startingPoint
             r <-
                 runNodeApplication

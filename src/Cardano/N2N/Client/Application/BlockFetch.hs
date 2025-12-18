@@ -7,12 +7,13 @@ where
 
 import Cardano.N2N.Client.Application.ChainSync
     ( Follower (..)
-    , FollowerResult (..)
+    , ProgressOrRewind (..)
     )
 import Cardano.N2N.Client.Ouroboros.Types
     ( Block
     , BlockFetchApplication
     , Header
+    , Intersector (..)
     )
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (..)
@@ -21,10 +22,15 @@ import Control.Concurrent.Class.MonadSTM.Strict
     , newTBQueueIO
     , writeTBQueue
     )
+import Control.Concurrent.MVar
+    ( modifyMVar_
+    , newEmptyMVar
+    , putMVar
+    , takeMVar
+    )
 import Control.Monad (unless)
 import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Ouroboros.Consensus.Cardano.Node ()
 import Ouroboros.Network.Block (blockPoint)
 import Ouroboros.Network.BlockFetch.ClientState (ChainRange (..))
@@ -41,13 +47,22 @@ newtype EventQueueLength = EventQueueLength Int
 mkBlockFetchApplication
     :: Tracer IO EventQueueLength
     -- ^ metrics tracer
-    -> Follower Block
+    -> Intersector Block
     -- ^ callback to process each fetched block
-    -> IO (BlockFetchApplication, Follower Header)
-mkBlockFetchApplication tr blockFollower = do
+    -> IO (BlockFetchApplication, Intersector Header)
+mkBlockFetchApplication tr blockIntersector = do
     (pushHeader, flushHeaders, waitEmpty) <- queue 1000
-    blockFollowerVar <- newIORef blockFollower -- WTF
-    let
+    blockFollowerVar <- newEmptyMVar
+    let mkHeaderIntersector blockIntersector' =
+            Intersector
+                { intersectFound = \point -> do
+                    blockFollower' <- intersectFound blockIntersector' point
+                    putMVar blockFollowerVar blockFollower'
+                    pure headerFollower
+                , intersectNotFound = do
+                    (blockIntersector'', points) <- intersectNotFound blockIntersector'
+                    pure (mkHeaderIntersector blockIntersector'', points)
+                }
         headerFollower =
             Follower
                 { rollForward = \header -> do
@@ -56,12 +71,16 @@ mkBlockFetchApplication tr blockFollower = do
                 , rollBackward = \point -> do
                     waitEmpty
                     -- we are safe as the only source of headers is rollForward above
-                    withIORef blockFollowerVar $ \Follower{rollBackward} -> do
-                        fr <- rollBackward point
-                        case fr of
-                            Progress bf -> pure (bf, Progress headerFollower)
-                            Rewind pts bf -> do
-                                pure (bf, Rewind pts headerFollower)
+                    Follower{rollBackward} <- takeMVar blockFollowerVar
+                    fr <- rollBackward point
+                    case fr of
+                        Progress blockFollower' -> do
+                            putMVar blockFollowerVar blockFollower'
+                            pure (Progress headerFollower)
+                        Rewind points blockIntersector' -> do
+                            pure
+                                $ Rewind points
+                                $ mkHeaderIntersector blockIntersector'
                 }
         blockFetchClient = BlockFetchClient $ do
             (points, len) <- flushHeaders
@@ -75,7 +94,7 @@ mkBlockFetchApplication tr blockFollower = do
                             $ \fetchOne ->
                                 BlockFetchReceiver
                                     { handleBlock = \block -> do
-                                        withIORef_ blockFollowerVar
+                                        modifyMVar_ blockFollowerVar
                                             $ flip rollForward block
                                         pure fetchOne
                                     , handleBatchDone = pure ()
@@ -84,19 +103,7 @@ mkBlockFetchApplication tr blockFollower = do
                         }
                     blockFetchClient
     pure
-        (blockFetchClient, headerFollower)
-
-withIORef :: IORef a -> (a -> IO (a, b)) -> IO b
-withIORef var f = do
-    x <- readIORef var
-    (x', y) <- f x
-    writeIORef var x'
-    pure y
-
-withIORef_ :: IORef t -> (t -> IO t) -> IO ()
-withIORef_ var f = withIORef var $ \x -> do
-    x' <- f x
-    pure (x', ())
+        (blockFetchClient, mkHeaderIntersector blockIntersector)
 
 nextChainRange
     :: MonadSTM m
