@@ -9,6 +9,8 @@ module Cardano.N2N.Client.Ouroboros.Types
     , KeepAliveApplication
     , ChainSync
     , BlockFetch
+    , Follower (..)
+    , FollowerResult (..)
     ) where
 
 import Ouroboros.Consensus.Cardano.Block qualified as Consensus
@@ -51,3 +53,13 @@ type ChainSync = ChainSync.ChainSync Header Point Tip
 
 -- | Type alias for BlockFetch protocol
 type BlockFetch = BlockFetch.BlockFetch Block Point
+
+data FollowerResult h
+    = Progress (Follower h)
+    | Rewind [Point] (Follower h)
+
+-- | An event representing a roll forward or roll backward in the chain
+data Follower h = Follower
+    { rollForward :: h -> IO (Follower h)
+    , rollBackward :: Point -> IO (FollowerResult h)
+    }

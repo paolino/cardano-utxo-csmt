@@ -1,3 +1,4 @@
+{- HLINT ignore "Use const" -}
 module Cardano.N2N.Client.Ouroboros.Application
     ( mkOuroborosApplication
     )
