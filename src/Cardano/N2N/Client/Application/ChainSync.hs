@@ -15,6 +15,7 @@ import Cardano.N2N.Client.Ouroboros.Types
     , ProgressOrRewind (..)
     , Tip
     )
+import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
 import Ouroboros.Consensus.Cardano.Node ()
 import Ouroboros.Network.Protocol.ChainSync.Client
@@ -29,36 +30,39 @@ type ChainSyncIdle = ClientStIdle Header Point Tip IO ()
 
 -- | boots the protocol and step into initialise
 mkChainSyncApplication
-    :: Intersector Header
+    :: Tracer IO Header
+    -> Intersector Header
     -- ^ queue to write roll events to
     -> [Point]
     -- ^ starting point
     -> ChainSyncApplication
     -- ^ the chain sync client application
-mkChainSyncApplication intersector startingPoints =
-    ChainSyncClient $ pure $ intersect startingPoints intersector
+mkChainSyncApplication tracer intersector startingPoints =
+    ChainSyncClient $ pure $ intersect tracer startingPoints intersector
 
 intersect
-    :: [Point]
+    :: Tracer IO Header
+    -> [Point]
     -> Intersector Header
     -> ClientStIdle Header Point Tip IO ()
-intersect points Intersector{intersectFound, intersectNotFound} =
+intersect tracer points Intersector{intersectFound, intersectNotFound} =
     SendMsgFindIntersect points
         $ ClientStIntersect
             { recvMsgIntersectFound = \point _ ->
                 ChainSyncClient $ do
                     nextFollower <- intersectFound point
-                    pure $ next nextFollower
+                    pure $ next tracer nextFollower
             , recvMsgIntersectNotFound = \_ ->
                 ChainSyncClient $ do
                     (intersector', points') <- intersectNotFound
-                    pure $ intersect points' intersector'
+                    pure $ intersect tracer points' intersector'
             }
 
 next
-    :: Follower Header
+    :: Tracer IO Header
+    -> Follower Header
     -> ChainSyncIdle
-next follower = ($ follower)
+next tracer follower = ($ follower)
     $ fix
     $ \go (Follower{rollForward, rollBackward}) ->
         let
@@ -68,13 +72,15 @@ next follower = ($ follower)
                 case progressOrRewind of
                     Progress follower' -> pure $ go follower'
                     Rewind points follower' ->
-                        pure $ intersect points follower'
+                        pure $ intersect tracer points follower'
         in
             SendMsgRequestNext
                 (pure ()) -- spare time for other work
                 ClientStNext
                     { recvMsgRollForward = \header _ -> do
-                        checkResult $ Progress <$> rollForward header
+                        checkResult $ do
+                            traceWith tracer header
+                            Progress <$> rollForward header
                     , recvMsgRollBackward = \point _ ->
                         checkResult $ rollBackward point
                     }

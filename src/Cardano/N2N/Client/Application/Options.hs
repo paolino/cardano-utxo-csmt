@@ -19,7 +19,6 @@ import Data.ByteArray.Encoding
 import Data.ByteString.Char8 qualified as B
 import Data.ByteString.Short qualified as SBS
 import Data.Word (Word32)
-import GHC.Event (Event)
 import Network.Socket (PortNumber)
 import OptEnvConf
     ( Parser
@@ -152,7 +151,7 @@ eventQueueSizeOption =
             , short 'q'
             , help "Size of the headers queue"
             , metavar "INT"
-            , value 100
+            , value 10
             , reader auto
             , option
             ]

@@ -9,6 +9,7 @@ where
 import Cardano.N2N.Client.Application.BlockFetch
     ( EventQueueLength (..)
     )
+import Cardano.N2N.Client.Ouroboros.Types (Header, Point)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, link)
 import Control.Concurrent.Class.MonadSTM.Strict
@@ -25,27 +26,41 @@ import Control.Concurrent.Class.MonadSTM.Strict
 import Control.Monad ((<=<))
 import Control.Tracer (Tracer (..))
 import Data.Function (fix)
-import Data.Word (Word32)
-import System.Console.ANSI (hCursorUpLine)
+import Ouroboros.Consensus.Block
+    ( BlockNo (BlockNo)
+    , SlotNo (unSlotNo)
+    , blockNo
+    , blockPoint
+    )
+import Ouroboros.Network.Block qualified as Network
+import Ouroboros.Network.Point
+    ( Block (blockPointHash)
+    , WithOrigin (..)
+    , blockPointSlot
+    )
+import System.Console.ANSI (hClearScreen, hSetCursorPosition)
 import System.IO
-    ( hPutStrLn
+    ( hPutStr
     , stderr
     )
 
 data MetricsEvent
     = BlockFetchMetrics EventQueueLength
-    | BlockHeightMetrics Word32
+    | UTxOChangesCount
+    | CurrentBlockInfo Header
 
 data Metrics = Metrics
     { averageQueueLength :: Double
     , maxQueueLength :: Int
-    , totalBlocksFetched :: Int
+    , utxoChanges :: Int
+    , utxoSpeed :: Double
     , blockSpeed :: Double
     }
 
 data MetricsState = MetricsState
     { msQueueLengthWindow :: [Int]
-    , msLastBlockCount :: Int
+    , msLastUtxOChangesCount :: Int
+    , msLastBlockInfo :: Maybe (Point, BlockNo)
     }
 
 updateMetrics
@@ -65,8 +80,12 @@ updateMetrics l ms metrics (BlockFetchMetrics (EventQueueLength len)) =
             }
         , ms{msQueueLengthWindow = newWindow}
         )
-updateMetrics _ ms metrics (BlockHeightMetrics _) =
-    (metrics{totalBlocksFetched = totalBlocksFetched metrics + 1}, ms)
+updateMetrics _ ms metrics UTxOChangesCount =
+    (metrics{utxoChanges = utxoChanges metrics + 1}, ms)
+updateMetrics _ ms metrics (CurrentBlockInfo cbi) =
+    ( metrics
+    , ms{msLastBlockInfo = Just (blockPoint cbi, blockNo cbi)}
+    )
 
 metricsTracer :: Int -> IO (Tracer IO MetricsEvent)
 metricsTracer l = do
@@ -74,14 +93,19 @@ metricsTracer l = do
 
     metricsState <-
         newTVarIO
-            $ MetricsState{msQueueLengthWindow = [], msLastBlockCount = 0}
+            $ MetricsState
+                { msQueueLengthWindow = []
+                , msLastUtxOChangesCount = 0
+                , msLastBlockInfo = Nothing
+                }
     -- Initial metrics
     metricsVar <-
         newTVarIO
             $ Metrics
                 { averageQueueLength = 0
                 , maxQueueLength = 0
-                , totalBlocksFetched = 0
+                , utxoChanges = 0
+                , utxoSpeed = 0
                 , blockSpeed = 0
                 }
     let tracer = Tracer $ \msg -> atomically $ writeTBQueue queue msg
@@ -99,23 +123,51 @@ metricsTracer l = do
         threadDelay 10_000_000 -- 10 seconds
         metrics <- readTVarIO metricsVar
         state <- readTVarIO metricsState
-        hPutStrLn stderr
+        hClearScreen stderr
+        hSetCursorPosition stderr 0 0
+        hPutStr stderr
             $ "Average Queue Length: "
                 ++ show (averageQueueLength metrics)
-                ++ ", Max Queue Length: "
+                ++ "\nMax Queue Length: "
                 ++ show (maxQueueLength metrics)
-                ++ ", Total Blocks Fetched: "
-                ++ show (totalBlocksFetched metrics)
-                ++ ", Block Speed (blocks/sec): "
+                ++ "\nTotal utxo changes processed: "
+                ++ show (utxoChanges metrics)
+                ++ "\nUTXO Change Speed (utxo changes/sec): "
                 ++ show @Double
-                    ( let blocksFetched = totalBlocksFetched metrics
+                    ( let changes = utxoChanges metrics
                       in  fromIntegral
-                            (blocksFetched - msLastBlockCount state)
+                            (changes - msLastUtxOChangesCount state)
                             / 10.0
+                    )
+                ++ case msLastBlockInfo state of
+                    Nothing -> "\n"
+                    Just point ->
+                        "\nCurrent Block Point: " ++ renderBlockPoint point
+                ++ "\nBlock Processing Speed (blocks/sec): "
+                ++ show @Double
+                    ( let mbLast = msLastBlockInfo state
+                      in  case mbLast of
+                            Nothing -> 0
+                            Just (_, BlockNo lastH) ->
+                                let currentH = case msLastBlockInfo state of
+                                        Nothing -> lastH
+                                        Just (_, BlockNo h) -> h
+                                in  fromIntegral
+                                        (currentH - lastH)
+                                        / 10.0
                     )
         atomically $ do
             modifyTVar metricsState $ \s ->
-                s{msLastBlockCount = totalBlocksFetched metrics}
-        hCursorUpLine stderr 1
+                s{msLastUtxOChangesCount = utxoChanges metrics}
         reportLoop
     pure tracer
+
+renderBlockPoint :: (Point, BlockNo) -> String
+renderBlockPoint (Network.Point Origin, _) = "Origin\n"
+renderBlockPoint (Network.Point (At block), BlockNo h) =
+    show (blockPointHash block)
+        ++ "@"
+        ++ show (unSlotNo $ blockPointSlot block)
+        ++ "\n"
+        ++ "Block No: "
+        ++ show h

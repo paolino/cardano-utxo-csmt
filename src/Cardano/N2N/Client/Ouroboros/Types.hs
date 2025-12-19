@@ -29,7 +29,7 @@ import Ouroboros.Network.Protocol.KeepAlive.Client (KeepAliveClient)
 type Block = Consensus.CardanoBlock Consensus.StandardCrypto
 
 -- | Real Cardano Header type
-type Header = Consensus.Header Block
+type Header = Consensus.CardanoHeader Consensus.StandardCrypto
 
 -- | Real Cardano Tip type
 type Tip = Network.Tip Block

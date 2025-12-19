@@ -28,18 +28,11 @@ import Cardano.N2N.Client.Application.Options
 import Cardano.N2N.Client.Application.UTxOs (Change (..), uTxOs)
 import Cardano.N2N.Client.Ouroboros.Connection (runNodeApplication)
 import Cardano.N2N.Client.Ouroboros.Types (Block, Intersector (..))
-import Control.Concurrent.Class.MonadSTM.Strict
-    ( MonadSTM (..)
-    , modifyTVar
-    , newTVarIO
-    , readTVar
-    )
 import Control.Exception (throwIO)
 import Control.Monad (forM_)
-import Control.Tracer (Contravariant (..), Tracer, traceWith)
+import Control.Tracer (Contravariant (..), traceWith)
 import Data.ByteString (toStrict)
 import Data.Function (fix, on)
-import Data.Word (Word32)
 import OptEnvConf (runParser)
 import Ouroboros.Consensus.Block (WithOrigin (Origin))
 import Ouroboros.Network.Block qualified as Network
@@ -70,7 +63,7 @@ application
         } = do
         hSetBuffering stdout NoBuffering
         tracer <- metricsTracer 10
-        counting <- newCounter $ contramap BlockHeightMetrics tracer
+        let counting = traceWith tracer UTxOChangesCount
         withRocksDB dbPath $ \runDb -> do
             (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
@@ -79,7 +72,10 @@ application
                     $ blockIntersector
                     $ forwarding runDb counting
             let chainFollowingApplication =
-                    mkChainSyncApplication headerIntersector [startingPoint]
+                    mkChainSyncApplication
+                        (contramap CurrentBlockInfo tracer)
+                        headerIntersector
+                        [startingPoint]
             result <-
                 runNodeApplication
                     networkMagic
@@ -96,22 +92,17 @@ forwarding :: RunRocksDB -> IO () -> Block -> IO ()
 forwarding (RunRocksDB run) counting block = do
     forM_ (uTxOs block) $ \change -> do
         case change of
-            Spend txIn -> run $ deleting txIn
-            Create txIn txOut -> run $ inserting txIn txOut
+            Spend txIn ->
+                -- pure ()
+                run $ deleting txIn
+            Create txIn txOut ->
+                -- pure ()
+                run $ inserting txIn txOut
         counting
   where
     rocks = rocksDBBackend mkHash
     deleting = delete rocks . toStrict
     inserting = insert rocks `on` toStrict
-
-newCounter :: Tracer IO Word32 -> IO (IO ())
-newCounter tracer = do
-    countVar <- newTVarIO 0
-    pure $ do
-        count <- atomically $ do
-            modifyTVar countVar succ
-            readTVar countVar
-        traceWith tracer count
 
 blockIntersector :: (Block -> IO ()) -> Intersector Block
 blockIntersector forward =
@@ -119,7 +110,6 @@ blockIntersector forward =
         { intersectFound = \_point -> do
             pure (blockFollower forward)
         , intersectNotFound = do
-            putStrLn "intersect not found, starting from Origin"
             pure (blockIntersector forward, [Network.Point Origin])
         }
 
@@ -130,6 +120,5 @@ blockFollower forward = fix $ \go ->
             forward block
             pure go
         , rollBackward = \_point -> do
-            putStrLn $ "rolling back to " ++ show _point
             pure $ Progress go
         }
