@@ -8,6 +8,9 @@ module Cardano.N2N.Client.Application.Options
     )
 where
 
+import Cardano.N2N.Client.Application.BlockFetch
+    ( EventQueueLength (..)
+    )
 import Cardano.N2N.Client.Ouroboros.Types (HeaderHash, Point)
 import Data.ByteArray.Encoding
     ( Base (..)
@@ -16,6 +19,7 @@ import Data.ByteArray.Encoding
 import Data.ByteString.Char8 qualified as B
 import Data.ByteString.Short qualified as SBS
 import Data.Word (Word32)
+import GHC.Event (Event)
 import Network.Socket (PortNumber)
 import OptEnvConf
     ( Parser
@@ -55,6 +59,7 @@ data Options = Options
     , nodeName :: String
     , portNumber :: PortNumber
     , startingPoint :: Point
+    , headersQueueSize :: EventQueueLength
     , dbPath :: FilePath
     }
 
@@ -139,6 +144,19 @@ readChainPoint string = case break (== '@') string of
         return $ At $ Network.Block slot hash
     _ -> Nothing
 
+eventQueueSizeOption :: Parser EventQueueLength
+eventQueueSizeOption =
+    EventQueueLength
+        <$> setting
+            [ long "headers-queue-size"
+            , short 'q'
+            , help "Size of the headers queue"
+            , metavar "INT"
+            , value 100
+            , reader auto
+            , option
+            ]
+
 optionsParser :: Parser Options
 optionsParser =
     Options
@@ -146,4 +164,5 @@ optionsParser =
         <*> nodeNameOption
         <*> portNumberOption
         <*> startingPointOption
+        <*> eventQueueSizeOption
         <*> dbPathOption

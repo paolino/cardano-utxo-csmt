@@ -31,17 +31,12 @@ type ChainSyncIdle = ClientStIdle Header Point Tip IO ()
 mkChainSyncApplication
     :: Intersector Header
     -- ^ queue to write roll events to
-    -> Point
+    -> [Point]
     -- ^ starting point
     -> ChainSyncApplication
     -- ^ the chain sync client application
-mkChainSyncApplication intersector startingPoint =
-    ChainSyncClient
-        $ pure
-        $ intersect
-            [ startingPoint
-            ]
-            intersector
+mkChainSyncApplication intersector startingPoints =
+    ChainSyncClient $ pure $ intersect startingPoints intersector
 
 intersect
     :: [Point]

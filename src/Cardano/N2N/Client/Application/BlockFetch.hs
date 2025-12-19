@@ -45,13 +45,15 @@ newtype EventQueueLength = EventQueueLength Int
     deriving (Show)
 
 mkBlockFetchApplication
-    :: Tracer IO EventQueueLength
+    :: EventQueueLength
+    -- ^ max length of the event queue
+    -> Tracer IO EventQueueLength
     -- ^ metrics tracer
     -> Intersector Block
     -- ^ callback to process each fetched block
     -> IO (BlockFetchApplication, Intersector Header)
-mkBlockFetchApplication tr blockIntersector = do
-    (pushHeader, flushHeaders, waitEmpty) <- queue 1000
+mkBlockFetchApplication (EventQueueLength maxQueueLen) tr blockIntersector = do
+    (pushHeader, flushHeaders, waitEmpty) <- queue maxQueueLen
     blockFollowerVar <- newEmptyMVar
     let mkHeaderIntersector blockIntersector' =
             Intersector
