@@ -17,6 +17,7 @@ module Cardano.N2N.Client.Application.Database.Interface
     )
 where
 
+import Data.List (sortOn)
 import Ouroboros.Network.Point (WithOrigin (..))
 import Prelude hiding (truncate)
 
@@ -26,8 +27,7 @@ data Operation key value
     deriving (Show, Eq)
 
 data Database m slot key value = Database
-    { update :: Update 'ProgressT m slot key value
-    , getValue :: key -> m (Maybe value)
+    { getValue :: key -> m (Maybe value)
     , getTip :: m (WithOrigin slot)
     , getFinality :: m (WithOrigin slot)
     }
@@ -61,7 +61,7 @@ emptyDump =
         }
 
 dumpDatabase
-    :: Monad m
+    :: (Monad m, Ord key)
     => [key]
     -> Database m slot key value
     -> m (Dump slot key value)
@@ -69,7 +69,7 @@ dumpDatabase keys db = do
     tip <- getTip db
     immutable <- getFinality db
     contents <- traverse (\k -> fmap (k,) (getValue db k)) keys
-    let presentContents = [(k, v) | (k, Just v) <- contents]
+    let presentContents = sortOn fst $ [(k, v) | (k, Just v) <- contents]
     pure
         $ Dump
             { dumpTip = tip
