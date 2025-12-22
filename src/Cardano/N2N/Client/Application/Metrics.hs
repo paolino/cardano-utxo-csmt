@@ -1,173 +1,203 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Cardano.N2N.Client.Application.Metrics
     ( metricsTracer
     , MetricsEvent (..)
+    , MetricsParams (..)
+    , Metrics (..)
     )
 where
 
 import Cardano.N2N.Client.Application.BlockFetch
     ( EventQueueLength (..)
     )
-import Cardano.N2N.Client.Ouroboros.Types (Header, Point)
+import Cardano.N2N.Client.Ouroboros.Types (Header)
+import Control.Comonad (Comonad (..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, link)
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (..)
+    , flushTQueue
     , modifyTVar
-    , newTBQueueIO
+    , newTQueueIO
     , newTVarIO
-    , readTBQueue
-    , readTVar
     , readTVarIO
-    , writeTBQueue
-    , writeTVar
+    , writeTQueue
     )
-import Control.Monad ((<=<))
+import Control.Foldl (Fold (..), handles)
+import Control.Foldl qualified as Fold
+import Control.Lens
+    ( APrism'
+    , aside
+    , to
+    , _Wrapped
+    )
+import Control.Lens.TH (makeLensesFor, makePrisms)
+import Control.Monad (forever, (<=<))
 import Control.Tracer (Tracer (..))
-import Data.Function (fix)
-import Ouroboros.Consensus.Block
-    ( BlockNo (BlockNo)
-    , SlotNo (unSlotNo)
-    , blockNo
-    , blockPoint
-    )
-import Ouroboros.Network.Block qualified as Network
-import Ouroboros.Network.Point
-    ( Block (blockPointHash)
-    , WithOrigin (..)
-    , blockPointSlot
-    )
-import System.Console.ANSI (hClearScreen, hSetCursorPosition)
-import System.IO
-    ( hPutStr
-    , stderr
-    )
+import Data.Profunctor (Profunctor (..))
+import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 
+----- libray functions to help with metrics collection -----
+
+-- Track the speed of events over a sliding window.
+speedoMeter :: Int -> Fold UTCTime Double
+speedoMeter window = Fold count Nothing getSpeed
+  where
+    getSpeed Nothing = 0
+    getSpeed (Just (Nothing, _, _)) = 0
+    getSpeed (Just (Just (startTime, endTime, cnt), _, _)) =
+        fromIntegral cnt / realToFrac (diffUTCTime endTime startTime)
+    count acc time = case acc of
+        Nothing -> Just (Nothing, time, 0)
+        Just (speed, startTime, cnt)
+            | cnt < window ->
+                Just (speed, startTime, cnt + 1)
+            | otherwise -> Just (Just (startTime, time, cnt), time, 0)
+
+-- Average over a rolling window
+averageOverWindow :: Fractional a => Int -> Fold a a
+averageOverWindow window = Fold step [] getAverage
+  where
+    step xs x = take window (x : xs)
+    getAverage xs =
+        let l = length xs
+        in  if l == 0 then 0 else sum xs / fromIntegral l
+
+-- Event tagged with the time it was recorded.
+data Timed a = Timed
+    { timedTimestamp :: UTCTime
+    , timedEvent :: a
+    }
+
+makeLensesFor
+    [ ("timedEvent", "timedEventL")
+    ]
+    ''Timed
+
+-- support to use event prisms with 'aside'
+timedAsTuple :: Timed a -> (UTCTime, a)
+timedAsTuple (Timed t e) = (t, e)
+
+-- A tracer that tags metrics events with the current time.
+traceMetricsWithTime
+    :: Tracer IO (Timed a) -> Tracer IO a
+traceMetricsWithTime (Tracer tr) = Tracer $ \me -> do
+    now <- getCurrentTime
+    tr $ Timed{timedTimestamp = now, timedEvent = me}
+
+---------- Metrics specific code ----------
+
+-- | The signal we receive to update the metrics
 data MetricsEvent
-    = BlockFetchMetrics EventQueueLength
-    | UTxOChangesCount
-    | CurrentBlockInfo Header
+    = -- | some blocks are going to be fetched
+      BlockFetchEvent EventQueueLength
+    | -- | one utxo change has been processed
+      UTxOChangeEvent
+    | -- | one block has been processed
+      BlockInfoEvent Header
 
+makePrisms ''MetricsEvent
+
+type TimedMetrics = Timed MetricsEvent
+
+-- track the last block point seen
+lastBlockPointFold
+    :: Fold (Timed MetricsEvent) (Maybe (UTCTime, Header))
+lastBlockPointFold =
+    lmap timedAsTuple
+        $ handles (aside _BlockInfoEvent) Fold.last
+
+-- track average block fetch queue length
+averageBlockFetchLength :: Int -> Fold TimedMetrics Double
+averageBlockFetchLength window =
+    handles
+        (timedEventL . _BlockFetchEvent . _Wrapped . to fromIntegral)
+        $ averageOverWindow window
+
+-- track max block fetch queue length
+maxBlockFetchQueueLength :: Fold TimedMetrics (Maybe Int)
+maxBlockFetchQueueLength =
+    handles
+        (timedEventL . _BlockFetchEvent . _Wrapped)
+        Fold.maximum
+
+-- track speed of some event type
+speedOfSomeEvent :: Int -> APrism' a b -> Fold (Timed a) Double
+speedOfSomeEvent window prism =
+    lmap timedAsTuple
+        $ handles (aside prism)
+        $ lmap fst
+        $ speedoMeter window
+
+-- speed of utxo changes processed
+utxoSpeedFold :: Int -> Fold TimedMetrics Double
+utxoSpeedFold window = speedOfSomeEvent window _UTxOChangeEvent
+
+-- speed of blocks processed
+blockSpeedFold :: Int -> Fold TimedMetrics Double
+blockSpeedFold window = speedOfSomeEvent window _BlockInfoEvent
+
+-- total number of utxo changes processed
+totalUtxoChangesFold :: Fold TimedMetrics Int
+totalUtxoChangesFold =
+    handles
+        (timedEventL . _UTxOChangeEvent)
+        Fold.genericLength
+
+-- | Tracked metrics
 data Metrics = Metrics
     { averageQueueLength :: Double
-    , maxQueueLength :: Int
-    , utxoChanges :: Int
+    , maxQueueLength :: Maybe Int
+    , utxoChangesCount :: Int
+    , lastBlockPoint :: Maybe (UTCTime, Header)
     , utxoSpeed :: Double
     , blockSpeed :: Double
     }
 
-data MetricsState = MetricsState
-    { msQueueLengthWindow :: [Int]
-    , msLastUtxOChangesCount :: Int
-    , msLastBlockInfo :: Maybe (Point, BlockNo)
+-- | Metrics configuration parameters
+data MetricsParams = MetricsParams
+    { qlWindow :: Int
+    -- ^ how many samples to consider for average queue length
+    , utxoSpeedWindow :: Int
+    -- ^ how many samples to consider for speed calculation
+    , blockSpeedWindow :: Int
+    -- ^ how many samples to consider for speed calculation
+    , metricsOutput :: Metrics -> IO ()
+    -- ^ function to output the metrics
+    , metricsFrequency :: Int
+    -- ^ frequency in microseconds to output the metrics
     }
 
-updateMetrics
-    :: Int
-    -> MetricsState
-    -> Metrics
-    -> MetricsEvent
-    -> (Metrics, MetricsState)
-updateMetrics l ms metrics (BlockFetchMetrics (EventQueueLength len)) =
-    let newWindow = take l (len : msQueueLengthWindow ms)
-        avgLen =
-            fromIntegral (sum newWindow) / fromIntegral (length newWindow)
-        maxLen = max len (maxQueueLength metrics)
-    in  ( metrics
-            { averageQueueLength = avgLen
-            , maxQueueLength = maxLen
-            }
-        , ms{msQueueLengthWindow = newWindow}
-        )
-updateMetrics _ ms metrics UTxOChangesCount =
-    (metrics{utxoChanges = utxoChanges metrics + 1}, ms)
-updateMetrics _ ms metrics (CurrentBlockInfo cbi) =
-    ( metrics
-    , ms{msLastBlockInfo = Just (blockPoint cbi, blockNo cbi)}
-    )
+-- track the whole set of metrics
+metricsFold :: MetricsParams -> Fold TimedMetrics Metrics
+metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
+    Metrics
+        <$> averageBlockFetchLength qlWindow
+        <*> maxBlockFetchQueueLength
+        <*> totalUtxoChangesFold
+        <*> lastBlockPointFold
+        <*> utxoSpeedFold utxoSpeedWindow
+        <*> blockSpeedFold blockSpeedWindow
 
-metricsTracer :: Int -> IO (Tracer IO MetricsEvent)
-metricsTracer l = do
-    queue <- newTBQueueIO 100
-
-    metricsState <-
-        newTVarIO
-            $ MetricsState
-                { msQueueLengthWindow = []
-                , msLastUtxOChangesCount = 0
-                , msLastBlockInfo = Nothing
-                }
-    -- Initial metrics
-    metricsVar <-
-        newTVarIO
-            $ Metrics
-                { averageQueueLength = 0
-                , maxQueueLength = 0
-                , utxoChanges = 0
-                , utxoSpeed = 0
-                , blockSpeed = 0
-                }
-    let tracer = Tracer $ \msg -> atomically $ writeTBQueue queue msg
-    link <=< async $ fix $ \loop -> do
+-- | Create a metrics tracer that collects metrics and outputs them
+metricsTracer :: MetricsParams -> IO (Tracer IO MetricsEvent)
+metricsTracer params@MetricsParams{metricsFrequency, metricsOutput} = do
+    eventsQ <- newTQueueIO -- unbounded or we risk to slow down the application
+    metricsV <- newTVarIO $ metricsFold params
+    let tracer =
+            traceMetricsWithTime
+                $ Tracer
+                $ \msg -> atomically $ writeTQueue eventsQ msg
+    link <=< async $ forever $ do
+        -- let events accumulate, no need to load CPU as they come with timestamps
+        threadDelay 100_000
         atomically $ do
-            state <- readTVar metricsState
-            msg <- readTBQueue queue
-            metrics <- readTVar metricsVar
-            let (newMetrics, newState) =
-                    updateMetrics l state metrics msg
-            writeTVar metricsVar newMetrics
-            writeTVar metricsState newState
-        loop
-    link <=< async $ fix $ \reportLoop -> do
-        threadDelay 10_000_000 -- 10 seconds
-        metrics <- readTVarIO metricsVar
-        state <- readTVarIO metricsState
-        hClearScreen stderr
-        hSetCursorPosition stderr 0 0
-        hPutStr stderr
-            $ "Average Queue Length: "
-                ++ show (averageQueueLength metrics)
-                ++ "\nMax Queue Length: "
-                ++ show (maxQueueLength metrics)
-                ++ "\nTotal utxo changes processed: "
-                ++ show (utxoChanges metrics)
-                ++ "\nUTXO Change Speed (utxo changes/sec): "
-                ++ show @Double
-                    ( let changes = utxoChanges metrics
-                      in  fromIntegral
-                            (changes - msLastUtxOChangesCount state)
-                            / 10.0
-                    )
-                ++ case msLastBlockInfo state of
-                    Nothing -> "\n"
-                    Just point ->
-                        "\nCurrent Block Point: " ++ renderBlockPoint point
-                ++ "\nBlock Processing Speed (blocks/sec): "
-                ++ show @Double
-                    ( let mbLast = msLastBlockInfo state
-                      in  case mbLast of
-                            Nothing -> 0
-                            Just (_, BlockNo lastH) ->
-                                let currentH = case msLastBlockInfo state of
-                                        Nothing -> lastH
-                                        Just (_, BlockNo h) -> h
-                                in  fromIntegral
-                                        (currentH - lastH)
-                                        / 10.0
-                    )
-        atomically $ do
-            modifyTVar metricsState $ \s ->
-                s{msLastUtxOChangesCount = utxoChanges metrics}
-        reportLoop
+            es <- flushTQueue eventsQ
+            modifyTVar metricsV $ \metrics -> Fold.fold (duplicate metrics) es
+    link <=< async $ forever $ do
+        threadDelay metricsFrequency
+        readTVarIO metricsV >>= metricsOutput . extract
     pure tracer
-
-renderBlockPoint :: (Point, BlockNo) -> String
-renderBlockPoint (Network.Point Origin, _) = "Origin\n"
-renderBlockPoint (Network.Point (At block), BlockNo h) =
-    show (blockPointHash block)
-        ++ "@"
-        ++ show (unSlotNo $ blockPointSlot block)
-        ++ "\n"
-        ++ "Block No: "
-        ++ show h

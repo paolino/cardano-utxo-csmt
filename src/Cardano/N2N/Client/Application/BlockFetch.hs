@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Cardano.N2N.Client.Application.BlockFetch
     ( mkBlockFetchApplication
     , EventQueueLength (..)
@@ -28,6 +30,7 @@ import Control.Concurrent.MVar
     , putMVar
     , takeMVar
     )
+import Control.Lens (makeWrapped)
 import Control.Monad (unless)
 import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
@@ -43,6 +46,8 @@ import Ouroboros.Network.Protocol.BlockFetch.Client
 
 newtype EventQueueLength = EventQueueLength Int
     deriving (Show)
+
+makeWrapped ''EventQueueLength
 
 mkBlockFetchApplication
     :: EventQueueLength

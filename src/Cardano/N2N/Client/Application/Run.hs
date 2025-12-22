@@ -1,3 +1,5 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 module Cardano.N2N.Client.Application.Run
     ( main
     )
@@ -18,7 +20,9 @@ import Cardano.N2N.Client.Application.ChainSync
     , mkChainSyncApplication
     )
 import Cardano.N2N.Client.Application.Metrics
-    ( MetricsEvent (..)
+    ( Metrics (..)
+    , MetricsEvent (..)
+    , MetricsParams (..)
     , metricsTracer
     )
 import Cardano.N2N.Client.Application.Options
@@ -34,9 +38,15 @@ import Control.Tracer (Contravariant (..), traceWith)
 import Data.ByteString (toStrict)
 import Data.Function (fix, on)
 import OptEnvConf (runParser)
-import Ouroboros.Consensus.Block (WithOrigin (Origin))
+import Ouroboros.Consensus.Block (blockNo, blockPoint, unSlotNo)
 import Ouroboros.Network.Block qualified as Network
+import Ouroboros.Network.Point
+    ( WithOrigin (..)
+    , blockPointHash
+    , blockPointSlot
+    )
 import Paths_cardano_utxo_csmt (version)
+import System.Console.ANSI (hClearScreen, hSetCursorPosition)
 import System.IO
     ( BufferMode (..)
     , hSetBuffering
@@ -48,6 +58,43 @@ main = do
     options <-
         runParser version "Tracking cardano UTxOs in a CSMT" optionsParser
     application options
+
+renderMetrics :: Metrics -> IO ()
+renderMetrics
+    Metrics
+        { averageQueueLength
+        , maxQueueLength
+        , utxoChangesCount
+        , lastBlockPoint
+        , utxoSpeed
+        , blockSpeed
+        } = do
+        hClearScreen stdout
+        hSetCursorPosition stdout 0 0
+        putStrLn
+            $ "Average Queue Length: "
+                ++ show averageQueueLength
+                ++ "\nMax Queue Length: "
+                ++ show maxQueueLength
+                ++ "\nTotal utxo changes processed: "
+                ++ show utxoChangesCount
+                ++ "\nUTXO Change Speed (utxo changes/sec): "
+                ++ show utxoSpeed
+                ++ "\nBlock Processing Speed (blocks/sec): "
+                ++ show blockSpeed
+                ++ "\nLast Block Point: "
+                ++ maybe "N/A" renderBlockPoint lastBlockPoint
+                ++ "\nLast Block Number: "
+                ++ maybe "N/A" (show . blockNo . snd) lastBlockPoint
+                ++ "\nLast Received Block Time: "
+                ++ maybe "N/A" (show . fst) lastBlockPoint
+      where
+        renderBlockPoint (_, header) = case blockPoint header of
+            Network.Point Origin -> "Origin"
+            Network.Point (At block) ->
+                show (blockPointHash block)
+                    ++ "@"
+                    ++ show (unSlotNo $ blockPointSlot block)
 
 application
     :: Options
@@ -62,18 +109,26 @@ application
         , dbPath
         } = do
         hSetBuffering stdout NoBuffering
-        tracer <- metricsTracer 10
-        let counting = traceWith tracer UTxOChangesCount
+        tracer <-
+            metricsTracer
+                $ MetricsParams
+                    { qlWindow = 100
+                    , utxoSpeedWindow = 1000
+                    , blockSpeedWindow = 100
+                    , metricsOutput = renderMetrics
+                    , metricsFrequency = 1_000_000
+                    }
+        let counting = traceWith tracer UTxOChangeEvent
         withRocksDB dbPath 1 1 $ \runDb -> do
             (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
                     headersQueueSize
-                    (contramap BlockFetchMetrics tracer)
+                    (contramap BlockFetchEvent tracer)
                     $ blockIntersector
                     $ forwarding runDb counting
             let chainFollowingApplication =
                     mkChainSyncApplication
-                        (contramap CurrentBlockInfo tracer)
+                        (contramap BlockInfoEvent tracer)
                         headerIntersector
                         [startingPoint]
             result <-
