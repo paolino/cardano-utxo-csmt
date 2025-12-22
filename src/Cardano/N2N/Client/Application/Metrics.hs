@@ -38,7 +38,10 @@ import Control.Lens.TH (makeLensesFor, makePrisms)
 import Control.Monad (forever, (<=<))
 import Control.Tracer (Tracer (..))
 import Data.Profunctor (Profunctor (..))
+import Data.SOP.Strict (index_NS)
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
+import Ouroboros.Consensus.HardFork.Combinator (OneEraHeader (..))
+import Ouroboros.Consensus.HardFork.Combinator qualified as HF
 
 ----- libray functions to help with metrics collection -----
 
@@ -147,6 +150,21 @@ totalUtxoChangesFold =
         (timedEventL . _UTxOChangeEvent)
         Fold.genericLength
 
+currentEraFold :: Fold TimedMetrics (Maybe String)
+currentEraFold =
+    handles (timedEventL . _BlockInfoEvent) $ lmap getEra Fold.last
+  where
+    getEra :: Header -> String
+    getEra (HF.HardForkHeader (OneEraHeader x)) = case index_NS x of
+        0 -> "byron"
+        1 -> "shelley"
+        2 -> "allegra"
+        3 -> "mary"
+        4 -> "alonzo"
+        5 -> "babbage"
+        6 -> "conway"
+        _ -> "unknown"
+
 -- | Tracked metrics
 data Metrics = Metrics
     { averageQueueLength :: Double
@@ -155,6 +173,7 @@ data Metrics = Metrics
     , lastBlockPoint :: Maybe (UTCTime, Header)
     , utxoSpeed :: Double
     , blockSpeed :: Double
+    , currentEra :: Maybe String
     }
 
 -- | Metrics configuration parameters
@@ -181,6 +200,7 @@ metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
         <*> lastBlockPointFold
         <*> utxoSpeedFold utxoSpeedWindow
         <*> blockSpeedFold blockSpeedWindow
+        <*> currentEraFold
 
 -- | Create a metrics tracer that collects metrics and outputs them
 metricsTracer :: MetricsParams -> IO (Tracer IO MetricsEvent)

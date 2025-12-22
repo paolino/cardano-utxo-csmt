@@ -37,6 +37,7 @@ import Control.Monad (forM_)
 import Control.Tracer (Contravariant (..), traceWith)
 import Data.ByteString (toStrict)
 import Data.Function (fix, on)
+import Data.Maybe (fromMaybe)
 import OptEnvConf (runParser)
 import Ouroboros.Consensus.Block (blockNo, blockPoint, unSlotNo)
 import Ouroboros.Network.Block qualified as Network
@@ -68,6 +69,7 @@ renderMetrics
         , lastBlockPoint
         , utxoSpeed
         , blockSpeed
+        , currentEra
         } = do
         hClearScreen stdout
         hSetCursorPosition stdout 0 0
@@ -88,6 +90,8 @@ renderMetrics
                 ++ maybe "N/A" (show . blockNo . snd) lastBlockPoint
                 ++ "\nLast Received Block Time: "
                 ++ maybe "N/A" (show . fst) lastBlockPoint
+                ++ "\nCurrent Era: "
+                ++ fromMaybe "N/A" currentEra
       where
         renderBlockPoint (_, header) = case blockPoint header of
             Network.Point Origin -> "Origin"

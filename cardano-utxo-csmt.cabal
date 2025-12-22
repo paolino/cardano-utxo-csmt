@@ -105,6 +105,7 @@ library
     , serialise
     , streaming
     , streaming-bytestring
+    , strict-sop-core
     , strict-stm
     , time
     , typed-protocols
