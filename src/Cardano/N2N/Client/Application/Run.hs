@@ -64,7 +64,7 @@ application
         hSetBuffering stdout NoBuffering
         tracer <- metricsTracer 10
         let counting = traceWith tracer UTxOChangesCount
-        withRocksDB dbPath $ \runDb -> do
+        withRocksDB dbPath 1 1 $ \runDb -> do
             (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
                     headersQueueSize

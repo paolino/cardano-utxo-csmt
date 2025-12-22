@@ -101,7 +101,7 @@ readUTxOCBORIncremental
         , optCSMTPath
         , optMaxEntries
         } =
-        withRocksDB optCSMTPath $ \run -> do
+        withRocksDB optCSMTPath 2 1 $ \run -> do
             withFile optInputFile ReadMode $ \handle ->
                 SB.hGetContents handle
                     & SB.toChunks
