@@ -10,19 +10,16 @@ where
 
 import Cardano.N2N.Client.Application.Database.Interface
     ( Database (..)
-    , Event (..)
     , Operation (..)
-    , ProgressK (..)
+    , Truncated (..)
     , Update (..)
-    , UpdateBox (..)
-    , UpdateResult (..)
     , inverseOp
     )
 import Control.Monad (forM_, when)
 import Control.Monad.State.Strict
     ( MonadState (..)
-    , State
-    , evalState
+    , StateT
+    , evalStateT
     , modify
     )
 import Data.Foldable (Foldable (..))
@@ -46,15 +43,18 @@ emptyInMemory =
         , mTip = Origin
         , mFinality = Origin
         }
-type InMemoryState slot key value = State (InMemory slot key value)
+type InMemoryState m slot key value =
+    StateT (InMemory slot key value) m
 
 runInMemoryState
-    :: (Ord key, Ord slot) => InMemoryState slot key value a -> a
-runInMemoryState st = evalState st emptyInMemory
+    :: (Ord key, Ord slot, Monad m)
+    => InMemoryState m slot key value a
+    -> m a
+runInMemoryState st = evalStateT st emptyInMemory
 
 mkInMemoryDatabaseSimple
-    :: Ord key
-    => Database (InMemoryState slot key value) slot key value
+    :: (Ord key, Monad m)
+    => Database (InMemoryState m slot key value) slot key value
 mkInMemoryDatabaseSimple =
     Database
         { getValue
@@ -73,43 +73,45 @@ mkInMemoryDatabaseSimple =
         pure mFinality
 
 updateInMemory
-    :: (Ord key, Ord slot)
-    => Database (InMemoryState slot key value) slot key value
-    -> Update 'ProgressT (State (InMemory slot key value)) slot key value
-updateInMemory value = TakeEvent $ \case
-    ForwardTip slot ops -> do
-        tip <- getTip value
-        when (At slot > tip) $ do
-            forM_ ops $ \op -> do
-                opI <- inverseOp (getValue value) op
-                modify $ \im@InMemory{mUTxos, mInverseOps} ->
-                    let mUTxos' = applyOp mUTxos op
-                        mInverseOps' = Map.insertWith (<>) slot [opI] mInverseOps
-                    in  im{mUTxos = mUTxos', mInverseOps = mInverseOps', mTip = At slot}
-        pure $ UpdateBox $ Progress $ updateInMemory value
-    RollbackTip Origin -> do
-        put emptyInMemory
-        pure $ UpdateBox $ Progress $ updateInMemory value
-    RollbackTip (At point) -> do
-        im@InMemory{mUTxos, mInverseOps, mTip, mFinality} <- get
-        if At point < mFinality
-            then do
+    :: (Ord key, Ord slot, Monad m)
+    => Database (InMemoryState m slot key value) slot key value
+    -> Update (InMemoryState m slot key value) slot key value
+updateInMemory value =
+    Update
+        { forwardTipApply = \slot ops -> do
+            tip <- getTip value
+            when (At slot > tip) $ do
+                forM_ ops $ \op -> do
+                    opI <- inverseOp (getValue value) op
+                    modify $ \im@InMemory{mUTxos, mInverseOps} ->
+                        let mUTxos' = applyOp mUTxos op
+                            mInverseOps' = Map.insertWith (<>) slot [opI] mInverseOps
+                        in  im{mUTxos = mUTxos', mInverseOps = mInverseOps', mTip = At slot}
+            pure $ updateInMemory value
+        , rollbackTipApply = \case
+            Origin -> do
                 put emptyInMemory
-                pure $ UpdateBox $ Rewind $ Truncate $ do
-                    pure $ Progress $ updateInMemory value
-            else do
-                when (At point < mTip) $ do
-                    let (mInverseOps', toBeInverted) = Map.split point mInverseOps
-                        opsToInvert = concatMap snd $ Map.toDescList toBeInverted
-                        mUTxos' = foldl' applyOp mUTxos opsToInvert
-                    put im{mUTxos = mUTxos', mInverseOps = mInverseOps', mTip = At point}
-                pure $ UpdateBox $ Progress $ updateInMemory value
-    ForwardFinality slot -> do
-        modify $ \im@InMemory{mFinality, mTip, mInverseOps} ->
-            let mFinalityPrime' = min (max mFinality (At slot)) mTip
-                (_, mInverseOps') = Map.split slot mInverseOps
-            in  im{mFinality = mFinalityPrime', mInverseOps = mInverseOps'}
-        pure $ UpdateBox $ Progress $ updateInMemory value
+                pure $ NotTruncated $ updateInMemory value
+            (At point) -> do
+                im@InMemory{mUTxos, mInverseOps, mTip, mFinality} <- get
+                if At point < mFinality
+                    then do
+                        put emptyInMemory
+                        pure $ Truncated $ updateInMemory value
+                    else do
+                        when (At point < mTip) $ do
+                            let (mInverseOps', toBeInverted) = Map.split point mInverseOps
+                                opsToInvert = concatMap snd $ Map.toDescList toBeInverted
+                                mUTxos' = foldl' applyOp mUTxos opsToInvert
+                            put im{mUTxos = mUTxos', mInverseOps = mInverseOps', mTip = At point}
+                        pure $ NotTruncated $ updateInMemory value
+        , forwardFinalityApply = \slot -> do
+            modify $ \im@InMemory{mFinality, mTip, mInverseOps} ->
+                let mFinalityPrime' = min (max mFinality (At slot)) mTip
+                    (_, mInverseOps') = Map.split slot mInverseOps
+                in  im{mFinality = mFinalityPrime', mInverseOps = mInverseOps'}
+            pure $ updateInMemory value
+        }
 
 applyOp
     :: Ord key => Map key value -> Operation key value -> Map key value

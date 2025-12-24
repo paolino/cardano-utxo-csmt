@@ -9,10 +9,6 @@ import Cardano.N2N.Client.Application.Database.InMemory
     , runInMemoryState
     , updateInMemory
     )
-import Cardano.N2N.Client.Application.Database.Interface
-    ( UpdateBox (UpdateBox)
-    , UpdateResult (Progress)
-    )
 import Cardano.N2N.Client.Application.Database.Properties
     ( findValue
     , logOnFailure
@@ -35,6 +31,7 @@ import Cardano.N2N.Client.Application.Database.Properties.Expected
     )
 import Cardano.Slotting.Slot (WithOrigin (..))
 import Data.Char (isAlpha, isAscii)
+import Data.Functor.Identity (Identity (..))
 import Data.List.NonEmpty (NonEmpty (..))
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.QuickCheck
@@ -72,8 +69,12 @@ instance Arbitrary GenValue where
       where
         isAsciiAlpha c = isAscii c && isAlpha c
 runInMemoryProperties
-    :: WithExpected (InMemoryState Int Int String) Int Int String a -> a
-runInMemoryProperties prop = runInMemoryState $ runWithExpected context box prop
+    :: WithExpected (InMemoryState Identity Int Int String) Int Int String a
+    -> a
+runInMemoryProperties prop =
+    runIdentity
+        $ runInMemoryState
+        $ runWithExpected context box prop
   where
     context =
         Context
@@ -91,10 +92,15 @@ runInMemoryProperties prop = runInMemoryState $ runWithExpected context box prop
                         pure v
                     }
             }
-    box = UpdateBox $ Progress $ updateInMemory mkInMemoryDatabaseSimple
+    box = updateInMemory mkInMemoryDatabaseSimple
 
 test
-    :: PropertyWithExpected (InMemoryState Int Int String) Int Int String ()
+    :: PropertyWithExpected
+        (InMemoryState Identity Int Int String)
+        Int
+        Int
+        String
+        ()
     -> Property
 test f =
     property

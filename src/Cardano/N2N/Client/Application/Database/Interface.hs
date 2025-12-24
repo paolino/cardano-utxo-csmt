@@ -2,10 +2,7 @@ module Cardano.N2N.Client.Application.Database.Interface
     ( Database (..)
     , Operation (..)
     , Update (..)
-    , UpdateBox (..)
-    , ProgressK (..)
-    , UpdateResult (..)
-    , Event (..)
+    , Truncated (..)
 
       -- * Implementation independent functions
     , inverseOp
@@ -21,10 +18,31 @@ import Data.List (sortOn)
 import Ouroboros.Network.Point (WithOrigin (..))
 import Prelude hiding (truncate)
 
+-- | Represents an operation on the database
 data Operation key value
     = Insert key value
     | Delete key
     deriving (Show, Eq)
+
+-- | Indicates whether an update resulted in truncation of the database
+data Truncated a = Truncated a | NotTruncated a
+
+-- | Represents an update to the database
+data Update m slot key value = Update
+    { forwardTipApply
+        :: slot
+        -> [Operation key value]
+        -> m (Update m slot key value)
+    -- ^ Apply operations at the given slot, moving the tip forward
+    , rollbackTipApply
+        :: WithOrigin slot
+        -> m (Truncated (Update m slot key value))
+    -- ^ Rollback to the given slot, possibly truncating the database
+    , forwardFinalityApply
+        :: slot
+        -> m (Update m slot key value)
+    -- ^ Move the finality point forward
+    }
 
 data Database m slot key value = Database
     { getValue :: key -> m (Maybe value)
@@ -32,6 +50,8 @@ data Database m slot key value = Database
     , getFinality :: m (WithOrigin slot)
     }
 
+-- | Get the inverse of an operation, needs access to the database to retrieve
+--   values for deletions
 inverseOp
     :: Monad m
     => (key -> m (Maybe value))
@@ -45,6 +65,7 @@ inverseOp value op = case op of
             Just v -> pure $ Insert k v
             Nothing -> error "inverseOp: cannot invert Delete operation, value not found"
 
+-- | A dump of the database contents for inspection/testing
 data Dump slot key value = Dump
     { dumpTip :: WithOrigin slot
     , dumpFinality :: WithOrigin slot
@@ -52,6 +73,7 @@ data Dump slot key value = Dump
     }
     deriving (Show, Eq)
 
+-- | An empty database dump
 emptyDump :: Dump slot key value
 emptyDump =
     Dump
@@ -60,6 +82,8 @@ emptyDump =
         , dumpAssocs = []
         }
 
+-- | Dump the contents of the database for the given keys. It's up to the caller
+--   to provide the keys of interest.
 dumpDatabase
     :: (Monad m, Ord key)
     => [key]
@@ -76,30 +100,3 @@ dumpDatabase keys db = do
             , dumpFinality = immutable
             , dumpAssocs = presentContents
             }
-
-data ProgressK = ProgressT | RewindT
-
-data Event slot key value where
-    ForwardTip :: slot -> [Operation key value] -> Event slot key value
-    ForwardFinality :: slot -> Event slot key value
-    RollbackTip :: WithOrigin slot -> Event slot key value
-
-data UpdateResult (p :: ProgressK) m slot key value where
-    Progress
-        :: Update 'ProgressT m slot key value
-        -> UpdateResult 'ProgressT m slot key value
-    Rewind
-        :: Update 'RewindT m slot key value
-        -> UpdateResult 'RewindT m slot key value
-
-data Update (p :: ProgressK) m slot key value where
-    TakeEvent
-        :: (Event slot key value -> m (UpdateBox m slot key value))
-        -> Update 'ProgressT m slot key value
-    Truncate
-        :: m (UpdateResult 'ProgressT m slot key value)
-        -> Update 'RewindT m slot key value
-
-data UpdateBox m slot key value where
-    UpdateBox
-        :: UpdateResult p m slot key value -> UpdateBox m slot key value

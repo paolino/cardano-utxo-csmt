@@ -40,12 +40,9 @@ where
 import Cardano.N2N.Client.Application.Database.Interface
     ( Database
     , Dump (..)
-    , Event (..)
     , Operation (..)
-    , ProgressK (..)
+    , Truncated (..)
     , Update (..)
-    , UpdateBox (..)
-    , UpdateResult (..)
     , dumpDatabase
     )
 import Cardano.N2N.Client.Application.Database.Interface qualified as Interface
@@ -112,12 +109,12 @@ type WithExpected m slot key value =
         (TrackingExpected m slot key value)
 
 type TrackingExpected m slot key value =
-    StateT (Expected slot key value, UpdateBox m slot key value) m
+    StateT (Expected slot key value, Update m slot key value) m
 
 runWithExpected
     :: PropertyConstraints m slot key value
     => Context m slot key value
-    -> UpdateBox m slot key value
+    -> Update m slot key value
     -> WithExpected m slot key value a
     -> m a
 runWithExpected context box prop =
@@ -241,11 +238,9 @@ forwardTip
     -> [Operation key value]
     -> PropertyWithExpected m slot key value ()
 forwardTip slot ops = lift . lift $ do
-    (ex, UpdateBox next) <- get
-    truncating next $ \case
-        TakeEvent update -> do
-            cont <- lift $ update (ForwardTip slot ops)
-            put (expectedForward ex slot ops, cont)
+    (ex, update) <- get
+    cont <- lift $ forwardTipApply update slot ops
+    put (expectedForward ex slot ops, cont)
 
 expectedRollback
     :: (Eq key, Ord slot)
@@ -283,11 +278,13 @@ rollbackTip
     => WithOrigin slot
     -> PropertyWithExpected m slot key value ()
 rollbackTip newTip = lift . lift $ do
-    (ex, UpdateBox next) <- get
-    truncating next $ \case
-        TakeEvent update -> do
-            cont <- lift $ update (RollbackTip newTip)
-            put (expectedRollback ex newTip, cont)
+    (ex, update) <- get
+    cont <- lift $ rollbackTipApply update newTip
+    case cont of
+        Truncated truncated -> do
+            put (emptyExpected, truncated)
+        NotTruncated notTruncated ->
+            put (expectedRollback ex newTip, notTruncated)
 
 expectedProgressFinality
     :: Ord slot
@@ -315,21 +312,9 @@ forwardFinality
     => slot
     -> PropertyWithExpected m slot key value ()
 forwardFinality slot = lift . lift $ do
-    (ex, UpdateBox next) <- get
-    truncating next $ \case
-        TakeEvent update -> do
-            cont <- lift $ update (ForwardFinality slot)
-            put (expectedProgressFinality ex slot, cont)
-
-truncating
-    :: Monad m
-    => UpdateResult p m slot key value
-    -> ( Update 'ProgressT m slot key value
-         -> TrackingExpected m slot key value a
-       )
-    -> TrackingExpected m slot key value a
-truncating (Rewind (Truncate truncateDB)) p = do
-    pe <- lift truncateDB
-    case pe of
-        Progress e -> p e
-truncating (Progress e) p = p e
+    (ex, update) <- get
+    cont <- lift $ forwardFinalityApply update slot
+    put
+        ( expectedProgressFinality ex slot
+        , cont
+        )
