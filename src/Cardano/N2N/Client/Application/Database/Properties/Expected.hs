@@ -38,9 +38,9 @@ module Cardano.N2N.Client.Application.Database.Properties.Expected
 where
 
 import Cardano.N2N.Client.Application.Database.Interface
-    ( Database
-    , Dump (..)
+    ( Dump (..)
     , Operation (..)
+    , Query
     , Truncated (..)
     , Update (..)
     , dumpDatabase
@@ -80,7 +80,7 @@ data Generator slot key value = Generator
 
 -- | Context for properties
 data Context m slot key value = Context
-    { contextDatabase :: Database m slot key value
+    { contextDatabase :: Query m slot key value
     , contextGenerator :: Generator slot key value
     }
 
@@ -133,7 +133,7 @@ type PropertyWithExpected m slot key value =
 
 runDb
     :: Monad m
-    => (Database m slot key value -> m a)
+    => (Query m slot key value -> m a)
     -> PropertyWithExpected m slot key value a
 runDb f = run $ do
     db <- asks contextDatabase

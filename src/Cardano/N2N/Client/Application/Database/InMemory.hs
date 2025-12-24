@@ -9,8 +9,8 @@ module Cardano.N2N.Client.Application.Database.InMemory
 where
 
 import Cardano.N2N.Client.Application.Database.Interface
-    ( Database (..)
-    , Operation (..)
+    ( Operation (..)
+    , Query (..)
     , Truncated (..)
     , Update (..)
     , inverseOp
@@ -54,9 +54,9 @@ runInMemoryState st = evalStateT st emptyInMemory
 
 mkInMemoryDatabaseSimple
     :: (Ord key, Monad m)
-    => Database (InMemoryState m slot key value) slot key value
+    => Query (InMemoryState m slot key value) slot key value
 mkInMemoryDatabaseSimple =
-    Database
+    Query
         { getValue
         , getTip
         , getFinality
@@ -74,7 +74,7 @@ mkInMemoryDatabaseSimple =
 
 updateInMemory
     :: (Ord key, Ord slot, Monad m)
-    => Database (InMemoryState m slot key value) slot key value
+    => Query (InMemoryState m slot key value) slot key value
     -> Update (InMemoryState m slot key value) slot key value
 updateInMemory value =
     Update

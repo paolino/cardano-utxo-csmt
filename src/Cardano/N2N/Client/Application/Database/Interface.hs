@@ -1,5 +1,5 @@
 module Cardano.N2N.Client.Application.Database.Interface
-    ( Database (..)
+    ( Query (..)
     , Operation (..)
     , Update (..)
     , Truncated (..)
@@ -44,7 +44,7 @@ data Update m slot key value = Update
     -- ^ Move the finality point forward
     }
 
-data Database m slot key value = Database
+data Query m slot key value = Query
     { getValue :: key -> m (Maybe value)
     , getTip :: m (WithOrigin slot)
     , getFinality :: m (WithOrigin slot)
@@ -87,7 +87,7 @@ emptyDump =
 dumpDatabase
     :: (Monad m, Ord key)
     => [key]
-    -> Database m slot key value
+    -> Query m slot key value
     -> m (Dump slot key value)
 dumpDatabase keys db = do
     tip <- getTip db
