@@ -65,6 +65,7 @@ library
     Cardano.N2N.Client.Application.Metrics
     Cardano.N2N.Client.Application.Options
     Cardano.N2N.Client.Application.Run
+    Cardano.N2N.Client.Application.Run.GenesisData
     Cardano.N2N.Client.Application.SampleList
     Cardano.N2N.Client.Application.UTxOs
     Cardano.N2N.Client.Ouroboros.Application
