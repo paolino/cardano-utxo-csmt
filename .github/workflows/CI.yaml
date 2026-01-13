@@ -37,6 +37,20 @@ jobs:
         with:
           name: cardano-utxo-csmt
           path: output-linux-tarball
+      - name: Build rpm artifact
+        run: nix bundle --bundler github:NixOS/bundlers#toRPM -o cardano-utxo-csmt.rpm
+      - name: Upload rpm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardano-utxo-csmt-rpm
+          path: cardano-utxo-csmt.rpm
+      - name: Build deb artifact
+        run: nix bundle --bundler github:NixOS/bundlers#toDEB -o cardano-utxo-csmt.deb
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardano-utxo-csmt-deb
+          path: cardano-utxo-csmt.deb
   unit:
     name: Run unit Tests
     runs-on: ubuntu-latest
