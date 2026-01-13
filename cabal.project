@@ -19,9 +19,9 @@ repository cardano-haskell-packages
 
 source-repository-package
   type: git
-  location: https://github.com/paolino/csmt
-  tag: a5922f1b739ed0a08b4df9c3cb106c8773c2b9a0
-  --sha256: sha256-YEyqHFymAxtEFnd0dtwmvoXh7AzzfFJF4WRkl7Md5Us=
+  location: https://github.com/paolino/haskell-csmt
+  tag: 50be8ba2dac8d385092eea0950273a7f1c9c0de2
+  --sha256: sha256-A2fXLKd8o8NouAHTtCGcfgwjc9v+oWnLUx8Ykk16aB0=
 
 source-repository-package
   type: git
