@@ -31,7 +31,11 @@ import Cardano.N2N.Client.Application.Options
     )
 import Cardano.N2N.Client.Application.UTxOs (Change (..), uTxOs)
 import Cardano.N2N.Client.Ouroboros.Connection (runNodeApplication)
-import Cardano.N2N.Client.Ouroboros.Types (Block, Intersector (..))
+import Cardano.N2N.Client.Ouroboros.Types
+    ( Block
+    , Intersector (..)
+    , Point
+    )
 import Control.Exception (throwIO)
 import Control.Monad (forM_)
 import Control.Tracer (Contravariant (..), traceWith)
@@ -147,8 +151,8 @@ application
                 Left err -> throwIO err
                 Right _ -> pure ()
 
-forwarding :: RunRocksDB -> IO () -> Block -> IO ()
-forwarding (RunRocksDB run) counting block = do
+forwarding :: RunRocksDB -> IO () -> (Point, Block) -> IO ()
+forwarding (RunRocksDB run) counting (_point, block) = do
     forM_ (uTxOs block) $ \change -> do
         case change of
             Spend txIn ->
@@ -163,7 +167,8 @@ forwarding (RunRocksDB run) counting block = do
     deleting = delete rocks . toStrict
     inserting = insert rocks `on` toStrict
 
-blockIntersector :: (Block -> IO ()) -> Intersector Block
+blockIntersector
+    :: ((Point, Block) -> IO ()) -> Intersector (Point, Block)
 blockIntersector forward =
     Intersector
         { intersectFound = \_point -> do
@@ -172,7 +177,7 @@ blockIntersector forward =
             pure (blockIntersector forward, [Network.Point Origin])
         }
 
-blockFollower :: (Block -> IO ()) -> Follower Block
+blockFollower :: ((Point, Block) -> IO ()) -> Follower (Point, Block)
 blockFollower forward = fix $ \go ->
     Follower
         { rollForward = \block -> do

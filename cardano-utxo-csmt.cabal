@@ -65,6 +65,9 @@ library
     Cardano.N2N.Client.Application.Metrics
     Cardano.N2N.Client.Application.Options
     Cardano.N2N.Client.Application.Run
+    Cardano.N2N.Client.Application.Run.GenesisData
+    Cardano.N2N.Client.Application.Run.InMemory
+    Cardano.N2N.Client.Application.SampleList
     Cardano.N2N.Client.Application.UTxOs
     Cardano.N2N.Client.Ouroboros.Application
     Cardano.N2N.Client.Ouroboros.Codecs
@@ -134,6 +137,16 @@ executable cardano-utxo-chainsync
 
   default-language: Haskell2010
 
+executable cardano-utxo-chainsync-in-memory
+  import:           warnings
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
+  main-is:          app/chainsync/in-memory.hs
+  build-depends:
+    , base
+    , cardano-utxo-csmt
+
+  default-language: Haskell2010
+
 library test-lib
   import:           warnings
   visibility:       public
@@ -145,11 +158,17 @@ test-suite unit-tests
   import:             warnings
   default-language:   Haskell2010
   hs-source-dirs:     test
-  build-depends:      hspec
+  build-depends:
+    , base
+    , cardano-slotting
+    , cardano-utxo-csmt
+    , hspec
+    , QuickCheck
+
   build-tool-depends: hspec-discover:hspec-discover
   type:               exitcode-stdio-1.0
   main-is:            main.hs
-  other-modules:
+  other-modules:      Cardano.N2N.Client.Application.Database.InMemorySpec
 
 benchmark bench
   import:           warnings

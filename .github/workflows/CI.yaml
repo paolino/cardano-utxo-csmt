@@ -25,8 +25,13 @@ jobs:
         with:
           name: cardano-utxo-csmt-image
           path: output-docker-image
-      - name: Build arx
-        run: nix bundle -o output-linux-tarball
+      - name: Build AppImage
+        run: nix bundle --bundler github:ralismark/nix-appimage .#cardano-utxo-csmt -o cardano-utxo-csmt.AppImage
+      - name: Upload appImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cardano-utxo-csmt-appImage
+          path: cardano-utxo-csmt.AppImage
       - name: Upload tarball Artifact
         uses: actions/upload-artifact@v4
         with:

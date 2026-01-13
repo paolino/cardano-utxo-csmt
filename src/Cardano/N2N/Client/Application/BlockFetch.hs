@@ -16,6 +16,7 @@ import Cardano.N2N.Client.Ouroboros.Types
     , BlockFetchApplication
     , Header
     , Intersector (..)
+    , Point
     )
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (..)
@@ -34,6 +35,7 @@ import Control.Lens (makeWrapped)
 import Control.Monad (unless)
 import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Ouroboros.Consensus.Cardano.Node ()
 import Ouroboros.Network.Block (blockPoint)
 import Ouroboros.Network.BlockFetch.ClientState (ChainRange (..))
@@ -54,7 +56,7 @@ mkBlockFetchApplication
     -- ^ max length of the event queue
     -> Tracer IO EventQueueLength
     -- ^ metrics tracer
-    -> Intersector Block
+    -> Intersector (Point, Block)
     -- ^ callback to process each fetched block
     -> IO (BlockFetchApplication, Intersector Header)
 mkBlockFetchApplication (EventQueueLength maxQueueLen) tr blockIntersector = do
@@ -90,19 +92,28 @@ mkBlockFetchApplication (EventQueueLength maxQueueLen) tr blockIntersector = do
                                 $ mkHeaderIntersector blockIntersector'
                 }
         blockFetchClient = BlockFetchClient $ do
-            (points, len) <- flushHeaders
+            (range, points, len) <- flushHeaders
             traceWith tr len
+            pointsVar <- newIORef points
             pure
                 $ SendMsgRequestRange
-                    points
+                    range
                     BlockFetchResponse
                         { handleStartBatch = pure
                             $ fix
                             $ \fetchOne ->
                                 BlockFetchReceiver
                                     { handleBlock = \block -> do
-                                        modifyMVar_ blockFollowerVar
-                                            $ flip rollForward block
+                                        pointsLeft <- readIORef pointsVar
+                                        case pointsLeft of
+                                            [] ->
+                                                error
+                                                    "mkBlockFetchApplication: \
+                                                    \more blocks fetched than requested"
+                                            p : ps -> do
+                                                writeIORef pointsVar ps
+                                                modifyMVar_ blockFollowerVar
+                                                    $ flip rollForward (p, block)
                                         pure fetchOne
                                     , handleBatchDone = pure ()
                                     }
@@ -127,11 +138,16 @@ nextChainRange xs = do
                 _ -> last ys
 
 queue
-    :: Int -> IO (a -> IO (), IO (ChainRange a, EventQueueLength), IO ())
+    :: Int
+    -> IO (a -> IO (), IO (ChainRange a, [a], EventQueueLength), IO ())
 queue size = do
     q <- newTBQueueIO $ fromIntegral size
     let push = writeTBQueue q
-        flush = flushTBQueue q >>= nextChainRange
+        flush = do
+            xs <- flushTBQueue q
+            (range, len) <- nextChainRange xs
+            pure (range, xs, len)
+
         waitEmpty = do
             isEmpty <- isEmptyTBQueue q
             unless isEmpty retry
