@@ -5,12 +5,19 @@ module Cardano.N2N.Client.Application.Run
     )
 where
 
+import CSMT
 import CSMT.Backend.RocksDB
     ( RunRocksDB (..)
-    , rocksDBBackend
+    , standaloneRocksDBDatabase
     , withRocksDB
     )
-import CSMT.Hashes (delete, insert, mkHash)
+import CSMT.Hashes
+    ( Hash
+    , delete
+    , fromKVHashes
+    , insert
+    , isoHash
+    )
 import Cardano.N2N.Client.Application.BlockFetch
     ( mkBlockFetchApplication
     )
@@ -38,10 +45,12 @@ import Cardano.N2N.Client.Ouroboros.Types
     )
 import Control.Exception (throwIO)
 import Control.Monad (forM_)
+import Control.Monad.IO.Class (MonadIO (..))
 import Control.Tracer (Contravariant (..), traceWith)
-import Data.ByteString (toStrict)
-import Data.Function (fix, on)
+import Data.ByteString (ByteString, toStrict)
+import Data.Function (fix)
 import Data.Maybe (fromMaybe)
+import Database.KV.Transaction qualified as Transaction
 import OptEnvConf (runParser)
 import Ouroboros.Consensus.Block (blockNo, blockPoint, unSlotNo)
 import Ouroboros.Network.Block qualified as Network
@@ -151,21 +160,30 @@ application
                 Left err -> throwIO err
                 Right _ -> pure ()
 
+codecs :: StandaloneCodecs ByteString ByteString Hash
+codecs =
+    StandaloneCodecs
+        { keyCodec = id
+        , valueCodec = id
+        , nodeCodec = isoHash
+        }
+
 forwarding :: RunRocksDB -> IO () -> (Point, Block) -> IO ()
-forwarding (RunRocksDB run) counting (_point, block) = do
+forwarding (RunRocksDB run) counting (_point, block) = run $ do
+    database <- standaloneRocksDBDatabase codecs
     forM_ (uTxOs block) $ \change -> do
-        case change of
+        Transaction.run database $ case change of
             Spend txIn ->
-                -- pure ()
-                run $ deleting txIn
+                delete fromKVHashes StandaloneKVCol StandaloneCSMTCol
+                    $ toStrict txIn
             Create txIn txOut ->
-                -- pure ()
-                run $ inserting txIn txOut
-        counting
-  where
-    rocks = rocksDBBackend mkHash
-    deleting = delete rocks . toStrict
-    inserting = insert rocks `on` toStrict
+                insert
+                    fromKVHashes
+                    StandaloneKVCol
+                    StandaloneCSMTCol
+                    (toStrict txIn)
+                    (toStrict txOut)
+        liftIO counting
 
 blockIntersector
     :: ((Point, Block) -> IO ()) -> Intersector (Point, Block)

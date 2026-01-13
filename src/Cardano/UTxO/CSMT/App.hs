@@ -3,12 +3,16 @@ module Cardano.UTxO.CSMT.App
     )
 where
 
+import CSMT
+    ( Standalone (StandaloneCSMTCol, StandaloneKVCol)
+    , StandaloneCodecs (..)
+    )
 import CSMT.Backend.RocksDB
     ( RunRocksDB (RunRocksDB)
-    , rocksDBBackend
+    , standaloneRocksDBDatabase
     , withRocksDB
     )
-import CSMT.Hashes (insert, mkHash)
+import CSMT.Hashes (Hash, fromKVHashes, insert, isoHash)
 import Codec.CBOR.Decoding
     ( Decoder
     , decodeBreakOr
@@ -26,6 +30,7 @@ import Data.ByteString (ByteString)
 import Data.Function ((&))
 import Data.Functor (($>))
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
+import Database.KV.Transaction qualified as Transaction
 import OptEnvConf (Parser, runParser, setting)
 import OptEnvConf.Setting
     ( auto
@@ -113,12 +118,23 @@ readUTxOCBORIncremental
       where
         part = maybe ($> ()) S.take optMaxEntries
 
+codecs :: StandaloneCodecs ByteString ByteString Hash
+codecs =
+    StandaloneCodecs
+        { keyCodec = id
+        , valueCodec = id
+        , nodeCodec = isoHash
+        }
+
 insertUTxO
     :: RunRocksDB -> Stream (Of (Term, Term)) IO () -> IO ()
 insertUTxO (RunRocksDB run) = S.mapM_ $ \(txin, term) -> do
     let key = toStrictByteString $ encodeTerm txin
         value' = toStrictByteString $ encodeTerm term
-    run $ insert (rocksDBBackend mkHash) key value'
+    run $ do
+        database <- standaloneRocksDBDatabase codecs
+        Transaction.run database
+            $ insert fromKVHashes StandaloneKVCol StandaloneCSMTCol key value'
 
 reportEvery :: Int -> Stream (Of a) IO b -> Stream (Of a) IO b
 reportEvery n s0 = do

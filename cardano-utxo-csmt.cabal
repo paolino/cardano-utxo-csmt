@@ -89,6 +89,7 @@ library
     , containers
     , contra-tracer
     , csmt
+    , csmt:rocksdb-transactions
     , foldl
     , lens
     , memory
