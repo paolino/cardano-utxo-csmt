@@ -61,6 +61,7 @@ library
     Cardano.N2N.Client.Application.Database.Interface
     Cardano.N2N.Client.Application.Database.Properties
     Cardano.N2N.Client.Application.Database.Properties.Expected
+    Cardano.N2N.Client.Application.Database.RocksDB.Structure
     Cardano.N2N.Client.Application.KeepAlive
     Cardano.N2N.Client.Application.Metrics
     Cardano.N2N.Client.Application.Options
@@ -106,6 +107,7 @@ library
     , ouroboros-network-protocols
     , profunctors
     , QuickCheck
+    , rocksdb-haskell-jprupp
     , serialise
     , streaming
     , streaming-bytestring
