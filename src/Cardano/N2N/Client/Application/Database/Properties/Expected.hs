@@ -41,7 +41,7 @@ import Cardano.N2N.Client.Application.Database.Interface
     ( Dump (..)
     , Operation (..)
     , Query
-    , Truncated (..)
+    , State (..)
     , Update (..)
     , dumpDatabase
     )
@@ -109,7 +109,7 @@ type WithExpected m slot key value =
         (TrackingExpected m slot key value)
 
 type TrackingExpected m slot key value =
-    StateT (Expected slot key value, Update m slot key value) m
+    StateT (Expected slot key value, State m slot key value) m
 
 runWithExpected
     :: PropertyConstraints m slot key value
@@ -118,7 +118,7 @@ runWithExpected
     -> WithExpected m slot key value a
     -> m a
 runWithExpected context box prop =
-    flip evalStateT (emptyExpected, box)
+    flip evalStateT (emptyExpected, Syncing box)
         $ runReaderT prop context
 
 -- | Access the generator from the context
@@ -238,9 +238,15 @@ forwardTip
     -> [Operation key value]
     -> PropertyWithExpected m slot key value ()
 forwardTip slot ops = lift . lift $ do
-    (ex, update) <- get
-    cont <- lift $ forwardTipApply update slot ops
-    put (expectedForward ex slot ops, cont)
+    (ex, databaseState) <- get
+    case databaseState of
+        Syncing update -> do
+            cont <- lift $ forwardTipApply update slot ops
+            put (expectedForward ex slot ops, Syncing cont)
+        Intersecting _ _ ->
+            error "forwardTip: cannot forward while intersecting"
+        Truncating _ ->
+            error "forwardTip: cannot forward while resetting"
 
 expectedRollback
     :: (Eq key, Ord slot)
@@ -278,13 +284,18 @@ rollbackTip
     => WithOrigin slot
     -> PropertyWithExpected m slot key value ()
 rollbackTip newTip = lift . lift $ do
-    (ex, update) <- get
-    cont <- lift $ rollbackTipApply update newTip
-    case cont of
-        Truncated truncated -> do
-            put (emptyExpected, truncated)
-        NotTruncated notTruncated ->
-            put (expectedRollback ex newTip, notTruncated)
+    (ex, databaseState) <- get
+    case databaseState of
+        Syncing update -> do
+            cont <- lift $ rollbackTipApply update newTip
+            case cont of
+                s@(Syncing{}) -> do
+                    put (expectedRollback ex newTip, s)
+                s -> put (ex, s)
+        Intersecting _ _ -> do
+            error "rollbackTip: cannot rollback to a point not in reset points"
+        Truncating _ -> do
+            error "rollbackTip: cannot rollback while resetting"
 
 expectedProgressFinality
     :: Ord slot
@@ -312,9 +323,15 @@ forwardFinality
     => slot
     -> PropertyWithExpected m slot key value ()
 forwardFinality slot = lift . lift $ do
-    (ex, update) <- get
-    cont <- lift $ forwardFinalityApply update slot
-    put
-        ( expectedProgressFinality ex slot
-        , cont
-        )
+    (ex, databaseState) <- get
+    case databaseState of
+        Syncing update -> do
+            cont <- lift $ forwardFinalityApply update slot
+            put
+                ( expectedProgressFinality ex slot
+                , Syncing cont
+                )
+        Intersecting _ _reset ->
+            error "forwardFinality: cannot progress finality while resetting"
+        Truncating _ ->
+            error "forwardFinality: cannot progress finality while resetting"

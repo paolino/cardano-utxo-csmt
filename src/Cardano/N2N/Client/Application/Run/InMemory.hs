@@ -20,11 +20,12 @@ import Cardano.N2N.Client.Application.Database.InMemory
     , InMemoryState
     , emptyInMemory
     , mkInMemoryDatabaseSimple
+    , newFinality
     , updateInMemory
     )
 import Cardano.N2N.Client.Application.Database.Interface
     ( Operation (..)
-    , Truncated (..)
+    , State (..)
     , Update (..)
     )
 import Cardano.N2N.Client.Application.Metrics
@@ -49,11 +50,17 @@ import Cardano.N2N.Client.Ouroboros.Types
     )
 import Control.Concurrent.Class.MonadSTM.Strict (MonadSTM (..))
 import Control.Concurrent.Class.MonadSTM.Strict.TVar
+    ( StrictTVar
+    , newTVarIO
+    , readTVarIO
+    , writeTVar
+    )
 import Control.Exception (throwIO)
+import Control.Monad (replicateM_)
 import Control.Monad.State.Strict
     ( StateT (..)
     )
-import Control.Tracer
+import Control.Tracer (Contravariant (contramap), traceWith)
 import Data.ByteString.Lazy (ByteString)
 import Data.Function (fix)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
@@ -69,7 +76,7 @@ import Ouroboros.Network.Point
     , blockPointSlot
     )
 import Paths_cardano_utxo_csmt (version)
-import System.Console.ANSI
+import System.Console.ANSI (hClearScreen, hSetCursorPosition)
 import System.IO (BufferMode (..), hSetBuffering, stdout)
 
 type DB = StrictTVar IO (InMemory Point ByteString ByteString)
@@ -78,8 +85,11 @@ type Updater = IORef InMemoryUpdater
 
 type InMemoryChain = InMemoryState IO Point ByteString ByteString
 
+origin :: Network.Point block
+origin = Network.Point{getPoint = Origin}
+
 type InMemoryUpdater =
-    Update
+    State
         InMemoryChain
         Point
         ByteString
@@ -89,21 +99,19 @@ getRollbackPoints :: DB -> IO (NonEmpty Point)
 getRollbackPoints dbVar = do
     db <- readTVarIO dbVar
     case sampleList $ Map.keys $ mInverseOps db of
-        [] -> pure $ Network.Point Origin :| []
+        [] -> pure $ origin :| []
         (p : ps) -> pure (p :| ps)
 
-intersector :: DB -> Updater -> Intersector (Point, Block)
-intersector db updater =
+intersector :: IO () -> DB -> Updater -> Intersector (Point, Block)
+intersector trUTxO db updater =
     Intersector
         { intersectFound = \point -> do
             putStrLn $ "Intersected at point: " ++ show point
-            r <- rollingBack db updater point (follower db updater)
-            case r of
-                Progress f -> pure f
-                Rewind _ _ -> error "intersector: intersectFound produced Rewind"
-        , intersectNotFound =
+            pure $ follower trUTxO db updater
+        , intersectNotFound = do
+            putStrLn "Intersect not found, resetting to origin"
             pure
-                ( intersector db updater
+                ( intersector trUTxO db updater
                 , [Network.Point Origin]
                 )
         }
@@ -112,35 +120,49 @@ changeToOperation :: Change -> Operation ByteString ByteString
 changeToOperation (Spend k) = Delete k
 changeToOperation (Create k v) = Insert k v
 
-follower :: DB -> Updater -> Follower (Point, Block)
-follower db updater = fix $ \go ->
+follower :: IO () -> DB -> Updater -> Follower (Point, Block)
+follower trUTxO db updater = fix $ \go ->
     Follower
         { rollForward = \(point, block) -> do
             let ops = changeToOperation <$> uTxOs block
-            () <- onDb db updater $ \update -> do
-                x <- forwardTipApply update point ops
-                pure ((), x)
+            -- putStrLn
+            --     $ "Rolling forward to point: "
+            --         ++ show point
+            --         ++ " with "
+            --         ++ show (length ops)
+            --         ++ " UTxO changes"
+            replicateM_ (length ops) trUTxO
+            () <- onDb db updater $ \case
+                Syncing update -> do
+                    u1 <- forwardTipApply update point ops
+                    mFinality <- newFinality 2160
+                    u2 <- case mFinality of
+                        Nothing -> pure u1
+                        Just slot -> forwardFinalityApply u1 slot
+                    pure ((), Syncing u2)
+                _ -> error "follower: cannot roll forward while intersecting"
             pure go
-        , rollBackward = \point -> rollingBack db updater point go
+        , rollBackward = \point -> rollingBack trUTxO db updater point go
         }
 
 rollingBack
-    :: DB
+    :: IO ()
+    -> DB
     -> Updater
     -> Point
     -> Follower (Point, Block)
     -> IO (ProgressOrRewind (Point, Block))
-rollingBack db updater point follower' = do
+rollingBack trUTxO db updater point follower' = do
     putStrLn $ "Rolling back to point: " ++ show point
-    c <- onDb db updater $ \update -> do
-        result <- rollbackTipApply update (At point)
-        case result of
-            NotTruncated update' -> pure (False, update')
-            Truncated truncated -> do
-                pure (True, truncated)
-    if c
-        then pure $ Rewind [point] (intersector db updater)
-        else pure $ Progress follower'
+    onDb db updater $ \case
+        Syncing update -> do
+            result <- rollbackTipApply update (At point)
+            case result of
+                Syncing{} -> pure (Progress follower', result)
+                Truncating u -> pure (Reset follower', Syncing u)
+                Intersecting ps u -> do
+                    pure (Rewind ps (intersector trUTxO db updater), Syncing u)
+        _ -> error "rollingBack: cannot roll back while intersecting"
 
 onDb
     :: DB
@@ -225,15 +247,16 @@ application
                     , metricsOutput = renderMetrics
                     , metricsFrequency = 1_000_000
                     }
-        -- let counting = traceWith tracer UTxOChangeEvent
+        let counting = traceWith tracer UTxOChangeEvent
 
         db <- newTVarIO emptyInMemory
-        updater <- newIORef $ updateInMemory mkInMemoryDatabaseSimple
+        updater <-
+            newIORef $ Syncing $ updateInMemory mkInMemoryDatabaseSimple
         (blockFetchApplication, headerIntersector) <-
             mkBlockFetchApplication
                 headersQueueSize
                 (contramap BlockFetchEvent tracer)
-                $ intersector db updater
+                $ intersector counting db updater
         let chainFollowingApplication =
                 mkChainSyncApplication
                     (contramap BlockInfoEvent tracer)

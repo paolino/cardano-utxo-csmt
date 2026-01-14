@@ -73,6 +73,8 @@ next tracer follower = ($ follower)
                     Progress follower' -> pure $ go follower'
                     Rewind points follower' ->
                         pure $ intersect tracer points follower'
+                    Reset follower' ->
+                        pure $ next tracer follower'
         in
             SendMsgRequestNext
                 (pure ()) -- spare time for other work

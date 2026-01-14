@@ -13,9 +13,6 @@ import CSMT.Backend.RocksDB
     )
 import CSMT.Hashes
     ( Hash
-    , delete
-    , fromKVHashes
-    , insert
     , isoHash
     )
 import Cardano.N2N.Client.Application.BlockFetch
@@ -36,7 +33,7 @@ import Cardano.N2N.Client.Application.Options
     ( Options (..)
     , optionsParser
     )
-import Cardano.N2N.Client.Application.UTxOs (Change (..), uTxOs)
+import Cardano.N2N.Client.Application.UTxOs (uTxOs)
 import Cardano.N2N.Client.Ouroboros.Connection (runNodeApplication)
 import Cardano.N2N.Client.Ouroboros.Types
     ( Block
@@ -47,10 +44,9 @@ import Control.Exception (throwIO)
 import Control.Monad (forM_)
 import Control.Monad.IO.Class (MonadIO (..))
 import Control.Tracer (Contravariant (..), traceWith)
-import Data.ByteString (ByteString, toStrict)
+import Data.ByteString (ByteString)
 import Data.Function (fix)
 import Data.Maybe (fromMaybe)
-import Database.KV.Transaction qualified as Transaction
 import OptEnvConf (runParser)
 import Ouroboros.Consensus.Block (blockNo, blockPoint, unSlotNo)
 import Ouroboros.Network.Block qualified as Network
@@ -172,17 +168,17 @@ forwarding :: RunRocksDB -> IO () -> (Point, Block) -> IO ()
 forwarding (RunRocksDB run) counting (_point, block) = run $ do
     database <- standaloneRocksDBDatabase codecs
     forM_ (uTxOs block) $ \change -> do
-        Transaction.run database $ case change of
-            Spend txIn ->
-                delete fromKVHashes StandaloneKVCol StandaloneCSMTCol
-                    $ toStrict txIn
-            Create txIn txOut ->
-                insert
-                    fromKVHashes
-                    StandaloneKVCol
-                    StandaloneCSMTCol
-                    (toStrict txIn)
-                    (toStrict txOut)
+        -- Transaction.run database $ case change of
+        --     Spend txIn ->
+        --         delete fromKVHashes StandaloneKVCol StandaloneCSMTCol
+        --             $ toStrict txIn
+        --     Create txIn txOut ->
+        --         insert
+        --             fromKVHashes
+        --             StandaloneKVCol
+        --             StandaloneCSMTCol
+        --             (toStrict txIn)
+        --             (toStrict txOut)
         liftIO counting
 
 blockIntersector
