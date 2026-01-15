@@ -75,6 +75,7 @@ library
     Cardano.N2N.Client.Ouroboros.Connection
     Cardano.N2N.Client.Ouroboros.Types
     Cardano.UTxO.CSMT.App
+    Data.List.SampleFibonacci
 
   build-depends:
     , ansi-terminal
@@ -171,7 +172,9 @@ test-suite unit-tests
   build-tool-depends: hspec-discover:hspec-discover
   type:               exitcode-stdio-1.0
   main-is:            main.hs
-  other-modules:      Cardano.N2N.Client.Application.Database.InMemorySpec
+  other-modules:
+    Cardano.N2N.Client.Application.Database.InMemorySpec
+    Data.List.SampleFibonacciSpec
 
 benchmark bench
   import:           warnings
