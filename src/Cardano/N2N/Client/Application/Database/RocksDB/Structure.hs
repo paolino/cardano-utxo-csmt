@@ -1,14 +1,16 @@
 module Cardano.N2N.Client.Application.Database.RocksDB.Structure
-    ( Structure (..)
+    ( Columns (..)
     , RollbackPoint (..)
     , RollbackPointKV
+    , RollbackResult (..)
+    , updateRocksDB
+    , Armageddon (..)
+
+      -- * Low level operations, exposed for testing
+    , forwardFinalityApplyRocksDB
     , forwardTipApplyRocksDB
     , updateRollbackPoint
     , rollbackTipApplyRocksDB
-    , RollbackResult (..)
-    , forwardFinalityApplyRocksDB
-    , updateRocksDB
-    , Armageddon (..)
     )
 where
 
@@ -55,7 +57,7 @@ data RollbackPoint slot hash key value = RollbackPoint
     , rbpInverseOperations :: [Operation key value]
     }
 
--- | Represents a point in the blockchain
+-- | Represents a point in the blockchain. Hashes are needed to rule out time forks.
 data Point slot hash = Point
     { pointSlot :: slot
     , pointHash :: hash
@@ -67,13 +69,13 @@ type RollbackPointKV slot hash key value =
     KV slot (RollbackPoint slot hash key value)
 
 -- | Structure of the RocksDB database used by this application
-data Structure slot hash key value x where
-    KVCol :: Structure slot hash key value (KV key value)
+data Columns slot hash key value x where
+    KVCol :: Columns slot hash key value (KV key value)
         -- ^ Key-Value column for utxos
-    CSMTCol :: Structure slot hash key value (KV Key (Indirect hash))
+    CSMTCol :: Columns slot hash key value (KV Key (Indirect hash))
         -- ^ CSMT column for storing the CSMT of the UTxO set
     RollbackPoints
-        :: Structure slot hash key value (RollbackPointKV slot hash key value)
+        :: Columns slot hash key value (RollbackPointKV slot hash key value)
         -- ^ Column for storing rollback points
 
 -- | Parameters for performing an "armageddon" cleanup of the RocksDB database
@@ -82,17 +84,17 @@ data Armageddon slot hash key value = Armageddon
     -- ^ Number of entries to delete per batch
     , armageddonRunBatch
         :: forall a
-         . Transaction IO ColumnFamily (Structure slot hash key value) BatchOp a
+         . Transaction IO ColumnFamily (Columns slot hash key value) BatchOp a
         -> IO a
     -- ^ Function to run a transaction, neeed to prevent memory exhaustion with
     -- an unbounded transaction size
     }
 
--- | Clean up a RocksDB column batch
+-- Clean up a RocksDB column batch
 -- THIS IS NOT GOING TO RUN ATOMICALLY
 cleanUpRocksDBBatch
     :: Ord (KeyOf x)
-    => Structure slot hash key value x
+    => Columns slot hash key value x
     -> Armageddon slot hash key value
     -> IO ()
 cleanUpRocksDBBatch column Armageddon{armageddonBatchSize, armageddonRunBatch} = do
@@ -108,7 +110,7 @@ cleanUpRocksDBBatch column Armageddon{armageddonBatchSize, armageddonRunBatch} =
                     go (next, count + 1)
         when r transact
 
--- | Perform an "armageddon" cleanup of the RocksDB database
+-- Perform an "armageddon" cleanup of the RocksDB database
 -- by deleting all entries in all columns in batches
 -- THIS IS NOT GOING TO RUN ATOMICALLY
 armageddonRocksDB
@@ -120,13 +122,13 @@ armageddonRocksDB armageddon = do
     cleanUpRocksDBBatch CSMTCol armageddon
     cleanUpRocksDBBatch RollbackPoints armageddon
 
-instance GEq (Structure slot hash key value) where
+instance GEq (Columns slot hash key value) where
     geq KVCol KVCol = Just Refl
     geq CSMTCol CSMTCol = Just Refl
     geq RollbackPoints RollbackPoints = Just Refl
     geq _ _ = Nothing
 
-instance GCompare (Structure slot hash key value) where
+instance GCompare (Columns slot hash key value) where
     gcompare KVCol KVCol = GEQ
     gcompare KVCol _ = GLT
     gcompare _ KVCol = GGT
@@ -147,7 +149,7 @@ forwardTipApplyRocksDB
     -- ^ slot at which operations happen
     -> [Operation key value]
     -- ^ operations to apply
-    -> Transaction IO ColumnFamily (Structure slot hash key value) BatchOp ()
+    -> Transaction IO ColumnFamily (Columns slot hash key value) BatchOp ()
 forwardTipApplyRocksDB fromKV hashing slot ops = do
     invs <- forM ops $ \case
         Insert k v -> do
@@ -167,14 +169,14 @@ updateRollbackPoint
     :: Ord slot
     => Point slot hash
     -> [Operation key value]
-    -> Transaction IO ColumnFamily (Structure slot hash key value) BatchOp ()
+    -> Transaction IO ColumnFamily (Columns slot hash key value) BatchOp ()
 updateRollbackPoint Point{pointSlot, pointHash} rbpInverseOperations =
     insert RollbackPoints pointSlot
         $ RollbackPoint{rbpHash = pointHash, rbpInverseOperations}
 
 sampleRollbackPoints
     :: Cursor
-        (Transaction IO ColumnFamily (Structure slot hash key value) BatchOp)
+        (Transaction IO ColumnFamily (Columns slot hash key value) BatchOp)
         (RollbackPointKV slot hash key value)
         [Point slot hash]
 sampleRollbackPoints = do
@@ -188,26 +190,40 @@ rollbackRollbackPoint
     => FromKV key value hash
     -> Hashing hash
     -> RollbackPoint slot hash key value
-    -> Transaction IO ColumnFamily (Structure slot hash key value) BatchOp ()
+    -> Transaction IO ColumnFamily (Columns slot hash key value) BatchOp ()
 rollbackRollbackPoint fromKV hashing RollbackPoint{rbpInverseOperations} =
     forM_ rbpInverseOperations $ \case
         Insert k v -> inserting fromKV hashing KVCol CSMTCol k v
         Delete k -> deleting fromKV hashing KVCol CSMTCol k
 
+-- | Result of a rollback attempt. Just a mirror, without continuation of 'Interface.State'
 data RollbackResult slot hash
     = RollbackSucceeded
     | RollbackFailedButPossible [Point slot hash]
     | RollbackImpossible
 
+-- | Create a RocksDB transaction that performs a rollback to the given slot
+-- Returns whether the rollback was successful, failed but possible (with a list
+-- of rollback points to intersect against), or impossible (in which case the
+-- database should be truncated)
+-- It DOES NOT encode the truncation as a transaction because that would potentially
+-- be too big to fit in memory
+-- Rollback is performed by seeking the exact rollback point, and then applying all
+-- inverse operations down to that point excluded
+-- If the exact rollback point is not found, we return a list of available rollback points
+-- If the list is empty, rollback is impossible and the database should be truncated
 rollbackTipApplyRocksDB
     :: (Ord slot, Eq hash, Ord key)
     => FromKV key value hash
+    -- ^ FromKV instance to convert from key to Key and value to hash
     -> Hashing hash
+    -- ^ Way to compose hashes
     -> WithOrigin (Point slot hash)
+    -- ^ Slot to rollback to
     -> Transaction
         IO
         ColumnFamily
-        (Structure slot hash key value)
+        (Columns slot hash key value)
         BatchOp
         (RollbackResult slot hash)
 rollbackTipApplyRocksDB _fromKV _hashing Origin = pure RollbackImpossible
@@ -231,10 +247,11 @@ rollbackTipApplyRocksDB fromKV hashing (At slot) = do
                         pure RollbackSucceeded
                     else RollbackFailedButPossible <$> sampleRollbackPoints
 
+-- | Apply forward finality in RocksDB.
 forwardFinalityApplyRocksDB
     :: Ord slot
     => Point slot hash
-    -> Transaction IO ColumnFamily (Structure slot hash key value) BatchOp ()
+    -> Transaction IO ColumnFamily (Columns slot hash key value) BatchOp ()
 forwardFinalityApplyRocksDB slot = do
     iterating RollbackPoints $ do
         me <- firstEntry
@@ -245,6 +262,8 @@ forwardFinalityApplyRocksDB slot = do
                     lift $ delete RollbackPoints entryKey
                     nextEntry >>= go
 
+-- | Update RocksDB database update state. This implementation does not take advantage
+-- of continuations and so always propose itself as the next continuation
 updateRocksDB
     :: (Ord key, Eq hash, Ord slot)
     => FromKV key value hash
@@ -254,7 +273,7 @@ updateRocksDB
     -> Armageddon slot hash key value
     -- ^ Armageddon parameters, in case rollback is impossible
     -> Update
-        (Transaction IO ColumnFamily (Structure slot hash key value) BatchOp)
+        (Transaction IO ColumnFamily (Columns slot hash key value) BatchOp)
         (Point slot hash)
         key
         value
