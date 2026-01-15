@@ -218,7 +218,7 @@ rollbackTipApplyRocksDB
     -- ^ FromKV instance to convert from key to Key and value to hash
     -> Hashing hash
     -- ^ Way to compose hashes
-    -> WithOrigin (Point slot hash)
+    -> Point slot hash
     -- ^ Slot to rollback to
     -> Transaction
         IO
@@ -226,8 +226,7 @@ rollbackTipApplyRocksDB
         (Columns slot hash key value)
         BatchOp
         (RollbackResult slot hash)
-rollbackTipApplyRocksDB _fromKV _hashing Origin = pure RollbackImpossible
-rollbackTipApplyRocksDB fromKV hashing (At slot) = do
+rollbackTipApplyRocksDB fromKV hashing slot = do
     iterating RollbackPoints $ do
         me <- seekKey $ pointSlot slot
         case me of
@@ -282,16 +281,18 @@ updateRocksDB fromKV hashing armageddon = fix $ \u ->
         { forwardTipApply = \slot ops -> do
             forwardTipApplyRocksDB fromKV hashing slot ops
             pure u
-        , rollbackTipApply = \slot -> do
-            r <- rollbackTipApplyRocksDB fromKV hashing slot
-            case r of
-                RollbackSucceeded -> pure $ Syncing u
-                RollbackFailedButPossible slots -> pure $ Intersecting slots u
-                RollbackImpossible -> do
-                    liftIO $ do
-                        putStrLn
-                            "rollbackTipApplyRocksDB: rollback impossible, truncating database"
-                        armageddonRocksDB armageddon
-                    pure $ Truncating u
+        , rollbackTipApply = \case
+            At slot -> do
+                r <- rollbackTipApplyRocksDB fromKV hashing slot
+                case r of
+                    RollbackSucceeded -> pure $ Syncing u
+                    RollbackFailedButPossible slots -> pure $ Intersecting slots u
+                    RollbackImpossible -> pure $ Truncating u
+            Origin -> do
+                liftIO $ do
+                    putStrLn
+                        "rollbackTipApplyRocksDB: rollback to Origin, truncating database"
+                    armageddonRocksDB armageddon
+                pure $ Syncing u
         , forwardFinalityApply = \slot -> forwardFinalityApplyRocksDB slot >> pure u
         }

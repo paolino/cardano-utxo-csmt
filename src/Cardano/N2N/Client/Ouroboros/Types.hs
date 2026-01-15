@@ -58,7 +58,7 @@ type BlockFetch = BlockFetch.BlockFetch Block Point
 data ProgressOrRewind h
     = Progress (Follower h)
     | Rewind [Point] (Intersector h)
-    | Reset (Follower h)
+    | Reset (Intersector h)
 
 -- | An event representing a roll forward or roll backward in the chain
 data Follower h = Follower

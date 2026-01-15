@@ -90,9 +90,8 @@ mkBlockFetchApplication (EventQueueLength maxQueueLen) tr blockIntersector = do
                             pure
                                 $ Rewind points
                                 $ mkHeaderIntersector blockIntersector'
-                        Reset blockFollower' -> do
-                            putMVar blockFollowerVar blockFollower'
-                            pure (Reset headerFollower)
+                        Reset blockIntersector' -> do
+                            pure (Reset $ mkHeaderIntersector blockIntersector')
                 }
         blockFetchClient = BlockFetchClient $ do
             (range, points, len) <- flushHeaders
