@@ -33,7 +33,10 @@ data State m slot key value
     | -- | Database is truncating, no possible rollbacks, the protocol should reset to Origin
       Truncating (Update m slot key value)
 
--- | Represents an update to the database
+-- | Represents an update to the database. We offer a continuation-based API so that
+-- the database implementation can thread an internal state without messing up with the
+-- monad stack.
+-- Valid consumers should always pick the continuation
 data Update m slot key value = Update
     { forwardTipApply
         :: slot
