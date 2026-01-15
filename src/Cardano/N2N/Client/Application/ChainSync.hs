@@ -18,6 +18,8 @@ import Cardano.N2N.Client.Ouroboros.Types
 import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
 import Ouroboros.Consensus.Cardano.Node ()
+import Ouroboros.Network.Block qualified as Network
+import Ouroboros.Network.Point (WithOrigin (Origin))
 import Ouroboros.Network.Protocol.ChainSync.Client
     ( ChainSyncClient (..)
     , ClientStIdle (..)
@@ -73,8 +75,8 @@ next tracer follower = ($ follower)
                     Progress follower' -> pure $ go follower'
                     Rewind points follower' ->
                         pure $ intersect tracer points follower'
-                    Reset follower' ->
-                        pure $ next tracer follower'
+                    Reset intersector' ->
+                        pure $ intersect tracer [Network.Point Origin] intersector'
         in
             SendMsgRequestNext
                 (pure ()) -- spare time for other work

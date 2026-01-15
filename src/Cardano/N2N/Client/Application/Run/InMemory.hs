@@ -159,7 +159,9 @@ rollingBack trUTxO db updater point follower' = do
             result <- rollbackTipApply update (At point)
             case result of
                 Syncing{} -> pure (Progress follower', result)
-                Truncating u -> pure (Reset follower', Syncing u)
+                Truncating u ->
+                    pure
+                        (Reset (intersector trUTxO db updater), Syncing u)
                 Intersecting ps u -> do
                     pure (Rewind ps (intersector trUTxO db updater), Syncing u)
         _ -> error "rollingBack: cannot roll back while intersecting"
