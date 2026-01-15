@@ -8,6 +8,7 @@ module Cardano.N2N.Client.Application.Database.RocksDB.Structure
     , RollbackResult (..)
     , forwardFinalityApplyRocksDB
     , updateRocksDB
+    , Armageddon (..)
     )
 where
 
@@ -38,6 +39,7 @@ import Database.KV.Transaction
     , GEq (..)
     , GOrdering (..)
     , KV
+    , KeyOf
     , Transaction
     , delete
     , insert
@@ -53,6 +55,7 @@ data RollbackPoint slot hash key value = RollbackPoint
     , rbpInverseOperations :: [Operation key value]
     }
 
+-- | Represents a point in the blockchain
 data Point slot hash = Point
     { pointSlot :: slot
     , pointHash :: hash
@@ -72,6 +75,50 @@ data Structure slot hash key value x where
     RollbackPoints
         :: Structure slot hash key value (RollbackPointKV slot hash key value)
         -- ^ Column for storing rollback points
+
+-- | Parameters for performing an "armageddon" cleanup of the RocksDB database
+data Armageddon slot hash key value = Armageddon
+    { armageddonBatchSize :: Int
+    -- ^ Number of entries to delete per batch
+    , armageddonRunBatch
+        :: forall a
+         . Transaction IO ColumnFamily (Structure slot hash key value) BatchOp a
+        -> IO a
+    -- ^ Function to run a transaction, neeed to prevent memory exhaustion with
+    -- an unbounded transaction size
+    }
+
+-- | Clean up a RocksDB column batch
+-- THIS IS NOT GOING TO RUN ATOMICALLY
+cleanUpRocksDBBatch
+    :: Ord (KeyOf x)
+    => Structure slot hash key value x
+    -> Armageddon slot hash key value
+    -> IO ()
+cleanUpRocksDBBatch column Armageddon{armageddonBatchSize, armageddonRunBatch} = do
+    fix $ \transact -> do
+        r <- armageddonRunBatch $ iterating column $ do
+            me <- firstEntry
+            ($ (me, 0)) $ fix $ \go -> \case
+                (Nothing, _) -> pure False
+                (_, n) | n >= armageddonBatchSize -> pure True
+                (Just Entry{entryKey}, count) -> do
+                    lift $ delete column entryKey
+                    next <- nextEntry
+                    go (next, count + 1)
+        when r transact
+
+-- | Perform an "armageddon" cleanup of the RocksDB database
+-- by deleting all entries in all columns in batches
+-- THIS IS NOT GOING TO RUN ATOMICALLY
+armageddonRocksDB
+    :: (Ord key, Ord slot)
+    => Armageddon slot hash key value
+    -> IO ()
+armageddonRocksDB armageddon = do
+    cleanUpRocksDBBatch KVCol armageddon
+    cleanUpRocksDBBatch CSMTCol armageddon
+    cleanUpRocksDBBatch RollbackPoints armageddon
 
 instance GEq (Structure slot hash key value) where
     geq KVCol KVCol = Just Refl
@@ -163,7 +210,7 @@ rollbackTipApplyRocksDB
         (Structure slot hash key value)
         BatchOp
         (RollbackResult slot hash)
-rollbackTipApplyRocksDB _fromKV _hashing Origin = error "not implemented yet"
+rollbackTipApplyRocksDB _fromKV _hashing Origin = pure RollbackImpossible
 rollbackTipApplyRocksDB fromKV hashing (At slot) = do
     iterating RollbackPoints $ do
         me <- seekKey $ pointSlot slot
@@ -201,13 +248,17 @@ forwardFinalityApplyRocksDB slot = do
 updateRocksDB
     :: (Ord key, Eq hash, Ord slot)
     => FromKV key value hash
+    -- ^ FromKV instance to convert from key to Key and value to hash
     -> Hashing hash
+    -- ^ Way to compose hashes
+    -> Armageddon slot hash key value
+    -- ^ Armageddon parameters, in case rollback is impossible
     -> Update
         (Transaction IO ColumnFamily (Structure slot hash key value) BatchOp)
         (Point slot hash)
         key
         value
-updateRocksDB fromKV hashing = fix $ \u ->
+updateRocksDB fromKV hashing armageddon = fix $ \u ->
     Update
         { forwardTipApply = \slot ops -> do
             forwardTipApplyRocksDB fromKV hashing slot ops
@@ -217,6 +268,11 @@ updateRocksDB fromKV hashing = fix $ \u ->
             case r of
                 RollbackSucceeded -> pure $ Syncing u
                 RollbackFailedButPossible slots -> pure $ Intersecting slots u
-                RollbackImpossible -> pure $ Truncating u
+                RollbackImpossible -> do
+                    liftIO $ do
+                        putStrLn
+                            "rollbackTipApplyRocksDB: rollback impossible, truncating database"
+                        armageddonRocksDB armageddon
+                    pure $ Truncating u
         , forwardFinalityApply = \slot -> forwardFinalityApplyRocksDB slot >> pure u
         }
