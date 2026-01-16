@@ -58,6 +58,7 @@ library
     Cardano.N2N.Client.Application.BlockFetch
     Cardano.N2N.Client.Application.ChainSync
     Cardano.N2N.Client.Application.Database.Implementation
+    Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     Cardano.N2N.Client.Application.Database.InMemory
     Cardano.N2N.Client.Application.Database.Interface
     Cardano.N2N.Client.Application.Database.Properties
@@ -87,6 +88,7 @@ library
     , cardano-ledger-byron
     , cardano-read-ledger
     , cborg
+    , cereal
     , comonad
     , containers
     , contra-tracer
