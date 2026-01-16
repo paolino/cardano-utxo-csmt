@@ -1,11 +1,15 @@
 module Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     ( ArmageddonParams (..)
     , armageddon
+    , setup
     )
 where
 
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
     ( Columns (..)
+    )
+import Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
+    ( RollbackPoint (..)
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     ( RunCSMTTransaction (..)
@@ -21,13 +25,16 @@ import Database.KV.Cursor
 import Database.KV.Transaction
     ( KeyOf
     , delete
+    , insert
     , iterating
     )
+import Ouroboros.Network.Point (WithOrigin (..))
 
 -- | Parameters for performing an "armageddon" cleanup of the database
-newtype ArmageddonParams = ArmageddonParams
+data ArmageddonParams hash = ArmageddonParams
     { armageddonBatchSize :: Int
     -- ^ Number of entries to delete per batch
+    , noHash :: hash
     }
 
 -- Clean up a column batch of rows
@@ -35,7 +42,7 @@ cleanUpBatch
     :: (Ord (KeyOf x), Monad m)
     => RunCSMTTransaction cf op slot hash key value m
     -> Columns slot hash key value x
-    -> ArmageddonParams
+    -> ArmageddonParams hash
     -> m ()
 cleanUpBatch
     RunCSMTTransaction{txRunTransaction = transact}
@@ -59,9 +66,26 @@ cleanUpBatch
 armageddon
     :: (Ord key, Ord slot, Monad m)
     => RunCSMTTransaction cf op slot hash key value m
-    -> ArmageddonParams
+    -> ArmageddonParams hash
     -> m ()
 armageddon runTransaction armageddonParams = do
     cleanUpBatch runTransaction KVCol armageddonParams
     cleanUpBatch runTransaction CSMTCol armageddonParams
     cleanUpBatch runTransaction RollbackPoints armageddonParams
+    setup runTransaction armageddonParams
+
+setup
+    :: Ord slot
+    => RunCSMTTransaction cf op slot hash key value m
+    -> ArmageddonParams hash
+    -> m ()
+setup (RunCSMTTransaction{txRunTransaction}) armageddonParams =
+    txRunTransaction
+        $ insert
+            RollbackPoints
+            Origin
+            ( RollbackPoint
+                { rbpHash = noHash armageddonParams
+                , rbpInverseOperations = []
+                }
+            )
