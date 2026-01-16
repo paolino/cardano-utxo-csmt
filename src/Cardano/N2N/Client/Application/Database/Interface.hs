@@ -1,9 +1,15 @@
 module Cardano.N2N.Client.Application.Database.Interface
-    ( Query (..)
+    ( -- * Query interface
+      Query (..)
+    , hoistQuery
+
+      -- * Operation
     , Operation (..)
+    , inverseOp
+
+      -- * Update interface
     , Update (..)
     , State (..)
-    , inverseOp
 
       -- * Database dump, for inspection/testing
     , Dump (..)
@@ -59,6 +65,18 @@ data Query m slot key value = Query
     , getTip :: m (WithOrigin slot)
     , getFinality :: m (WithOrigin slot)
     }
+
+-- | Let a transaction runner apply to all queries
+hoistQuery
+    :: (forall a. m a -> n a)
+    -> Query m slot key value
+    -> Query n slot key value
+hoistQuery nat Query{getValue, getTip, getFinality} =
+    Query
+        { getValue = nat . getValue
+        , getTip = nat getTip
+        , getFinality = nat getFinality
+        }
 
 -- | Get the inverse of an operation, needs access to the database to retrieve
 --   values for deletions
