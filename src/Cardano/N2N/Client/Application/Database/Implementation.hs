@@ -11,6 +11,7 @@ module Cardano.N2N.Client.Application.Database.Implementation
     , forwardTip
     , updateRollbackPoint
     , rollbackTip
+    , mkQuery
     )
 where
 
@@ -19,6 +20,7 @@ import CSMT.Deletion (deleting)
 import CSMT.Interface (Indirect, Key)
 import Cardano.N2N.Client.Application.Database.Interface
     ( Operation (..)
+    , Query (..)
     , State (..)
     , Update (..)
     )
@@ -180,9 +182,11 @@ sampleRollbackPoints
         [Point slot hash]
 sampleRollbackPoints = do
     fmap mkPoint <$> sampleAtFibonacciIntervals prevEntry
-  where
-    mkPoint Entry{entryKey, entryValue = RollbackPoint{rbpHash}} =
-        Point{pointSlot = entryKey, pointHash = rbpHash}
+
+mkPoint
+    :: Entry (KV slot (RollbackPoint slot hash key value)) -> Point slot hash
+mkPoint Entry{entryKey, entryValue = RollbackPoint{rbpHash}} =
+    Point{pointSlot = entryKey, pointHash = rbpHash}
 
 rollbackRollbackPoint
     :: (Ord key, Monad m)
@@ -307,3 +311,48 @@ mkUpdate fromKV hashing runTransaction@RunTransaction{transact} armageddonParams
                     pure $ Syncing cont
             , forwardFinalityApply = \slot -> transact $ forwardFinality slot >> pure cont
             }
+
+mkQuery
+    :: (Ord key, Monad m)
+    => RunTransaction cf op slot hash key value m
+    -> Query m (Point slot hash) key value
+mkQuery RunTransaction{transact} =
+    Query
+        { getValue = transact . getValue'
+        , getTip = transact getTip'
+        , getFinality = transact getFinality'
+        }
+
+rollbackPointDefaultToOrigin
+    :: Maybe (Entry (KV slot (RollbackPoint slot hash key value)))
+    -> WithOrigin (Point slot hash)
+rollbackPointDefaultToOrigin Nothing = Origin
+rollbackPointDefaultToOrigin (Just e) = At $ mkPoint e
+
+getFinality'
+    :: Monad m
+    => Transaction
+        m
+        cf
+        (Columns slot hash key value)
+        op
+        (WithOrigin (Point slot hash))
+getFinality' =
+    iterating RollbackPoints $ rollbackPointDefaultToOrigin <$> firstEntry
+
+getTip'
+    :: Monad m
+    => Transaction
+        m
+        cf
+        (Columns slot hash key value)
+        op
+        (WithOrigin (Point slot hash))
+getTip' =
+    iterating RollbackPoints $ rollbackPointDefaultToOrigin <$> lastEntry
+
+getValue'
+    :: Ord key
+    => key
+    -> Transaction m cf (Columns slot hash key value) op (Maybe value)
+getValue' = query KVCol
