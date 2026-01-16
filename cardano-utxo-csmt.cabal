@@ -58,8 +58,10 @@ library
     Cardano.N2N.Client.Application.BlockFetch
     Cardano.N2N.Client.Application.ChainSync
     Cardano.N2N.Client.Application.Database.Implementation
+    Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     Cardano.N2N.Client.Application.Database.Implementation.Columns
     Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
+    Cardano.N2N.Client.Application.Database.Implementation.RunTransaction
     Cardano.N2N.Client.Application.Database.InMemory
     Cardano.N2N.Client.Application.Database.Interface
     Cardano.N2N.Client.Application.Database.Properties
