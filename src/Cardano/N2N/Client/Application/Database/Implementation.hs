@@ -26,6 +26,10 @@ import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
     ( Columns (..)
     )
+import Cardano.N2N.Client.Application.Database.Implementation.Point
+    ( Point (..)
+    , mkPoint
+    )
 import Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
     , RollbackPointKV
@@ -62,13 +66,6 @@ import Database.KV.Transaction
     , query
     )
 import Ouroboros.Network.Point (WithOrigin (..))
-
--- | Represents a point in the blockchain. Hashes are needed to rule out time forks.
-data Point slot hash = Point
-    { pointSlot :: slot
-    , pointHash :: hash
-    }
-    deriving (Show, Eq, Ord)
 
 -- | Apply forward tip .
 -- We compose csmt transactions for each operation with a updateRollbackPoint one
@@ -115,11 +112,6 @@ sampleRollbackPoints
         [Point slot hash]
 sampleRollbackPoints = do
     fmap mkPoint <$> sampleAtFibonacciIntervals prevEntry
-
-mkPoint
-    :: Entry (KV slot (RollbackPoint slot hash key value)) -> Point slot hash
-mkPoint Entry{entryKey, entryValue = RollbackPoint{rbpHash}} =
-    Point{pointSlot = entryKey, pointHash = rbpHash}
 
 rollbackRollbackPoint
     :: (Ord key, Monad m)
