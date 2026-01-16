@@ -69,6 +69,7 @@ library
     Cardano.N2N.Client.Application.Database.Interface
     Cardano.N2N.Client.Application.Database.Properties
     Cardano.N2N.Client.Application.Database.Properties.Expected
+    Cardano.N2N.Client.Application.Database.RocksDB
     Cardano.N2N.Client.Application.KeepAlive
     Cardano.N2N.Client.Application.Metrics
     Cardano.N2N.Client.Application.Options
@@ -172,16 +173,25 @@ test-suite unit-tests
   hs-source-dirs:     test
   build-depends:
     , base
+    , bytestring
     , cardano-slotting
     , cardano-utxo-csmt
+    , cereal
+    , csmt
+    , csmt:rocksdb-transactions
     , hspec
+    , lens
     , QuickCheck
+    , rocksdb-haskell-jprupp
+    , temporary
+    , transformers
 
   build-tool-depends: hspec-discover:hspec-discover
   type:               exitcode-stdio-1.0
   main-is:            main.hs
   other-modules:
     Cardano.N2N.Client.Application.Database.InMemorySpec
+    Cardano.N2N.Client.Application.Database.RocksDBSpec
     Data.List.SampleFibonacciSpec
 
 benchmark bench
