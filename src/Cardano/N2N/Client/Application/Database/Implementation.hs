@@ -3,8 +3,10 @@ module Cardano.N2N.Client.Application.Database.Implementation
     , RollbackPoint (..)
     , RollbackPointKV
     , RollbackResult (..)
+    , Point (..)
     , mkUpdate
     , ArmageddonParams (..)
+    , RunTransaction (..)
 
       -- * Low level operations, exposed for testing
     , forwardFinality
@@ -12,12 +14,18 @@ module Cardano.N2N.Client.Application.Database.Implementation
     , updateRollbackPoint
     , rollbackTip
     , mkQuery
+    , rollbackPointPrism
     )
 where
 
 import CSMT (FromKV, Hashing, inserting)
 import CSMT.Deletion (deleting)
 import CSMT.Interface (Indirect, Key)
+import Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
+    ( RollbackPoint (..)
+    , RollbackPointKV
+    , rollbackPointPrism
+    )
 import Cardano.N2N.Client.Application.Database.Interface
     ( Operation (..)
     , Query (..)
@@ -52,22 +60,12 @@ import Database.KV.Transaction
     )
 import Ouroboros.Network.Point (WithOrigin (..))
 
--- | Represents a rollback point in the database
-data RollbackPoint slot hash key value = RollbackPoint
-    { rbpHash :: hash
-    , rbpInverseOperations :: [Operation key value]
-    }
-
 -- | Represents a point in the blockchain. Hashes are needed to rule out time forks.
 data Point slot hash = Point
     { pointSlot :: slot
     , pointHash :: hash
     }
     deriving (Show, Eq, Ord)
-
--- | Type alias for the KV column storing rollback points
-type RollbackPointKV slot hash key value =
-    KV slot (RollbackPoint slot hash key value)
 
 -- | Structure of the database used by this application
 data Columns slot hash key value x where

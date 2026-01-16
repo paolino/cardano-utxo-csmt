@@ -1,0 +1,91 @@
+module Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
+    ( RollbackPoint (..)
+    , RollbackPointKV
+    , rollbackPointPrism
+    )
+where
+
+import Cardano.N2N.Client.Application.Database.Interface
+    ( Operation (..)
+    )
+import Control.Lens (Prism', preview, prism', review)
+import Control.Monad (forM_, replicateM)
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as B
+import Data.Serialize
+    ( Get
+    , PutM
+    , getByteString
+    , getWord32be
+    , getWord8
+    , putByteString
+    , putWord32be
+    , putWord8
+    )
+import Data.Serialize.Extra (evalGetM, evalPutM)
+import Database.KV.Transaction (KV)
+
+-- | Represents a rollback point in the database
+data RollbackPoint slot hash key value = RollbackPoint
+    { rbpHash :: hash
+    , rbpInverseOperations :: [Operation key value]
+    }
+
+-- | Type alias for the KV column storing rollback points
+type RollbackPointKV slot hash key value =
+    KV slot (RollbackPoint slot hash key value)
+
+putReview :: Prism' ByteString a -> a -> PutM ()
+putReview p x = do
+    let y = review p x
+        l = B.length y
+    putWord32be $ fromIntegral l
+    putByteString y
+
+getPreview :: Prism' ByteString a -> Get a
+getPreview p = do
+    bs <- getWord32be >>= getByteString . fromIntegral
+    case preview p bs of
+        Just x -> pure x
+        Nothing -> fail "getPreview: prism decoding failed"
+
+-- | Prism for serializing/deserializing RollbackPoint
+rollbackPointPrism
+    :: forall slot hash key value
+     . Prism' ByteString hash
+    -> Prism' ByteString key
+    -> Prism' ByteString value
+    -> Prism' ByteString (RollbackPoint slot hash key value)
+rollbackPointPrism hashPrism keyPrism valuePrism =
+    prism' encode decode
+  where
+    encode :: RollbackPoint slot hash key value -> ByteString
+    encode RollbackPoint{rbpHash, rbpInverseOperations} =
+        evalPutM $ do
+            putReview hashPrism rbpHash
+            let opsCount = fromIntegral (length rbpInverseOperations)
+            putWord32be opsCount
+            forM_ rbpInverseOperations $ \case
+                Delete k -> do
+                    putWord8 0
+                    putReview keyPrism k
+                Insert k v -> do
+                    putWord8 1
+                    putReview keyPrism k
+                    putReview valuePrism v
+    decode :: ByteString -> Maybe (RollbackPoint slot hash key value)
+    decode = evalGetM $ do
+        rbpHash <- getPreview hashPrism
+        opsCount <- getWord32be
+        rbpInverseOperations <- replicateM (fromIntegral opsCount) $ do
+            tag <- getWord8
+            case tag of
+                0 -> do
+                    k <- getPreview keyPrism
+                    pure $ Delete k
+                1 -> do
+                    k <- getPreview keyPrism
+                    v <- getPreview valuePrism
+                    pure $ Insert k v
+                _ -> fail "mkRollbackPointCodecs: invalid operation tag"
+        pure $ RollbackPoint{rbpHash, rbpInverseOperations}
