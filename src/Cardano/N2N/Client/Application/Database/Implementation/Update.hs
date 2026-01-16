@@ -9,8 +9,6 @@ module Cardano.N2N.Client.Application.Database.Implementation.Update
     )
 where
 
-import CSMT (FromKV, Hashing, inserting)
-import CSMT.Deletion (deleting)
 import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     ( ArmageddonParams
     , armageddon
@@ -26,8 +24,11 @@ import Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
     , RollbackPointKV
     )
-import Cardano.N2N.Client.Application.Database.Implementation.RunTransaction
-    ( RunTransaction (..)
+import Cardano.N2N.Client.Application.Database.Implementation.Transaction
+    ( CSMTTransaction
+    , RunCSMTTransaction (..)
+    , deleteCSMT
+    , insertCSMT
     )
 import Cardano.N2N.Client.Application.Database.Interface
     ( Operation (..)
@@ -48,8 +49,7 @@ import Database.KV.Cursor
     , seekKey
     )
 import Database.KV.Transaction
-    ( Transaction
-    , delete
+    ( delete
     , insert
     , iterating
     , query
@@ -57,38 +57,34 @@ import Database.KV.Transaction
 import Ouroboros.Network.Point (WithOrigin (..))
 
 -- | Apply forward tip .
--- We compose csmt transactions for each operation with a updateRollbackPoint one
+-- We compose csmt transactions for each operation with an updateRollbackPoint one
 forwardTip
     :: (Ord key, Ord slot, Monad m)
-    => FromKV key value hash
-    -- ^ FromKV instance to convert from key to Key and value to hash
-    -> Hashing hash
-    -- ^ Way to compose hashes
-    -> Point slot hash
+    => Point slot hash
     -- ^ slot at which operations happen
     -> [Operation key value]
     -- ^ operations to apply
-    -> Transaction m cf (Columns slot hash key value) op ()
-forwardTip fromKV hashing slot ops = do
+    -> CSMTTransaction m cf op slot hash key value ()
+forwardTip slot ops = do
     invs <- forM ops $ \case
         Insert k v -> do
-            inserting fromKV hashing KVCol CSMTCol k v
-            pure $ Delete k
+            insertCSMT k v
+            pure [Delete k]
         Delete k -> do
-            deleting fromKV hashing KVCol CSMTCol k
+            deleteCSMT k
             mx <- query KVCol k
             case mx of
-                Nothing ->
-                    error
-                        "forwardFinalityApply: cannot invert Delete operation, value not found"
-                Just x -> pure $ Insert k x
-    updateRollbackPoint slot invs
+                Nothing -> pure []
+                -- error
+                -- "forwardFinalityApply: cannot invert Delete operation, value not found"
+                Just x -> pure [Insert k x]
+    updateRollbackPoint slot $ concat invs
 
 updateRollbackPoint
     :: (Ord slot)
     => Point slot hash
     -> [Operation key value]
-    -> Transaction m cf (Columns slot hash key value) op ()
+    -> CSMTTransaction m cf op slot hash key value ()
 updateRollbackPoint Point{pointSlot, pointHash} rbpInverseOperations =
     insert RollbackPoints pointSlot
         $ RollbackPoint{rbpHash = pointHash, rbpInverseOperations}
@@ -96,7 +92,7 @@ updateRollbackPoint Point{pointSlot, pointHash} rbpInverseOperations =
 sampleRollbackPoints
     :: Monad m
     => Cursor
-        (Transaction m cf (Columns slot hash key value) op)
+        (CSMTTransaction m cf op slot hash key value)
         (RollbackPointKV slot hash key value)
         [Point slot hash]
 sampleRollbackPoints = do
@@ -104,14 +100,12 @@ sampleRollbackPoints = do
 
 rollbackRollbackPoint
     :: (Ord key, Monad m)
-    => FromKV key value hash
-    -> Hashing hash
-    -> RollbackPoint slot hash key value
-    -> Transaction m cf (Columns slot hash key value) op ()
-rollbackRollbackPoint fromKV hashing RollbackPoint{rbpInverseOperations} =
+    => RollbackPoint slot hash key value
+    -> CSMTTransaction m cf op slot hash key value ()
+rollbackRollbackPoint RollbackPoint{rbpInverseOperations} =
     forM_ rbpInverseOperations $ \case
-        Insert k v -> inserting fromKV hashing KVCol CSMTCol k v
-        Delete k -> deleting fromKV hashing KVCol CSMTCol k
+        Insert k v -> insertCSMT k v
+        Delete k -> deleteCSMT k
 
 -- | Result of a rollback attempt. Just a mirror, without continuation of 'Interface.State'
 data RollbackResult slot hash
@@ -131,19 +125,10 @@ data RollbackResult slot hash
 -- If the list is empty, rollback is impossible and the database should be truncated
 rollbackTip
     :: (Ord slot, Eq hash, Ord key, MonadFail m)
-    => FromKV key value hash
-    -- ^ FromKV instance to convert from key to Key and value to hash
-    -> Hashing hash
-    -- ^ Way to compose hashes
-    -> Point slot hash
+    => Point slot hash
     -- ^ Slot to rollback to
-    -> Transaction
-        m
-        cf
-        (Columns slot hash key value)
-        op
-        (RollbackResult slot hash)
-rollbackTip fromKV hashing slot = do
+    -> CSMTTransaction m cf op slot hash key value (RollbackResult slot hash)
+rollbackTip slot = do
     iterating RollbackPoints $ do
         me <- seekKey $ pointSlot slot
         case me of
@@ -158,7 +143,7 @@ rollbackTip fromKV hashing slot = do
                             Just Entry{entryKey, entryValue} ->
                                 when (entryKey > pointSlot slot) $ do
                                     lift $ do
-                                        rollbackRollbackPoint fromKV hashing entryValue
+                                        rollbackRollbackPoint entryValue
                                         delete RollbackPoints entryKey
                                     prevEntry >>= go
                         pure RollbackSucceeded
@@ -168,7 +153,7 @@ rollbackTip fromKV hashing slot = do
 forwardFinality
     :: (Ord slot, Monad m)
     => Point slot hash
-    -> Transaction m cf (Columns slot hash key value) op ()
+    -> CSMTTransaction m cf op slot hash key value ()
 forwardFinality slot = do
     iterating RollbackPoints $ do
         me <- firstEntry
@@ -185,26 +170,18 @@ mkUpdate
     :: (Ord key, Eq hash, Ord slot, MonadFail m, MonadIO m)
     => ArmageddonParams
     -- ^ Armageddon parameters, in case rollback is impossible
-    -> FromKV key value hash
-    -- ^ FromKV instance to convert from key to Key and value to hash
-    -> Hashing hash
-    -- ^ Way to compose hashes
-    -> RunTransaction cf op slot hash key value m
+    -> RunCSMTTransaction cf op slot hash key value m
     -- ^ Function to run a transaction
-    -> Update
-        m
-        (Point slot hash)
-        key
-        value
-mkUpdate armageddonParams fromKV hashing runTransaction@RunTransaction{transact} =
+    -> Update m (Point slot hash) key value
+mkUpdate armageddonParams runTransaction@RunCSMTTransaction{txRunTransaction} =
     fix $ \cont ->
         Update
-            { forwardTipApply = \slot ops -> transact $ do
-                forwardTip fromKV hashing slot ops
+            { forwardTipApply = \slot ops -> txRunTransaction $ do
+                forwardTip slot ops
                 pure cont
             , rollbackTipApply = \case
                 At slot -> do
-                    r <- transact $ rollbackTip fromKV hashing slot
+                    r <- txRunTransaction $ rollbackTip slot
                     case r of
                         RollbackSucceeded -> pure $ Syncing cont
                         RollbackFailedButPossible slots -> pure $ Intersecting slots cont
@@ -215,5 +192,5 @@ mkUpdate armageddonParams fromKV hashing runTransaction@RunTransaction{transact}
                             "rollbackTipApply: rollback to Origin, truncating database"
                     armageddon runTransaction armageddonParams
                     pure $ Syncing cont
-            , forwardFinalityApply = \slot -> transact $ forwardFinality slot >> pure cont
+            , forwardFinalityApply = \slot -> txRunTransaction $ forwardFinality slot >> pure cont
             }

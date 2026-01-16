@@ -7,8 +7,8 @@ where
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
     ( Columns (..)
     )
-import Cardano.N2N.Client.Application.Database.Implementation.RunTransaction
-    ( RunTransaction (..)
+import Cardano.N2N.Client.Application.Database.Implementation.Transaction
+    ( RunCSMTTransaction (..)
     )
 import Control.Monad (when)
 import Control.Monad.Trans (lift)
@@ -33,12 +33,12 @@ newtype ArmageddonParams = ArmageddonParams
 -- Clean up a column batch of rows
 cleanUpBatch
     :: (Ord (KeyOf x), Monad m)
-    => RunTransaction cf op slot hash key value m
+    => RunCSMTTransaction cf op slot hash key value m
     -> Columns slot hash key value x
     -> ArmageddonParams
     -> m ()
 cleanUpBatch
-    RunTransaction{transact}
+    RunCSMTTransaction{txRunTransaction = transact}
     column
     ArmageddonParams{armageddonBatchSize} = do
         fix $ \batch -> do
@@ -58,7 +58,7 @@ cleanUpBatch
 -- THIS IS NOT GOING TO RUN ATOMICALLY
 armageddon
     :: (Ord key, Ord slot, Monad m)
-    => RunTransaction cf op slot hash key value m
+    => RunCSMTTransaction cf op slot hash key value m
     -> ArmageddonParams
     -> m ()
 armageddon runTransaction armageddonParams = do
