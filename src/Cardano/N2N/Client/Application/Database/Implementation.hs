@@ -20,7 +20,9 @@ where
 
 import CSMT (FromKV, Hashing, inserting)
 import CSMT.Deletion (deleting)
-import CSMT.Interface (Indirect, Key)
+import Cardano.N2N.Client.Application.Database.Implementation.Columns
+    ( Columns (..)
+    )
 import Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
     , RollbackPointKV
@@ -32,7 +34,6 @@ import Cardano.N2N.Client.Application.Database.Interface
     , State (..)
     , Update (..)
     )
-import Control.Lens ((:~:) (..))
 import Control.Monad (forM, forM_, when)
 import Control.Monad.Trans (MonadIO (..), lift)
 import Data.Function (fix)
@@ -47,10 +48,7 @@ import Database.KV.Cursor
     , seekKey
     )
 import Database.KV.Transaction
-    ( GCompare (..)
-    , GEq (..)
-    , GOrdering (..)
-    , KV
+    ( KV
     , KeyOf
     , Transaction
     , delete
@@ -66,31 +64,6 @@ data Point slot hash = Point
     , pointHash :: hash
     }
     deriving (Show, Eq, Ord)
-
--- | Structure of the database used by this application
-data Columns slot hash key value x where
-    KVCol :: Columns slot hash key value (KV key value)
-        -- ^ Key-Value column for utxos
-    CSMTCol :: Columns slot hash key value (KV Key (Indirect hash))
-        -- ^ CSMT column for storing the CSMT of the UTxO set
-    RollbackPoints
-        :: Columns slot hash key value (RollbackPointKV slot hash key value)
-        -- ^ Column for storing rollback points
-
-instance GEq (Columns slot hash key value) where
-    geq KVCol KVCol = Just Refl
-    geq CSMTCol CSMTCol = Just Refl
-    geq RollbackPoints RollbackPoints = Just Refl
-    geq _ _ = Nothing
-
-instance GCompare (Columns slot hash key value) where
-    gcompare KVCol KVCol = GEQ
-    gcompare KVCol _ = GLT
-    gcompare _ KVCol = GGT
-    gcompare CSMTCol CSMTCol = GEQ
-    gcompare CSMTCol RollbackPoints = GLT
-    gcompare RollbackPoints CSMTCol = GGT
-    gcompare RollbackPoints RollbackPoints = GEQ
 
 -- | Parameters for performing an "armageddon" cleanup of the database
 newtype ArmageddonParams = ArmageddonParams
