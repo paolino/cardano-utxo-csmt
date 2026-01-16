@@ -14,7 +14,7 @@ import Cardano.N2N.Client.Application.Database.Implementation.Point
 import Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
     )
-import Cardano.N2N.Client.Application.Database.Implementation.RunTransaction
+import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     ( RunTransaction (..)
     )
 import Cardano.N2N.Client.Application.Database.Interface
