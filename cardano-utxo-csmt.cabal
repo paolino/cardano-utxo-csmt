@@ -64,6 +64,7 @@ library
     Cardano.N2N.Client.Application.Database.Implementation.Query
     Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     Cardano.N2N.Client.Application.Database.Implementation.RunTransaction
+    Cardano.N2N.Client.Application.Database.Implementation.Update
     Cardano.N2N.Client.Application.Database.InMemory
     Cardano.N2N.Client.Application.Database.Interface
     Cardano.N2N.Client.Application.Database.Properties
