@@ -9,6 +9,7 @@ import CSMT.Interface (Indirect, Key, csmtCodecs)
 import Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     ( RollbackPointKV
     , rollbackPointPrism
+    , withOriginPrism
     )
 import Control.Lens (Prism', type (:~:) (Refl))
 import Data.ByteString (ByteString)
@@ -66,7 +67,7 @@ codecs Prisms{keyP, hashP, slotP, valueP} =
         , CSMTCol :=> csmtCodecs hashP
         , RollbackPoints
             :=> Codecs
-                { keyCodec = slotP
+                { keyCodec = withOriginPrism slotP
                 , valueCodec = rollbackPointPrism hashP keyP valueP
                 }
         ]

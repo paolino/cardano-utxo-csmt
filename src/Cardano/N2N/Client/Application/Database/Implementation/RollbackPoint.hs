@@ -2,6 +2,7 @@ module Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
     , RollbackPointKV
     , rollbackPointPrism
+    , withOriginPrism
     )
 where
 
@@ -24,6 +25,7 @@ import Data.Serialize
     )
 import Data.Serialize.Extra (evalGetM, evalPutM)
 import Database.KV.Transaction (KV)
+import Ouroboros.Network.Point (WithOrigin (..))
 
 -- | Represents a rollback point in the database
 data RollbackPoint slot hash key value = RollbackPoint
@@ -33,7 +35,7 @@ data RollbackPoint slot hash key value = RollbackPoint
 
 -- | Type alias for the KV column storing rollback points
 type RollbackPointKV slot hash key value =
-    KV slot (RollbackPoint slot hash key value)
+    KV (WithOrigin slot) (RollbackPoint slot hash key value)
 
 putReview :: Prism' ByteString a -> a -> PutM ()
 putReview p x = do
@@ -89,3 +91,25 @@ rollbackPointPrism hashPrism keyPrism valuePrism =
                     pure $ Insert k v
                 _ -> fail "mkRollbackPointCodecs: invalid operation tag"
         pure $ RollbackPoint{rbpHash, rbpInverseOperations}
+
+withOriginPrism
+    :: forall slot
+     . Prism' ByteString slot
+    -> Prism' ByteString (WithOrigin slot)
+withOriginPrism slotP = prism' encode decode
+  where
+    encode :: WithOrigin slot -> ByteString
+    encode Origin = B.singleton 0
+    encode (At slot) =
+        B.cons 1 $ evalPutM $ putReview slotP slot
+
+    decode :: ByteString -> Maybe (WithOrigin slot)
+    decode = evalGetM getOrigin
+
+    getOrigin :: Get (WithOrigin slot)
+    getOrigin = do
+        tag <- getWord8
+        case tag of
+            0 -> pure Origin
+            1 -> At <$> getPreview slotP
+            _ -> fail "withOriginPrism: invalid WithOrigin tag"

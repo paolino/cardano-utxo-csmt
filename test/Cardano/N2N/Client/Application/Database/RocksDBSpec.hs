@@ -11,6 +11,7 @@ import Cardano.N2N.Client.Application.Database.Implementation
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     ( ArmageddonParams (ArmageddonParams)
+    , setup
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
     ( Prisms (..)
@@ -133,8 +134,12 @@ runRocksDBProperties
 runRocksDBProperties prop =
     withSystemTempDirectory "rocksdb-test" $ \dir ->
         withRocksDB dir $ \(RunRocksDB r) ->
-            r $ runWithExpected context update prop
+            r $ do
+                setup txRunner armageddonParams
+                runWithExpected context update prop
   where
+    txRunner = mkRunRocksDBCSMTTransaction prisms csmtContext
+    armageddonParams = ArmageddonParams 1000 (mkHash "")
     context =
         Context
             { contextDatabase = query
@@ -142,6 +147,7 @@ runRocksDBProperties prop =
                 Generator
                     { genSlot = do
                         GenSlot x <- arbitrary
+
                         GenHash h <- arbitrary
                         pure $ Point x h
                     , genKey = do
@@ -158,9 +164,7 @@ runRocksDBProperties prop =
 
     update
         :: Update (ReaderT DB IO) (Point Int Hash) ByteString ByteString
-    update =
-        mkUpdate (ArmageddonParams $ error "should not restart")
-            $ mkRunRocksDBCSMTTransaction prisms csmtContext
+    update = mkUpdate armageddonParams txRunner
 
 test
     :: PropertyWithExpected
@@ -215,7 +219,10 @@ spec = do
             _ <- populateWithSomeContent
             propertyForwardBeforeTipIsNoOp
         it "will forward after tip and apply changes" $ test $ do
+            logOnFailure "Starting forward after tip test"
+            getDump >>= logOnFailure . ("Initial dump: " ++) . show
             _ <- populateWithSomeContent
+            getDump >>= logOnFailure . ("After load dump: " ++) . show
             propertyForwardAfterTipAppliesChanges
         it "will not rollback to after tip" $ test $ do
             _ <- populateWithSomeContent
