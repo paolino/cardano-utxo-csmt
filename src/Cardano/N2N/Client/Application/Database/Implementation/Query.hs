@@ -1,5 +1,6 @@
 module Cardano.N2N.Client.Application.Database.Implementation.Query
     ( mkQuery
+    , mkTransactionedQuery
     )
 where
 
@@ -13,8 +14,12 @@ import Cardano.N2N.Client.Application.Database.Implementation.Point
 import Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
     )
+import Cardano.N2N.Client.Application.Database.Implementation.RunTransaction
+    ( RunTransaction (..)
+    )
 import Cardano.N2N.Client.Application.Database.Interface
     ( Query (..)
+    , hoistQuery
     )
 import Database.KV.Cursor
     ( Entry (..)
@@ -51,3 +56,11 @@ rollbackPointDefaultToOrigin
     -> WithOrigin (Point slot hash)
 rollbackPointDefaultToOrigin Nothing = Origin
 rollbackPointDefaultToOrigin (Just e) = At $ mkPoint e
+
+-- | Create a 'Query' interface for RocksDB where all queries are run in separate transactions
+-- Useful for property testing
+mkTransactionedQuery
+    :: (Ord key, Monad m)
+    => RunTransaction cf op slot hash key value m
+    -> Query m (Point slot hash) key value
+mkTransactionedQuery (RunTransaction runTx) = hoistQuery runTx mkQuery
