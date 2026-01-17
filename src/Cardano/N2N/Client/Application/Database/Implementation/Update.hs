@@ -1,5 +1,6 @@
 module Cardano.N2N.Client.Application.Database.Implementation.Update
     ( mkUpdate
+    , PartialHistory (..)
 
       -- * Low level operations, exposed for testing
     , forwardFinality
@@ -56,16 +57,19 @@ import Database.KV.Transaction
     )
 import Ouroboros.Network.Point (WithOrigin (..))
 
+data PartialHistory = Complete | Partial
+
 -- | Apply forward tip .
 -- We compose csmt transactions for each operation with an updateRollbackPoint one
 forwardTip
     :: (Ord key, Ord slot, MonadFail m)
-    => Point slot hash
+    => PartialHistory
+    -> Point slot hash
     -- ^ slot at which operations happen
     -> [Operation key value]
     -- ^ operations to apply
     -> CSMTTransaction m cf op slot hash key value ()
-forwardTip slot ops = do
+forwardTip partiality slot ops = do
     tip <- getTip mkQuery
     when (At slot > tip) $ do
         invs <- forM ops $ \case
@@ -77,9 +81,11 @@ forwardTip slot ops = do
                 deleteCSMT k
                 case mx of
                     Nothing ->
-                        -- pure []
-                        error
-                            "forwardTip: cannot invert Delete operation, key not found"
+                        case partiality of
+                            Partial -> pure []
+                            Complete ->
+                                error
+                                    "forwardTip: cannot invert Delete operation, key not found"
                     Just x -> pure [Insert k x]
         updateRollbackPoint slot $ reverse $ concat invs
 
@@ -182,16 +188,17 @@ forwardFinality slot = do
 -- of continuations and so always propose itself as the next continuation
 mkUpdate
     :: (Ord key, Ord slot, MonadFail m)
-    => ArmageddonParams hash
+    => PartialHistory
+    -> ArmageddonParams hash
     -- ^ Armageddon parameters, in case rollback is impossible
     -> RunCSMTTransaction cf op slot hash key value m
     -- ^ Function to run a transaction
     -> Update m (Point slot hash) key value
-mkUpdate armageddonParams runTransaction@RunCSMTTransaction{txRunTransaction} =
+mkUpdate partiality armageddonParams runTransaction@RunCSMTTransaction{txRunTransaction} =
     fix $ \cont ->
         Update
             { forwardTipApply = \slot ops -> txRunTransaction $ do
-                forwardTip slot ops
+                forwardTip partiality slot ops
                 pure cont
             , rollbackTipApply = \case
                 At slot -> do

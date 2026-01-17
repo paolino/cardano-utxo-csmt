@@ -22,6 +22,9 @@ import Cardano.N2N.Client.Application.Database.Implementation.Query
 import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
     )
+import Cardano.N2N.Client.Application.Database.Implementation.Update
+    ( PartialHistory (..)
+    )
 import Cardano.N2N.Client.Application.Database.Interface
     ( Query
     , Update
@@ -164,7 +167,7 @@ runRocksDBProperties prop =
 
     update
         :: Update (ReaderT DB IO) (Point Int Hash) ByteString ByteString
-    update = mkUpdate armageddonParams txRunner
+    update = mkUpdate Complete armageddonParams txRunner
 
 test
     :: PropertyWithExpected
