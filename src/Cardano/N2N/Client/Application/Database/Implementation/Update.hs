@@ -7,6 +7,8 @@ module Cardano.N2N.Client.Application.Database.Implementation.Update
     , forwardTip
     , updateRollbackPoint
     , rollbackTip
+    , sampleRollbackPoints
+    , newState
     )
 where
 
@@ -19,12 +21,14 @@ import Cardano.N2N.Client.Application.Database.Implementation.Columns
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Point
     ( Point (..)
+    , mkPoint
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Query
     ( mkQuery
     )
 import Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
+    , RollbackPointKV
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     ( CSMTTransaction
@@ -41,8 +45,10 @@ import Cardano.N2N.Client.Application.Database.Interface
 import Control.Monad (forM, forM_, when)
 import Control.Monad.Trans (lift)
 import Data.Function (fix)
+import Data.List.SampleFibonacci (sampleAtFibonacciIntervals)
 import Database.KV.Cursor
-    ( Entry (..)
+    ( Cursor
+    , Entry (..)
     , firstEntry
     , lastEntry
     , nextEntry
@@ -58,6 +64,25 @@ import Database.KV.Transaction
 import Ouroboros.Network.Point (WithOrigin (..))
 
 data PartialHistory = Complete | Partial
+
+newState
+    :: (Ord key, Ord slot, MonadFail m)
+    => PartialHistory
+    -> ArmageddonParams hash
+    -> RunCSMTTransaction cf op slot hash key value m
+    -> m (State m (Point slot hash) key value)
+newState
+    partiality
+    armageddonParams
+    runTransaction@RunCSMTTransaction{txRunTransaction} = do
+        cps <-
+            txRunTransaction $ iterating RollbackPoints sampleRollbackPoints
+        pure
+            $ Intersecting cps
+            $ mkUpdate
+                partiality
+                armageddonParams
+                runTransaction
 
 -- | Apply forward tip .
 -- We compose csmt transactions for each operation with an updateRollbackPoint one
@@ -98,23 +123,23 @@ updateRollbackPoint (Point{pointSlot, pointHash}) rbpInverseOperations =
     insert RollbackPoints (At pointSlot)
         $ RollbackPoint{rbpHash = pointHash, rbpInverseOperations}
 
--- sampleRollbackPoints
---     :: Monad m
---     => Cursor
---         (CSMTTransaction m cf op slot hash key value)
---         (RollbackPointKV slot hash key value)
---         [WithOrigin (Point slot hash)]
--- sampleRollbackPoints = do
---     fmap mkPoint <$> sampleAtFibonacciIntervals prevEntry
+sampleRollbackPoints
+    :: Monad m
+    => Cursor
+        (CSMTTransaction m cf op slot hash key value)
+        (RollbackPointKV slot hash key value)
+        [Point slot hash]
+sampleRollbackPoints = do
+    keepAts . fmap mkPoint <$> sampleAtFibonacciIntervals prevEntry
 
--- keepAts :: [WithOrigin a] -> [a]
--- keepAts =
---     foldr
---         ( \case
---             Origin -> id
---             At x -> (x :)
---         )
---         []
+keepAts :: [WithOrigin a] -> [a]
+keepAts =
+    foldr
+        ( \case
+            Origin -> id
+            At x -> (x :)
+        )
+        []
 
 rollbackRollbackPoint
     :: (Ord key, Monad m)
