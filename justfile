@@ -23,17 +23,19 @@ hlint:
 bench:
     #!/usr/bin/env bash
     cabal bench
-unit match="":
+unit match="" *args='' :
     #!/usr/bin/env bash
     # shellcheck disable=SC2050
     if [[ '{{ match }}' == "" ]]; then
       cabal test unit-tests \
-          --test-show-details=direct
+          --test-show-details=direct \
+          --test-options="{{args}}"
     else
-      cabal test unit-tests\
+      cabal test unit-tests \
           --test-show-details=direct \
           --test-option=--match \
-          --test-option="{{ match }}"
+          --test-option="{{ match }}" \
+          --test-options="{{ args }}"
     fi
 
 build:

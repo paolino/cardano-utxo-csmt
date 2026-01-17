@@ -57,10 +57,19 @@ library
   exposed-modules:
     Cardano.N2N.Client.Application.BlockFetch
     Cardano.N2N.Client.Application.ChainSync
+    Cardano.N2N.Client.Application.Database.Implementation
+    Cardano.N2N.Client.Application.Database.Implementation.Armageddon
+    Cardano.N2N.Client.Application.Database.Implementation.Columns
+    Cardano.N2N.Client.Application.Database.Implementation.Point
+    Cardano.N2N.Client.Application.Database.Implementation.Query
+    Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
+    Cardano.N2N.Client.Application.Database.Implementation.Transaction
+    Cardano.N2N.Client.Application.Database.Implementation.Update
     Cardano.N2N.Client.Application.Database.InMemory
     Cardano.N2N.Client.Application.Database.Interface
     Cardano.N2N.Client.Application.Database.Properties
     Cardano.N2N.Client.Application.Database.Properties.Expected
+    Cardano.N2N.Client.Application.Database.RocksDB
     Cardano.N2N.Client.Application.KeepAlive
     Cardano.N2N.Client.Application.Metrics
     Cardano.N2N.Client.Application.Options
@@ -74,6 +83,7 @@ library
     Cardano.N2N.Client.Ouroboros.Connection
     Cardano.N2N.Client.Ouroboros.Types
     Cardano.UTxO.CSMT.App
+    Data.List.SampleFibonacci
 
   build-depends:
     , ansi-terminal
@@ -85,6 +95,7 @@ library
     , cardano-ledger-byron
     , cardano-read-ledger
     , cborg
+    , cereal
     , comonad
     , containers
     , contra-tracer
@@ -106,6 +117,7 @@ library
     , ouroboros-network-protocols
     , profunctors
     , QuickCheck
+    , rocksdb-haskell-jprupp
     , serialise
     , streaming
     , streaming-bytestring
@@ -161,15 +173,26 @@ test-suite unit-tests
   hs-source-dirs:     test
   build-depends:
     , base
+    , bytestring
     , cardano-slotting
     , cardano-utxo-csmt
+    , cereal
+    , csmt
+    , csmt:rocksdb-transactions
     , hspec
+    , lens
     , QuickCheck
+    , rocksdb-haskell-jprupp
+    , temporary
+    , transformers
 
   build-tool-depends: hspec-discover:hspec-discover
   type:               exitcode-stdio-1.0
   main-is:            main.hs
-  other-modules:      Cardano.N2N.Client.Application.Database.InMemorySpec
+  other-modules:
+    Cardano.N2N.Client.Application.Database.InMemorySpec
+    Cardano.N2N.Client.Application.Database.RocksDBSpec
+    Data.List.SampleFibonacciSpec
 
 benchmark bench
   import:           warnings

@@ -81,7 +81,7 @@ networkMagicOption =
             , short 'm'
             , help "Network magic number"
             , metavar "INT"
-            , value 1
+            , value 764824073
             , reader auto
             , option
             ]
@@ -93,7 +93,7 @@ nodeNameOption =
         , short 's'
         , help "Peer node hostname"
         , metavar "HOSTNAME"
-        , value "preprod-node.play.dev.cardano.org"
+        , value "backbone.cardano.iog.io"
         , reader str
         , option
         ]

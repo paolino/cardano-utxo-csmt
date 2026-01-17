@@ -5,13 +5,14 @@ module Cardano.N2N.Client.Application.Database.InMemory
     , mkInMemoryDatabaseSimple
     , runInMemoryState
     , updateInMemory
+    , newFinality
     )
 where
 
 import Cardano.N2N.Client.Application.Database.Interface
     ( Operation (..)
     , Query (..)
-    , Truncated (..)
+    , State (..)
     , Update (..)
     , inverseOp
     )
@@ -25,6 +26,7 @@ import Control.Monad.State.Strict
 import Data.Foldable (Foldable (..))
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (maybeToList)
 import Ouroboros.Network.Point (WithOrigin (..))
 
 data InMemory slot key value = InMemory
@@ -34,6 +36,21 @@ data InMemory slot key value = InMemory
     , mFinality :: WithOrigin slot
     }
     deriving (Show, Eq)
+
+newFinality
+    :: Monad m => Int -> InMemoryState m slot key value (Maybe slot)
+newFinality n = do
+    InMemory{mInverseOps} <- get
+    let inverseOpsSize = Map.size mInverseOps
+    pure
+        $ if n >= inverseOpsSize
+            then Nothing
+            else
+                ( let
+                    index = inverseOpsSize - n
+                  in
+                    Just $ fst $ Map.elemAt index mInverseOps
+                )
 
 emptyInMemory :: (Ord key, Ord slot) => InMemory slot key value
 emptyInMemory =
@@ -85,26 +102,26 @@ updateInMemory value =
                     opI <- inverseOp (getValue value) op
                     modify $ \im@InMemory{mUTxos, mInverseOps} ->
                         let mUTxos' = applyOp mUTxos op
-                            mInverseOps' = Map.insertWith (<>) slot [opI] mInverseOps
+                            mInverseOps' = Map.insertWith (<>) slot (maybeToList opI) mInverseOps
                         in  im{mUTxos = mUTxos', mInverseOps = mInverseOps', mTip = At slot}
             pure $ updateInMemory value
         , rollbackTipApply = \case
             Origin -> do
                 put emptyInMemory
-                pure $ NotTruncated $ updateInMemory value
+                pure $ Syncing $ updateInMemory value
             (At point) -> do
                 im@InMemory{mUTxos, mInverseOps, mTip, mFinality} <- get
                 if At point < mFinality
                     then do
                         put emptyInMemory
-                        pure $ Truncated $ updateInMemory value
+                        pure $ Truncating $ updateInMemory value
                     else do
                         when (At point < mTip) $ do
                             let (mInverseOps', toBeInverted) = Map.split point mInverseOps
                                 opsToInvert = concatMap snd $ Map.toDescList toBeInverted
                                 mUTxos' = foldl' applyOp mUTxos opsToInvert
                             put im{mUTxos = mUTxos', mInverseOps = mInverseOps', mTip = At point}
-                        pure $ NotTruncated $ updateInMemory value
+                        pure $ Syncing $ updateInMemory value
         , forwardFinalityApply = \slot -> do
             modify $ \im@InMemory{mFinality, mTip, mInverseOps} ->
                 let mFinalityPrime' = min (max mFinality (At slot)) mTip
