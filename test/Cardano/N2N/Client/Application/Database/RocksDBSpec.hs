@@ -3,7 +3,7 @@ module Cardano.N2N.Client.Application.Database.RocksDBSpec
     )
 where
 
-import CSMT.Backend.RocksDB (RocksDB, RunRocksDB (..))
+import CSMT.Backend.RocksDB (RunRocksDB (..))
 import CSMT.Hashes (Hash, fromKVHashes, hashHashing, isoHash, mkHash)
 import Cardano.N2N.Client.Application.Database.Implementation
     ( Point (..)
@@ -24,10 +24,6 @@ import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Update
     ( PartialHistory (..)
-    )
-import Cardano.N2N.Client.Application.Database.Interface
-    ( Query
-    , Update
     )
 import Cardano.N2N.Client.Application.Database.Properties
     ( findValue
@@ -55,14 +51,14 @@ import Cardano.N2N.Client.Application.Database.RocksDB
     )
 import Cardano.Slotting.Slot (WithOrigin (..))
 import Control.Lens (prism')
-import Control.Monad.Trans.Reader (ReaderT (..))
+import Control.Monad.Trans.Reader (ReaderT (..), ask)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BC
 import Data.Char (isAlpha, isAscii)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Serialize (getWord64be, putWord64be)
 import Data.Serialize.Extra (evalGetM, evalPutM)
-import Database.RocksDB (Config (..), DB, withDBCF)
+import Database.RocksDB (Config (..), withDBCF)
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec (Spec, describe, it, shouldBe)
 import Test.QuickCheck
@@ -132,20 +128,20 @@ prisms =
         }
 
 runRocksDBProperties
-    :: WithExpected RocksDB (Point Int Hash) ByteString ByteString a
+    :: WithExpected IO (Point Int Hash) ByteString ByteString a
     -> IO a
 runRocksDBProperties prop =
     withSystemTempDirectory "rocksdb-test" $ \dir ->
-        withRocksDB dir $ \(RunRocksDB r) ->
-            r $ do
-                setup txRunner armageddonParams
-                runWithExpected context update prop
+        withRocksDB dir $ \(RunRocksDB r) -> do
+            db <- r ask
+            setup (txRunner db) armageddonParams
+            runWithExpected (context db) (update db) prop
   where
-    txRunner = mkRunRocksDBCSMTTransaction prisms csmtContext
+    txRunner db = mkRunRocksDBCSMTTransaction db prisms csmtContext
     armageddonParams = ArmageddonParams 1000 (mkHash "")
-    context =
+    context db =
         Context
-            { contextDatabase = query
+            { contextDatabase = query db
             , contextGenerator =
                 Generator
                     { genSlot = do
@@ -162,16 +158,12 @@ runRocksDBProperties prop =
                     }
             }
 
-    query :: Query (ReaderT DB IO) (Point Int Hash) ByteString ByteString
-    query = mkTransactionedQuery $ mkRunRocksDBTransaction prisms
-
-    update
-        :: Update (ReaderT DB IO) (Point Int Hash) ByteString ByteString
-    update = mkUpdate Complete armageddonParams txRunner
+    query db = mkTransactionedQuery $ mkRunRocksDBTransaction db prisms
+    update db = mkUpdate Complete armageddonParams $ txRunner db
 
 test
     :: PropertyWithExpected
-        RocksDB
+        IO
         (Point Int Hash)
         ByteString
         ByteString

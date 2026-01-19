@@ -3,6 +3,7 @@ module Cardano.N2N.Client.Application.Database.RocksDB
     , RocksDBQuery
     , mkRunRocksDBTransaction
     , mkRunRocksDBCSMTTransaction
+    , newRocksDBState
     )
 where
 
@@ -10,6 +11,9 @@ import Cardano.N2N.Client.Application.Database.Implementation
     ( Columns
     , Point
     , RunTransaction (..)
+    )
+import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
+    ( ArmageddonParams
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
     ( Prisms
@@ -19,14 +23,17 @@ import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
     , RunCSMTTransaction (..)
     )
+import Cardano.N2N.Client.Application.Database.Implementation.Update
+    ( PartialHistory
+    , newState
+    )
 import Cardano.N2N.Client.Application.Database.Interface
     ( Query
+    , State
     )
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader
-    ( MonadReader (..)
-    , MonadTrans (..)
-    , ReaderT (..)
+    ( ReaderT (..)
     )
 import Database.KV.RocksDB.Transaction (mkColumns, mkRocksDBDatabase)
 import Database.KV.Transaction (Transaction, run)
@@ -38,25 +45,38 @@ type RocksDBTransaction m slot hash key value =
 type RocksDBQuery m slot hash key value =
     Query m (Point slot hash) key value
 
+runRocksDBTransaction
+    :: (MonadFail m, MonadIO m)
+    => Prisms slot hash key value
+    -> DB
+    -> Transaction
+        m
+        ColumnFamily
+        (Columns slot hash key value)
+        BatchOp
+        b
+    -> m b
+runRocksDBTransaction prisms db =
+    run
+        $ mkRocksDBDatabase db
+        $ mkColumns db
+        $ codecs prisms
+
 -- | Create a 'RunTransaction' for RocksDB
 mkRunRocksDBTransaction
     :: (MonadIO m, MonadFail m)
-    => Prisms slot hash key value
+    => DB
+    -> Prisms slot hash key value
     -- ^ Prisms for serializing/deserializing keys and values
-    -> RunTransaction ColumnFamily BatchOp slot hash key value (ReaderT DB m)
-mkRunRocksDBTransaction prisms =
+    -> RunTransaction ColumnFamily BatchOp slot hash key value m
+mkRunRocksDBTransaction db prisms =
     RunTransaction $ \tx -> do
-        db <- ask
-        run
-            ( mkRocksDBDatabase db
-                $ mkColumns db
-                $ codecs prisms
-            )
-            tx
+        runRocksDBTransaction prisms db tx
 
 mkRunRocksDBCSMTTransaction
     :: (MonadIO m, MonadFail m)
-    => Prisms slot hash key value
+    => DB
+    -> Prisms slot hash key value
     -> CSMTContext hash key value
     -- ^ Prisms for serializing/deserializing keys and values
     -> RunCSMTTransaction
@@ -66,14 +86,20 @@ mkRunRocksDBCSMTTransaction
         hash
         key
         value
-        (ReaderT DB m)
-mkRunRocksDBCSMTTransaction prisms csmtContext =
+        m
+mkRunRocksDBCSMTTransaction db prisms csmtContext =
     RunCSMTTransaction
         $ \tx -> flip runReaderT csmtContext $ do
-            db <- lift ask
-            run
-                ( mkRocksDBDatabase db
-                    $ mkColumns db
-                    $ codecs prisms
-                )
-                tx
+            runRocksDBTransaction prisms db tx
+
+newRocksDBState
+    :: (MonadIO m, MonadFail m, Ord key, Ord slot)
+    => DB
+    -> Prisms slot hash key value
+    -> CSMTContext hash key value
+    -> PartialHistory
+    -> ArmageddonParams hash
+    -> m (State m (Point slot hash) key value)
+newRocksDBState db prisms csmtContext partiality armageddonParams =
+    newState partiality armageddonParams
+        $ mkRunRocksDBCSMTTransaction db prisms csmtContext
