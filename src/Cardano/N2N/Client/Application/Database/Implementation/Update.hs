@@ -20,10 +20,6 @@ import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
     ( Columns (..)
     )
-import Cardano.N2N.Client.Application.Database.Implementation.Point
-    ( Point (..)
-    , mkPoint
-    )
 import Cardano.N2N.Client.Application.Database.Implementation.Query
     ( mkQuery
     )
@@ -69,11 +65,13 @@ data PartialHistory = Complete | Partial
 newState
     :: (Ord key, Ord slot, MonadFail m)
     => PartialHistory
+    -> (slot -> hash)
     -> ArmageddonParams hash
     -> RunCSMTTransaction cf op slot hash key value m
-    -> m (State m (Point slot hash) key value)
+    -> m (State m slot key value)
 newState
     partiality
+    slotHash
     armageddonParams
     runTransaction@RunCSMTTransaction{txRunTransaction} = do
         cps <-
@@ -82,6 +80,7 @@ newState
             $ Intersecting cps
             $ mkUpdate
                 partiality
+                slotHash
                 armageddonParams
                 runTransaction
 
@@ -90,12 +89,13 @@ newState
 forwardTip
     :: (Ord key, Ord slot, MonadFail m)
     => PartialHistory
-    -> Point slot hash
+    -> hash
+    -> slot
     -- ^ slot at which operations happen
     -> [Operation key value]
     -- ^ operations to apply
     -> CSMTTransaction m cf op slot hash key value ()
-forwardTip partiality slot ops = do
+forwardTip partiality hash slot ops = do
     tip <- getTip mkQuery
     when (At slot > tip) $ do
         invs <- forM ops $ \case
@@ -113,14 +113,15 @@ forwardTip partiality slot ops = do
                                 error
                                     "forwardTip: cannot invert Delete operation, key not found"
                     Just x -> pure [Insert k x]
-        updateRollbackPoint slot $ reverse $ concat invs
+        updateRollbackPoint hash slot $ reverse $ concat invs
 
 updateRollbackPoint
     :: (Ord slot)
-    => Point slot hash
+    => hash
+    -> slot
     -> [Operation key value]
     -> CSMTTransaction m cf op slot hash key value ()
-updateRollbackPoint (Point{pointSlot, pointHash}) rbpInverseOperations =
+updateRollbackPoint pointHash pointSlot rbpInverseOperations =
     insert RollbackPoints (At pointSlot)
         $ RollbackPoint{rbpHash = pointHash, rbpInverseOperations}
 
@@ -129,9 +130,9 @@ sampleRollbackPoints
     => Cursor
         (CSMTTransaction m cf op slot hash key value)
         (RollbackPointKV slot hash key value)
-        [Point slot hash]
+        [slot]
 sampleRollbackPoints = do
-    keepAts . fmap mkPoint <$> sampleAtFibonacciIntervals prevEntry
+    keepAts . fmap entryKey <$> sampleAtFibonacciIntervals prevEntry
 
 keepAts :: [WithOrigin a] -> [a]
 keepAts =
@@ -168,7 +169,7 @@ data RollbackResult
 -- If the list is empty, rollback is impossible and the database should be truncated
 rollbackTip
     :: (Ord slot, Ord key, MonadFail m)
-    => Point slot hash
+    => slot
     -- ^ Slot to rollback to
     -> CSMTTransaction m cf op slot hash key value RollbackResult
 rollbackTip slot = do
@@ -176,16 +177,16 @@ rollbackTip slot = do
     if At slot > tip
         then pure RollbackSucceeded
         else iterating RollbackPoints $ do
-            me <- seekKey $ At (pointSlot slot)
+            me <- seekKey $ At slot
             case me of
-                Just (Entry (At foundSlot) RollbackPoint{rbpHash = foundHash})
-                    | Point{pointSlot = foundSlot, pointHash = foundHash} == slot -> do
+                Just (Entry (At foundSlot) RollbackPoint{})
+                    | foundSlot == slot -> do
                         ml <- lastEntry
                         ($ ml) $ fix $ \go current -> case current of
                             Nothing ->
                                 lift . lift $ fail "rollbackTipApply: inconsistent rollback points"
                             Just Entry{entryKey, entryValue} ->
-                                when (entryKey > At (pointSlot slot)) $ do
+                                when (entryKey > At slot) $ do
                                     lift $ do
                                         rollbackRollbackPoint entryValue
                                         delete RollbackPoints entryKey
@@ -198,7 +199,7 @@ rollbackTip slot = do
 -- | Apply forward finality .
 forwardFinality
     :: (Ord slot, Monad m)
-    => Point slot hash
+    => slot
     -> CSMTTransaction m cf op slot hash key value ()
 forwardFinality slot = do
     iterating RollbackPoints $ do
@@ -206,7 +207,7 @@ forwardFinality slot = do
         ($ me) $ fix $ \go current ->
             case current of
                 Nothing -> pure ()
-                Just Entry{entryKey} -> when (entryKey < At (pointSlot slot)) $ do
+                Just Entry{entryKey} -> when (entryKey < At slot) $ do
                     lift $ delete RollbackPoints entryKey
                     nextEntry >>= go
 
@@ -215,16 +216,17 @@ forwardFinality slot = do
 mkUpdate
     :: (Ord key, Ord slot, MonadFail m)
     => PartialHistory
+    -> (slot -> hash)
     -> ArmageddonParams hash
     -- ^ Armageddon parameters, in case rollback is impossible
     -> RunCSMTTransaction cf op slot hash key value m
     -- ^ Function to run a transaction
-    -> Update m (Point slot hash) key value
-mkUpdate partiality armageddonParams runTransaction@RunCSMTTransaction{txRunTransaction} =
+    -> Update m slot key value
+mkUpdate partiality slotHash armageddonParams runTransaction@RunCSMTTransaction{txRunTransaction} =
     fix $ \cont ->
         Update
             { forwardTipApply = \slot ops -> txRunTransaction $ do
-                forwardTip partiality slot ops
+                forwardTip partiality (slotHash slot) slot ops
                 pure cont
             , rollbackTipApply = \case
                 At slot -> do
@@ -245,19 +247,19 @@ mkUpdate partiality armageddonParams runTransaction@RunCSMTTransaction{txRunTran
 newFinality
     :: (Ord key, MonadFail m)
     => (WithOrigin slot -> WithOrigin slot -> Bool)
-    -> CSMTTransaction m cf op slot hash key value (Maybe (Point slot hash))
+    -> CSMTTransaction m cf op slot hash key value (Maybe slot)
 newFinality isFinal = do
-    tip <- fmap pointSlot <$> getTip mkQuery
+    tip <- getTip mkQuery
     iterating RollbackPoints $ do
         me <- firstEntry
-        ($ Origin) . ($ me)  $ fix $ \go current finality ->
+        ($ Origin) . ($ me) $ fix $ \go current finality ->
             case current of
                 Nothing -> pure Nothing
-                Just e@Entry{entryKey} ->
+                Just Entry{entryKey} ->
                     if isFinal tip entryKey
                         then do
                             current' <- nextEntry
-                            go current' $ mkPoint e
+                            go current' entryKey
                         else pure $ case finality of
                             Origin -> Nothing
                             At p -> Just p

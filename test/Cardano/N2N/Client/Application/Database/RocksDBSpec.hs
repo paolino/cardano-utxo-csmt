@@ -6,8 +6,7 @@ where
 import CSMT.Backend.RocksDB (RunRocksDB (..))
 import CSMT.Hashes (Hash, fromKVHashes, hashHashing, isoHash, mkHash)
 import Cardano.N2N.Client.Application.Database.Implementation
-    ( Point (..)
-    , mkUpdate
+    ( mkUpdate
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     ( ArmageddonParams (ArmageddonParams)
@@ -128,7 +127,7 @@ prisms =
         }
 
 runRocksDBProperties
-    :: WithExpected IO (Point Int Hash) ByteString ByteString a
+    :: WithExpected IO Int ByteString ByteString a
     -> IO a
 runRocksDBProperties prop =
     withSystemTempDirectory "rocksdb-test" $ \dir ->
@@ -147,8 +146,7 @@ runRocksDBProperties prop =
                     { genSlot = do
                         GenSlot x <- arbitrary
 
-                        GenHash h <- arbitrary
-                        pure $ Point x h
+                        pure x
                     , genKey = do
                         GenKey x <- arbitrary
                         pure x
@@ -159,12 +157,13 @@ runRocksDBProperties prop =
             }
 
     query db = mkTransactionedQuery $ mkRunRocksDBTransaction db prisms
-    update db = mkUpdate Complete armageddonParams $ txRunner db
+    update db =
+        mkUpdate Complete (const $ mkHash "") armageddonParams $ txRunner db
 
 test
     :: PropertyWithExpected
         IO
-        (Point Int Hash)
+        Int
         ByteString
         ByteString
         ()
