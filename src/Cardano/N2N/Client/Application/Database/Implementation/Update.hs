@@ -61,6 +61,10 @@ import Database.KV.Transaction
 import Ouroboros.Network.Point (WithOrigin (..))
 
 data PartialHistory = Complete | Partial
+data UpdateTrace
+    = UpdateTraceArmageddonStarted
+    | UpdateTraceArmageddonCompleted
+    deriving (Show, Eq)
 
 newState
     :: (Ord key, Ord slot, MonadFail m)
@@ -68,7 +72,7 @@ newState
     -> (slot -> hash)
     -> ArmageddonParams hash
     -> RunCSMTTransaction cf op slot hash key value m
-    -> m (State m slot key value)
+    -> m (Update m slot key value, [slot])
 newState
     partiality
     slotHash
@@ -76,8 +80,9 @@ newState
     runTransaction@RunCSMTTransaction{txRunTransaction} = do
         cps <-
             txRunTransaction $ iterating RollbackPoints sampleRollbackPoints
+
         pure
-            $ Intersecting cps
+            $ (,cps)
             $ mkUpdate
                 partiality
                 slotHash

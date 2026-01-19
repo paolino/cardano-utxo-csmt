@@ -28,7 +28,7 @@ import Cardano.N2N.Client.Application.Database.Implementation.Update
     )
 import Cardano.N2N.Client.Application.Database.Interface
     ( Query
-    , State
+    , Update
     )
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader
@@ -99,7 +99,10 @@ newRocksDBState
     -> PartialHistory
     -> (slot -> hash)
     -> ArmageddonParams hash
-    -> m (State m slot key value)
-newRocksDBState db prisms csmtContext partiality slotHash armageddonParams =
-    newState partiality slotHash armageddonParams
-        $ mkRunRocksDBCSMTTransaction db prisms csmtContext
+    -> m
+        ( (Update m slot key value, [slot])
+        , RunCSMTTransaction ColumnFamily BatchOp slot hash key value m
+        )
+newRocksDBState db prisms csmtContext partiality slotHash armageddonParams = do
+    let runner = mkRunRocksDBCSMTTransaction db prisms csmtContext
+    (,runner) <$> newState partiality slotHash armageddonParams runner
