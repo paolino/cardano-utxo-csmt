@@ -9,6 +9,7 @@ module Cardano.N2N.Client.Application.Database.Implementation.Update
     , rollbackTip
     , sampleRollbackPoints
     , newState
+    , newFinality
     )
 where
 
@@ -239,3 +240,24 @@ mkUpdate partiality armageddonParams runTransaction@RunCSMTTransaction{txRunTran
                     pure $ Syncing cont
             , forwardFinalityApply = \slot -> txRunTransaction $ forwardFinality slot >> pure cont
             }
+
+-- | Determines whether a new finality point can be set
+newFinality
+    :: (Ord key, MonadFail m)
+    => (WithOrigin slot -> WithOrigin slot -> Bool)
+    -> CSMTTransaction m cf op slot hash key value (Maybe (Point slot hash))
+newFinality isFinal = do
+    tip <- fmap pointSlot <$> getTip mkQuery
+    iterating RollbackPoints $ do
+        me <- firstEntry
+        ($ Origin) . ($ me)  $ fix $ \go current finality ->
+            case current of
+                Nothing -> pure Nothing
+                Just e@Entry{entryKey} ->
+                    if isFinal tip entryKey
+                        then do
+                            current' <- nextEntry
+                            go current' $ mkPoint e
+                        else pure $ case finality of
+                            Origin -> Nothing
+                            At p -> Just p
