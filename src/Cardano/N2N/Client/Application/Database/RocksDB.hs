@@ -9,7 +9,6 @@ where
 
 import Cardano.N2N.Client.Application.Database.Implementation
     ( Columns
-    , Point
     , RunTransaction (..)
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
@@ -43,7 +42,7 @@ type RocksDBTransaction m slot hash key value =
     Transaction m ColumnFamily (Columns slot hash key value) BatchOp
 
 type RocksDBQuery m slot hash key value =
-    Query m (Point slot hash) key value
+    Query m slot key value
 
 runRocksDBTransaction
     :: (MonadFail m, MonadIO m)
@@ -98,8 +97,9 @@ newRocksDBState
     -> Prisms slot hash key value
     -> CSMTContext hash key value
     -> PartialHistory
+    -> (slot -> hash)
     -> ArmageddonParams hash
-    -> m (State m (Point slot hash) key value)
-newRocksDBState db prisms csmtContext partiality armageddonParams =
-    newState partiality armageddonParams
+    -> m (State m slot key value)
+newRocksDBState db prisms csmtContext partiality slotHash armageddonParams =
+    newState partiality slotHash armageddonParams
         $ mkRunRocksDBCSMTTransaction db prisms csmtContext

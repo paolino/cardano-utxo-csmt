@@ -1,6 +1,5 @@
 module Cardano.N2N.Client.Application.Database.Implementation
     ( Columns
-    , Point (..)
     , RunTransaction (..)
     , RunCSMTTransaction (..)
     , CSMTTransaction
@@ -11,9 +10,6 @@ where
 
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
     ( Columns (..)
-    )
-import Cardano.N2N.Client.Application.Database.Implementation.Point
-    ( Point (..)
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Query
     ( mkQuery
