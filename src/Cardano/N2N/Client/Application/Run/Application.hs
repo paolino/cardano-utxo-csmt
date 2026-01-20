@@ -42,19 +42,16 @@ import Control.Monad (replicateM_)
 import Control.Tracer (Contravariant (contramap), traceWith)
 import Data.ByteString.Lazy (ByteString)
 import Data.Function (fix)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point
     ( WithOrigin (..)
     )
 import System.IO (BufferMode (..), hSetBuffering, stdout)
 
-type Updater = IORef DB
-
 origin :: Network.Point block
 origin = Network.Point{getPoint = Origin}
 
-type DB =
+type DBState =
     State
         IO
         Point
@@ -62,7 +59,7 @@ type DB =
         ByteString
 
 intersector
-    :: IO () -> IO (Maybe Point) -> Updater -> Intersector (Point, Block)
+    :: IO () -> IO (Maybe Point) -> DBState -> Intersector (Point, Block)
 intersector trUTxO mFinality updater =
     Intersector
         { intersectFound = \point -> do
@@ -81,8 +78,8 @@ changeToOperation (Spend k) = Delete k
 changeToOperation (Create k v) = Insert k v
 
 follower
-    :: IO () -> IO (Maybe Point) -> Updater -> Follower (Point, Block)
-follower trUTxO mFinality updater = fix $ \go ->
+    :: IO () -> IO (Maybe Point) -> DBState -> Follower (Point, Block)
+follower trUTxO newFinalityTarget db = ($ db) $ fix $ \go currentDB ->
     Follower
         { rollForward = \(point, block) -> do
             let ops = changeToOperation <$> uTxOs block
@@ -93,49 +90,44 @@ follower trUTxO mFinality updater = fix $ \go ->
             --         ++ show (length ops)
             --         ++ " UTxO changes"
             replicateM_ (length ops) trUTxO
-            () <- onDb updater $ \case
+            newDB <- case currentDB of
                 Syncing update -> do
-                    u1 <- forwardTipApply update point ops
-                    finality <- mFinality
-                    u2 <- case finality of
-                        Nothing -> pure u1
-                        Just slot -> forwardFinalityApply u1 slot
-                    pure ((), Syncing u2)
+                    newUpdate <- forwardTipApply update point ops
+                    finality <- newFinalityTarget
+                    Syncing <$> case finality of
+                        Nothing -> pure newUpdate
+                        Just slot -> forwardFinalityApply newUpdate slot
                 _ -> error "follower: cannot roll forward while intersecting"
-            pure go
-        , rollBackward = \point -> rollingBack trUTxO mFinality updater point go
+            pure $ go newDB
+        , rollBackward = \point -> rollingBack trUTxO newFinalityTarget point go currentDB
         }
 
 rollingBack
     :: IO ()
     -> IO (Maybe Point)
-    -> Updater
     -> Point
-    -> Follower (Point, Block)
+    -> (DBState -> Follower (Point, Block))
+    -> DBState
     -> IO (ProgressOrRewind (Point, Block))
-rollingBack trUTxO mFinality updater point follower' = do
+rollingBack trUTxO newFinalityTarget point follower' state = do
     putStrLn $ "Rolling back to point: " ++ show point
-    onDb updater $ \case
+    case state of
         Syncing update -> do
-            result <- rollbackTipApply update (At point)
-            case result of
-                Syncing{} -> pure (Progress follower', result)
-                Truncating u ->
-                    pure
-                        (Reset (intersector trUTxO mFinality updater), Syncing u)
-                Intersecting ps u -> do
-                    pure (Rewind ps (intersector trUTxO mFinality updater), Syncing u)
+            newState <- rollbackTipApply update (At point)
+            pure $ case newState of
+                Syncing newUpdate ->
+                    Progress
+                        $ follower'
+                        $ Syncing newUpdate
+                Truncating newUpdate ->
+                    Reset
+                        $ intersector trUTxO newFinalityTarget
+                        $ Syncing newUpdate
+                Intersecting ps newUpdate ->
+                    Rewind ps
+                        $ intersector trUTxO newFinalityTarget
+                        $ Syncing newUpdate
         _ -> error "rollingBack: cannot roll back while intersecting"
-
-onDb
-    :: Updater
-    -> (DB -> IO (a, DB))
-    -> IO a
-onDb updaterRef f = do
-    updater <- readIORef updaterRef
-    (a, updater') <- f updater
-    writeIORef updaterRef updater'
-    pure a
 
 application
     :: Options
@@ -151,8 +143,8 @@ application
         , startingPoint
         , headersQueueSize
         }
-    update
-    slots
+    initialDBUpdate
+    availablePoints
     mFinality =
         do
             hSetBuffering stdout NoBuffering
@@ -167,17 +159,20 @@ application
                         }
             let counting = traceWith tracer UTxOChangeEvent
 
-            updater <- newIORef $ Syncing update
             (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
                     headersQueueSize
                     (contramap BlockFetchEvent tracer)
-                    $ intersector counting mFinality updater
+                    $ intersector counting mFinality
+                    $ Syncing initialDBUpdate
             let chainFollowingApplication =
                     mkChainSyncApplication
                         (contramap BlockInfoEvent tracer)
                         headerIntersector
-                        $ if null slots then [startingPoint] else slots
+                        $ if null availablePoints
+                            then
+                                [startingPoint]
+                            else availablePoints
             result <-
                 runNodeApplication
                     networkMagic
