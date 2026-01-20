@@ -2,6 +2,8 @@
 
 module Cardano.N2N.Client.Application.Run.Application
     ( application
+    , ApplicationTrace (..)
+    , renderApplicationTrace
     )
 where
 
@@ -19,15 +21,13 @@ import Cardano.N2N.Client.Application.Database.Interface
     , Update (..)
     )
 import Cardano.N2N.Client.Application.Metrics
-    ( MetricsEvent (..)
+    ( Metrics
+    , MetricsEvent (..)
     , MetricsParams (..)
     , metricsTracer
     )
 import Cardano.N2N.Client.Application.Options
     ( Options (..)
-    )
-import Cardano.N2N.Client.Application.Run.RenderMetrics
-    ( renderMetrics
     )
 import Cardano.N2N.Client.Application.UTxOs (Change (..), uTxOs)
 import Cardano.N2N.Client.Ouroboros.Connection (runNodeApplication)
@@ -39,14 +39,36 @@ import Cardano.N2N.Client.Ouroboros.Types
     )
 import Control.Exception (throwIO)
 import Control.Monad (replicateM_)
-import Control.Tracer (Contravariant (contramap), traceWith)
+import Control.Tracer (Tracer, traceWith)
 import Data.ByteString.Lazy (ByteString)
 import Data.Function (fix)
+import Data.Tracer.TraceWith
+    ( contra
+    , trace
+    , tracer
+    , pattern TraceWith
+    )
+import Data.Void (Void)
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point
     ( WithOrigin (..)
     )
 import System.IO (BufferMode (..), hSetBuffering, stdout)
+
+-- | Events emitted by the application
+data ApplicationTrace
+    = ApplicationIntersectionAt Point
+    | ApplicationIntersectionFailed
+    | ApplicationRollingBack Point
+
+-- | Render an 'ApplicationTrace'
+renderApplicationTrace :: ApplicationTrace -> String
+renderApplicationTrace (ApplicationIntersectionAt point) =
+    "Intersected at point: " ++ show point
+renderApplicationTrace ApplicationIntersectionFailed =
+    "Intersection failed, resetting to origin"
+renderApplicationTrace (ApplicationRollingBack point) =
+    "Rolling back to point: " ++ show point
 
 origin :: Network.Point block
 origin = Network.Point{getPoint = Origin}
@@ -54,16 +76,20 @@ origin = Network.Point{getPoint = Origin}
 type DBState = State IO Point ByteString ByteString
 
 intersector
-    :: IO () -> IO (Maybe Point) -> DBState -> Intersector Fetched
-intersector trUTxO mFinality updater =
+    :: Tracer IO ApplicationTrace
+    -> IO ()
+    -> IO (Maybe Point)
+    -> DBState
+    -> Intersector Fetched
+intersector TraceWith{trace, tracer} trUTxO mFinality updater =
     Intersector
         { intersectFound = \point -> do
-            putStrLn $ "Intersected at point: " ++ show point
-            pure $ follower trUTxO mFinality updater
+            trace $ ApplicationIntersectionAt point
+            pure $ follower tracer trUTxO mFinality updater
         , intersectNotFound = do
-            putStrLn "Intersect not found, resetting to origin"
+            trace ApplicationIntersectionFailed
             pure
-                ( intersector trUTxO mFinality updater
+                ( intersector tracer trUTxO mFinality updater
                 , [origin]
                 )
         }
@@ -73,39 +99,49 @@ changeToOperation (Spend k) = Delete k
 changeToOperation (Create k v) = Insert k v
 
 follower
-    :: IO () -> IO (Maybe Point) -> DBState -> Follower Fetched
-follower trUTxO newFinalityTarget db = ($ db) $ fix $ \go currentDB ->
-    Follower
-        { rollForward = \Fetched{fetchedPoint, fetchedBlock} -> do
-            let ops = changeToOperation <$> uTxOs fetchedBlock
-            -- putStrLn
-            --     $ "Rolling forward to point: "
-            --         ++ show point
-            --         ++ " with "
-            --         ++ show (length ops)
-            --         ++ " UTxO changes"
-            replicateM_ (length ops) trUTxO
-            newDB <- case currentDB of
-                Syncing update -> do
-                    newUpdate <- forwardTipApply update fetchedPoint ops
-                    finality <- newFinalityTarget
-                    Syncing <$> case finality of
-                        Nothing -> pure newUpdate
-                        Just slot -> forwardFinalityApply newUpdate slot
-                _ -> error "follower: cannot roll forward while intersecting"
-            pure $ go newDB
-        , rollBackward = \point -> rollingBack trUTxO newFinalityTarget point go currentDB
-        }
+    :: Tracer IO ApplicationTrace
+    -> IO ()
+    -> IO (Maybe Point)
+    -> DBState
+    -> Follower Fetched
+follower
+    tracer
+    trUTxO
+    newFinalityTarget
+    db = ($ db) $ fix $ \go currentDB ->
+        Follower
+            { rollForward = \Fetched{fetchedPoint, fetchedBlock} -> do
+                let ops = changeToOperation <$> uTxOs fetchedBlock
+                replicateM_ (length ops) trUTxO
+                newDB <- case currentDB of
+                    Syncing update -> do
+                        newUpdate <- forwardTipApply update fetchedPoint ops
+                        finality <- newFinalityTarget
+                        Syncing <$> case finality of
+                            Nothing -> pure newUpdate
+                            Just slot -> forwardFinalityApply newUpdate slot
+                    _ -> error "follower: cannot roll forward while intersecting"
+                pure $ go newDB
+            , rollBackward = \point ->
+                rollingBack
+                    tracer
+                    trUTxO
+                    newFinalityTarget
+                    point
+                    go
+                    currentDB
+            }
 
 rollingBack
-    :: IO ()
+    :: Tracer IO ApplicationTrace
+    -> IO ()
     -> IO (Maybe Point)
     -> Point
     -> (DBState -> Follower Fetched)
     -> DBState
     -> IO (ProgressOrRewind Fetched)
-rollingBack trUTxO newFinalityTarget point follower' state = do
-    putStrLn $ "Rolling back to point: " ++ show point
+rollingBack TraceWith{trace, tracer} trUTxO newFinalityTarget point follower' state = do
+    trace $ ApplicationRollingBack point
     case state of
         Syncing update -> do
             newState <- rollbackTipApply update (At point)
@@ -116,20 +152,28 @@ rollingBack trUTxO newFinalityTarget point follower' state = do
                         $ Syncing newUpdate
                 Truncating newUpdate ->
                     Reset
-                        $ intersector trUTxO newFinalityTarget
+                        $ intersector tracer trUTxO newFinalityTarget
                         $ Syncing newUpdate
                 Intersecting ps newUpdate ->
                     Rewind ps
-                        $ intersector trUTxO newFinalityTarget
+                        $ intersector tracer trUTxO newFinalityTarget
                         $ Syncing newUpdate
         _ -> error "rollingBack: cannot roll back while intersecting"
 
 application
     :: Options
+    -- ^ Application options
+    -> Tracer IO Metrics
+    -- ^ Tracer for metrics events
+    -> Tracer IO ApplicationTrace
+    -- ^ Tracer for application events
     -> Update IO Point ByteString ByteString
+    -- ^ Initial database FSM update
     -> [Point]
+    -- ^ Available points to sync from
     -> IO (Maybe Point)
-    -> IO ()
+    -- ^ Finality target. TODO redesign the Update object to avoid this
+    -> IO Void
 application
     Options
         { networkMagic
@@ -138,31 +182,33 @@ application
         , startingPoint
         , headersQueueSize
         }
+    metricsRenderer
+    TraceWith{tracer}
     initialDBUpdate
     availablePoints
     mFinality =
         do
             hSetBuffering stdout NoBuffering
-            tracer <-
+            TraceWith{trace = metricTrace, contra = metricContra} <-
                 metricsTracer
                     $ MetricsParams
                         { qlWindow = 100
                         , utxoSpeedWindow = 1000
                         , blockSpeedWindow = 100
-                        , metricsOutput = renderMetrics
+                        , metricsOutput = traceWith metricsRenderer
                         , metricsFrequency = 1_000_000
                         }
-            let counting = traceWith tracer UTxOChangeEvent
+            let counting = metricTrace UTxOChangeEvent
 
             (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
                     headersQueueSize
-                    (contramap BlockFetchEvent tracer)
-                    $ intersector counting mFinality
+                    (metricContra BlockFetchEvent)
+                    $ intersector tracer counting mFinality
                     $ Syncing initialDBUpdate
             let chainFollowingApplication =
                     mkChainSyncApplication
-                        (contramap BlockInfoEvent tracer)
+                        (metricContra BlockInfoEvent)
                         headerIntersector
                         $ if null availablePoints
                             then
@@ -178,4 +224,6 @@ application
 
             case result of
                 Left err -> throwIO err
-                Right _ -> pure ()
+                Right (Left ()) ->
+                    error "application: chain following application exited unexpectedly"
+                Right _ -> error "application: impossible branch reached"

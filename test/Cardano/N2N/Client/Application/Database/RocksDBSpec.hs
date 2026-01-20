@@ -51,6 +51,7 @@ import Cardano.N2N.Client.Application.Database.RocksDB
 import Cardano.Slotting.Slot (WithOrigin (..))
 import Control.Lens (prism')
 import Control.Monad.Trans.Reader (ReaderT (..), ask)
+import Control.Tracer (nullTracer)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BC
 import Data.Char (isAlpha, isAscii)
@@ -133,7 +134,7 @@ runRocksDBProperties prop =
     withSystemTempDirectory "rocksdb-test" $ \dir ->
         withRocksDB dir $ \(RunRocksDB r) -> do
             db <- r ask
-            setup (txRunner db) armageddonParams
+            setup nullTracer (txRunner db) armageddonParams
             runWithExpected (context db) (update db) prop
   where
     txRunner db = mkRunRocksDBCSMTTransaction db prisms csmtContext
@@ -158,7 +159,8 @@ runRocksDBProperties prop =
 
     query db = mkTransactionedQuery $ mkRunRocksDBTransaction db prisms
     update db =
-        mkUpdate Complete (const $ mkHash "") armageddonParams $ txRunner db
+        mkUpdate nullTracer Complete (const $ mkHash "") armageddonParams
+            $ txRunner db
 
 test
     :: PropertyWithExpected

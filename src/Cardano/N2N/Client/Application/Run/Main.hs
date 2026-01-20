@@ -13,6 +13,8 @@ import CSMT.Hashes
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     ( ArmageddonParams (..)
+    , ArmageddonTrace
+    , renderArmageddonTrace
     , setup
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
@@ -25,7 +27,9 @@ import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Update
     ( PartialHistory (..)
+    , UpdateTrace
     , newFinality
+    , renderUpdateTrace
     )
 import Cardano.N2N.Client.Application.Database.RocksDB
     ( newRocksDBState
@@ -34,12 +38,20 @@ import Cardano.N2N.Client.Application.Options
     ( Options (..)
     , optionsParser
     )
-import Cardano.N2N.Client.Application.Run.Application (application)
+import Cardano.N2N.Client.Application.Run.Application
+    ( ApplicationTrace
+    , application
+    , renderApplicationTrace
+    )
 import Cardano.N2N.Client.Ouroboros.Types
     ( Point
     )
 import Control.Lens (Prism', lazy, prism', strict, view)
-import Control.Monad (when)
+import Control.Monad (unless, when)
+import Control.Tracer
+    ( Contravariant (..)
+    , Tracer (..)
+    )
 import Data.ByteString (StrictByteString)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.ByteString.Short (fromShort)
@@ -54,6 +66,15 @@ import Data.Serialize
     , putWord64be
     )
 import Data.Serialize.Extra (evalGetM, evalPutM)
+import Data.Tracer.LogFile (logTracer)
+import Data.Tracer.ThreadSafe (newThreadSafeTracer)
+import Data.Tracer.Timestamps (addTimestampsTracer)
+import Data.Tracer.TraceWith
+    ( contra
+    , trace
+    , tracer
+    , pattern TraceWith
+    )
 import Database.KV.Cursor (firstEntry)
 import Database.KV.Transaction (iterating)
 import Database.RocksDB
@@ -95,21 +116,62 @@ config =
         , bloomFilter = False
         }
 
+data MainTraces
+    = Boot
+    | NotEmpty
+    | New ArmageddonTrace
+    | Update (UpdateTrace Point)
+    | Application ApplicationTrace
+
+renderMainTraces :: MainTraces -> String
+renderMainTraces Boot = "Starting up Cardano UTxO CSMT client..."
+renderMainTraces NotEmpty =
+    "Database is not empty, skipping initial setup."
+renderMainTraces (New a) =
+    "Database is empty, performing initial setup."
+        ++ renderArmageddonTrace a
+renderMainTraces (Update ut) =
+    "Database update: " ++ renderUpdateTrace ut
+renderMainTraces (Application at) =
+    "Application event: " ++ renderApplicationTrace at
+
 main :: IO ()
 main = do
-    options@Options{dbPath} <-
+    options@Options{dbPath, logPath} <-
         runParser
             version
             "Tracking cardano UTxOs in a CSMT in a rocksDB database"
             optionsParser
-    withRocksDB dbPath $ \db -> do
-        ((state, slots), runner) <-
-            newRocksDBState db prisms context Partial slotHash armageddonParams
-        setupDB runner
-        application options state slots (mFinality runner)
+    logTracer logPath $ \basicTracer -> do
+        TraceWith{tracer, trace, contra} <-
+            newThreadSafeTracer
+                $ contramap renderMainTraces
+                $ addTimestampsTracer basicTracer
+        trace Boot
+        withRocksDB dbPath $ \db -> do
+            ((state, slots), runner) <-
+                newRocksDBState
+                    (contra Update)
+                    db
+                    prisms
+                    context
+                    Partial
+                    slotHash
+                    armageddonParams
+            setupDB tracer runner
+            _ <-
+                application
+                    options
+                    nullTracer
+                    (contra Application)
+                    state
+                    slots
+                    (mFinality runner)
+            error "main: application exited unexpectedly"
 
 setupDB
-    :: RunCSMTTransaction
+    :: Tracer IO MainTraces
+    -> RunCSMTTransaction
         ColumnFamily
         BatchOp
         Point
@@ -118,9 +180,10 @@ setupDB
         LazyByteString
         IO
     -> IO ()
-setupDB runner = do
+setupDB TraceWith{trace, contra} runner = do
     new <- checkEmptyRollbacks runner
-    when new $ setup runner armageddonParams
+    unless new $ trace NotEmpty
+    when new $ setup (contra New) runner armageddonParams
 
 checkEmptyRollbacks
     :: RunCSMTTransaction

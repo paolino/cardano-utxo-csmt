@@ -2,6 +2,10 @@ module Cardano.N2N.Client.Application.Database.Implementation.Update
     ( mkUpdate
     , PartialHistory (..)
 
+      -- * Tracing
+    , UpdateTrace (..)
+    , renderUpdateTrace
+
       -- * Low level operations, exposed for testing
     , forwardFinality
     , forwardTip
@@ -15,7 +19,9 @@ where
 
 import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     ( ArmageddonParams
+    , ArmageddonTrace
     , armageddon
+    , renderArmageddonTrace
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
     ( Columns (..)
@@ -41,8 +47,16 @@ import Cardano.N2N.Client.Application.Database.Interface
     )
 import Control.Monad (forM, forM_, when)
 import Control.Monad.Trans (lift)
+import Control.Tracer (Tracer)
 import Data.Function (fix)
-import Data.List.SampleFibonacci (sampleAtFibonacciIntervals)
+import Data.List.SampleFibonacci (sampleAll)
+import Data.Monoid (Sum (..))
+import Data.Tracer.TraceWith
+    ( contra
+    , trace
+    , tracer
+    , pattern TraceWith
+    )
 import Database.KV.Cursor
     ( Cursor
     , Entry (..)
@@ -61,29 +75,46 @@ import Database.KV.Transaction
 import Ouroboros.Network.Point (WithOrigin (..))
 
 data PartialHistory = Complete | Partial
-data UpdateTrace
-    = UpdateTraceArmageddonStarted
-    | UpdateTraceArmageddonCompleted
-    deriving (Show, Eq)
+
+data UpdateTrace slot
+    = UpdateArmageddon ArmageddonTrace
+    | UpdateForwardTip slot Int Int
+    | UpdateNewState [slot]
+
+renderUpdateTrace :: Show slot => UpdateTrace slot -> String
+renderUpdateTrace (UpdateArmageddon t) = renderArmageddonTrace t
+renderUpdateTrace (UpdateForwardTip slot nInsert nDelete) =
+    "Forward tip at "
+        ++ show slot
+        ++ ": "
+        ++ show nInsert
+        ++ " inserts, "
+        ++ show nDelete
+        ++ " deletes"
+renderUpdateTrace (UpdateNewState slots) =
+    "New update state with rollback points at: " ++ show slots
 
 newState
     :: (Ord key, Ord slot, MonadFail m)
-    => PartialHistory
+    => Tracer m (UpdateTrace slot)
+    -> PartialHistory
     -> (slot -> hash)
     -> ArmageddonParams hash
     -> RunCSMTTransaction cf op slot hash key value m
     -> m (Update m slot key value, [slot])
 newState
+    TraceWith{tracer, trace}
     partiality
     slotHash
     armageddonParams
     runTransaction@RunCSMTTransaction{txRunTransaction} = do
         cps <-
             txRunTransaction $ iterating RollbackPoints sampleRollbackPoints
-
+        trace $ UpdateNewState cps
         pure
             $ (,cps)
             $ mkUpdate
+                tracer
                 partiality
                 slotHash
                 armageddonParams
@@ -93,32 +124,40 @@ newState
 -- We compose csmt transactions for each operation with an updateRollbackPoint one
 forwardTip
     :: (Ord key, Ord slot, MonadFail m)
-    => PartialHistory
+    => Tracer m (UpdateTrace slot)
+    -> PartialHistory
     -> hash
     -> slot
     -- ^ slot at which operations happen
     -> [Operation key value]
     -- ^ operations to apply
     -> CSMTTransaction m cf op slot hash key value ()
-forwardTip partiality hash slot ops = do
-    tip <- getTip mkQuery
-    when (At slot > tip) $ do
-        invs <- forM ops $ \case
-            Insert k v -> do
-                insertCSMT k v
-                pure [Delete k]
-            Delete k -> do
-                mx <- query KVCol k
-                deleteCSMT k
-                case mx of
-                    Nothing ->
-                        case partiality of
-                            Partial -> pure []
-                            Complete ->
-                                error
-                                    "forwardTip: cannot invert Delete operation, key not found"
-                    Just x -> pure [Insert k x]
-        updateRollbackPoint hash slot $ reverse $ concat invs
+forwardTip
+    TraceWith{trace}
+    partiality
+    hash
+    slot
+    ops = do
+        tip <- getTip mkQuery
+        when (At slot > tip) $ do
+            result <- forM ops $ \case
+                Insert k v -> do
+                    insertCSMT k v
+                    pure (Sum 1, Sum 0, [Delete k])
+                Delete k -> do
+                    mx <- query KVCol k
+                    deleteCSMT k
+                    case mx of
+                        Nothing ->
+                            case partiality of
+                                Partial -> pure (Sum 0, Sum 1, [])
+                                Complete ->
+                                    error
+                                        "forwardTip: cannot invert Delete operation, key not found"
+                        Just x -> pure (Sum 0, Sum 1, [Insert k x])
+            let (Sum nInserts, Sum nDeletes, invs) = mconcat result
+            lift . lift . lift . trace $ UpdateForwardTip slot nInserts nDeletes
+            updateRollbackPoint hash slot $ reverse invs
 
 updateRollbackPoint
     :: (Ord slot)
@@ -136,8 +175,7 @@ sampleRollbackPoints
         (CSMTTransaction m cf op slot hash key value)
         (RollbackPointKV slot hash key value)
         [slot]
-sampleRollbackPoints = do
-    keepAts . fmap entryKey <$> sampleAtFibonacciIntervals prevEntry
+sampleRollbackPoints = keepAts . fmap entryKey <$> sampleAll prevEntry
 
 keepAts :: [WithOrigin a] -> [a]
 keepAts =
@@ -220,33 +258,47 @@ forwardFinality slot = do
 -- of continuations and so always propose itself as the next continuation
 mkUpdate
     :: (Ord key, Ord slot, MonadFail m)
-    => PartialHistory
+    => Tracer m (UpdateTrace slot)
+    -> PartialHistory
     -> (slot -> hash)
     -> ArmageddonParams hash
     -- ^ Armageddon parameters, in case rollback is impossible
     -> RunCSMTTransaction cf op slot hash key value m
     -- ^ Function to run a transaction
     -> Update m slot key value
-mkUpdate partiality slotHash armageddonParams runTransaction@RunCSMTTransaction{txRunTransaction} =
-    fix $ \cont ->
-        Update
-            { forwardTipApply = \slot ops -> txRunTransaction $ do
-                forwardTip partiality (slotHash slot) slot ops
-                pure cont
-            , rollbackTipApply = \case
-                At slot -> do
-                    r <- txRunTransaction $ rollbackTip slot
-                    case r of
-                        RollbackSucceeded -> pure $ Syncing cont
-                        -- RollbackFailedButPossible slots -> pure $ Intersecting slots cont
-                        RollbackImpossible -> do
-                            armageddon runTransaction armageddonParams
-                            pure $ Truncating cont
-                Origin -> do
-                    armageddon runTransaction armageddonParams
-                    pure $ Syncing cont
-            , forwardFinalityApply = \slot -> txRunTransaction $ forwardFinality slot >> pure cont
-            }
+mkUpdate
+    TraceWith{tracer, contra}
+    partiality
+    slotHash
+    armageddonParams
+    runTransaction@RunCSMTTransaction{txRunTransaction} =
+        fix $ \cont ->
+            Update
+                { forwardTipApply = \slot ops -> txRunTransaction $ do
+                    forwardTip tracer partiality (slotHash slot) slot ops
+                    pure cont
+                , rollbackTipApply = \case
+                    At slot -> do
+                        r <- txRunTransaction $ rollbackTip slot
+                        case r of
+                            RollbackSucceeded -> pure $ Syncing cont
+                            -- RollbackFailedButPossible slots -> pure $ Intersecting slots cont
+                            RollbackImpossible -> do
+                                armageddonCall
+                                pure $ Truncating cont
+                    Origin -> do
+                        armageddonCall
+                        pure $ Syncing cont
+                , forwardFinalityApply = \slot ->
+                    txRunTransaction
+                        $ forwardFinality slot >> pure cont
+                }
+      where
+        armageddonCall =
+            armageddon
+                (contra UpdateArmageddon)
+                runTransaction
+                armageddonParams
 
 -- | Determines whether a new finality point can be set
 newFinality

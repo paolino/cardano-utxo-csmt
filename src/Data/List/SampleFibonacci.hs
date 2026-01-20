@@ -5,6 +5,7 @@ module Data.List.SampleFibonacci
     , atMost
     , fibonacci
     , fibonacciIntervals
+    , sampleAll
     ) where
 
 import Data.Function (fix)
@@ -74,3 +75,10 @@ sampleAtFibonacciIntervals f = ($ fibonacciSequence) $ fix $ \go (Cons n ns) -> 
     case mx of
         Nothing -> pure $ maybeToList ml
         Just x -> (x :) <$> go ns
+
+sampleAll :: Monad m => m (Maybe a) -> m [a]
+sampleAll f = fix $ \go -> do
+    mx <- f
+    case mx of
+        Nothing -> pure []
+        Just x -> (x :) <$> go

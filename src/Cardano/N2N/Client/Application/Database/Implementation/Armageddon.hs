@@ -1,7 +1,9 @@
 module Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     ( ArmageddonParams (..)
+    , ArmageddonTrace (..)
     , armageddon
     , setup
+    , renderArmageddonTrace
     )
 where
 
@@ -16,6 +18,7 @@ import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     )
 import Control.Monad (when)
 import Control.Monad.Trans (lift)
+import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
 import Database.KV.Cursor
     ( Entry (..)
@@ -29,6 +32,16 @@ import Database.KV.Transaction
     , iterating
     )
 import Ouroboros.Network.Point (WithOrigin (..))
+
+data ArmageddonTrace
+    = ArmageddonStarted
+    | ArmageddonCompleted
+    | SetupDone
+
+renderArmageddonTrace :: ArmageddonTrace -> String
+renderArmageddonTrace ArmageddonStarted = " Armageddon cleanup started."
+renderArmageddonTrace ArmageddonCompleted = " Armageddon cleanup completed."
+renderArmageddonTrace SetupDone = " Initial setup done."
 
 -- | Parameters for performing an "armageddon" cleanup of the database
 data ArmageddonParams hash = ArmageddonParams
@@ -65,21 +78,25 @@ cleanUpBatch
 -- THIS IS NOT GOING TO RUN ATOMICALLY
 armageddon
     :: (Ord key, Ord slot, Monad m)
-    => RunCSMTTransaction cf op slot hash key value m
+    => Tracer m ArmageddonTrace
+    -> RunCSMTTransaction cf op slot hash key value m
     -> ArmageddonParams hash
     -> m ()
-armageddon runTransaction armageddonParams = do
+armageddon tracer@(traceWith -> trace) runTransaction armageddonParams = do
+    trace ArmageddonStarted
     cleanUpBatch runTransaction KVCol armageddonParams
     cleanUpBatch runTransaction CSMTCol armageddonParams
     cleanUpBatch runTransaction RollbackPoints armageddonParams
-    setup runTransaction armageddonParams
+    setup tracer runTransaction armageddonParams
+    trace ArmageddonCompleted
 
 setup
-    :: Ord slot
-    => RunCSMTTransaction cf op slot hash key value m
+    :: (Ord slot, Monad m)
+    => Tracer m ArmageddonTrace
+    -> RunCSMTTransaction cf op slot hash key value m
     -> ArmageddonParams hash
     -> m ()
-setup (RunCSMTTransaction{txRunTransaction}) armageddonParams =
+setup (traceWith -> trace) (RunCSMTTransaction{txRunTransaction}) armageddonParams = do
     txRunTransaction
         $ insert
             RollbackPoints
@@ -89,3 +106,4 @@ setup (RunCSMTTransaction{txRunTransaction}) armageddonParams =
                 , rbpInverseOperations = []
                 }
             )
+    trace SetupDone
