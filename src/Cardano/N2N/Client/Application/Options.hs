@@ -28,6 +28,7 @@ import OptEnvConf
     , maybeReader
     , metavar
     , option
+    , optional
     , reader
     , setting
     , short
@@ -60,6 +61,7 @@ data Options = Options
     , startingPoint :: Point
     , headersQueueSize :: EventQueueLength
     , dbPath :: FilePath
+    , logPath :: Maybe FilePath
     }
 
 dbPathOption :: Parser FilePath
@@ -72,6 +74,19 @@ dbPathOption =
         , reader str
         , option
         ]
+
+logPathOption :: Parser (Maybe FilePath)
+logPathOption =
+    optional
+        $ setting
+            [ long "log-path"
+            , short 'l'
+            , help "Path to the log file"
+            , metavar "FILE"
+            , value "cardano-utxo-csmt.log"
+            , reader str
+            , option
+            ]
 
 networkMagicOption :: Parser NetworkMagic
 networkMagicOption =
@@ -165,3 +180,4 @@ optionsParser =
         <*> startingPointOption
         <*> eventQueueSizeOption
         <*> dbPathOption
+        <*> logPathOption
