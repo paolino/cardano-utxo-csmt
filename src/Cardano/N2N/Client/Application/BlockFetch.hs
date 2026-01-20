@@ -27,7 +27,7 @@ import Control.Concurrent.Class.MonadSTM.Strict
     , writeTBQueue
     )
 import Control.Concurrent.MVar
-    ( modifyMVar_
+    ( MVar
     , newEmptyMVar
     , putMVar
     , takeMVar
@@ -36,7 +36,8 @@ import Control.Lens (makeWrapped)
 import Control.Monad (unless)
 import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
-import Data.IORef (newIORef, readIORef, writeIORef)
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NE
 import Ouroboros.Consensus.Cardano.Node ()
 import Ouroboros.Network.Block (blockPoint)
 import Ouroboros.Network.BlockFetch.ClientState (ChainRange (..))
@@ -47,121 +48,166 @@ import Ouroboros.Network.Protocol.BlockFetch.Client
     , BlockFetchResponse (..)
     )
 
+-- | Length of the queue of headers to fetch blocks for
 newtype EventQueueLength = EventQueueLength Int
     deriving (Show)
 
 makeWrapped ''EventQueueLength
 
+-- | A fetched block along with its point
 data Fetched = Fetched
     { fetchedPoint :: Point
     , fetchedBlock :: Block
     }
 
+-- | Create a block fetch application and promote compute an header intersector
+-- for the chain sync application
 mkBlockFetchApplication
     :: EventQueueLength
-    -- ^ max length of the event queue
+    -- ^ maximum length of the headers queue
     -> Tracer IO EventQueueLength
     -- ^ metrics tracer
     -> Intersector Fetched
     -- ^ callback to process each fetched block
     -> IO (BlockFetchApplication, Intersector Header)
 mkBlockFetchApplication (EventQueueLength maxQueueLen) tr blockIntersector = do
-    (pushHeader, flushHeaders, waitEmpty) <- queue maxQueueLen
+    queue <- newQueue maxQueueLen
     blockFollowerVar <- newEmptyMVar
-    let mkHeaderIntersector blockIntersector' =
-            Intersector
-                { intersectFound = \point -> do
-                    blockFollower' <- intersectFound blockIntersector' point
-                    putMVar blockFollowerVar blockFollower'
-                    pure headerFollower
-                , intersectNotFound = do
-                    (blockIntersector'', points) <- intersectNotFound blockIntersector'
-                    pure (mkHeaderIntersector blockIntersector'', points)
-                }
-        headerFollower =
-            Follower
-                { rollForward = \header -> do
-                    pushHeader $ blockPoint header
-                    pure headerFollower
-                , rollBackward = \point -> do
-                    waitEmpty
-                    -- we are safe as the only source of headers is rollForward above
-                    Follower{rollBackward} <- takeMVar blockFollowerVar
-                    fr <- rollBackward point
-                    case fr of
-                        Progress blockFollower' -> do
-                            putMVar blockFollowerVar blockFollower'
-                            pure (Progress headerFollower)
-                        Rewind points blockIntersector' -> do
-                            pure
-                                $ Rewind points
-                                $ mkHeaderIntersector blockIntersector'
-                        Reset blockIntersector' -> do
-                            pure (Reset $ mkHeaderIntersector blockIntersector')
-                }
-        blockFetchClient = BlockFetchClient $ do
-            (range, points, len) <- flushHeaders
-            traceWith tr len
-            pointsVar <- newIORef points
-            pure
-                $ SendMsgRequestRange
-                    range
-                    BlockFetchResponse
-                        { handleStartBatch = pure
-                            $ fix
-                            $ \fetchOne ->
-                                BlockFetchReceiver
-                                    { handleBlock = \block -> do
-                                        pointsLeft <- readIORef pointsVar
-                                        case pointsLeft of
-                                            [] ->
-                                                error
-                                                    "mkBlockFetchApplication: \
-                                                    \more blocks fetched than requested"
-                                            p : ps -> do
-                                                writeIORef pointsVar ps
-                                                modifyMVar_ blockFollowerVar
-                                                    $ flip
-                                                        rollForward
-                                                        Fetched
-                                                            { fetchedPoint = p
-                                                            , fetchedBlock = block
-                                                            }
-                                        pure fetchOne
-                                    , handleBatchDone = pure ()
-                                    }
-                        , handleNoBlocks = pure ()
-                        }
-                    blockFetchClient
     pure
-        (blockFetchClient, mkHeaderIntersector blockIntersector)
+        ( blockFetchClient tr blockFollowerVar queue
+        , mkHeaderIntersector blockFollowerVar queue blockIntersector
+        )
 
-nextChainRange
+headerFollower
+    :: MVar (Follower Fetched)
+    -> Queue Point
+    -> Follower Header
+headerFollower blockFollowerVar queue@Queue{pushQueue, waitEmptyQueue} = fix $ \go ->
+    Follower
+        { rollForward = \header -> do
+            -- we do not wait if there is space in the queue
+            pushQueue $ blockPoint header
+            pure go
+        , rollBackward = \point -> do
+            waitEmptyQueue
+            -- we are safe as the only source of headers is rollForward above
+            -- and it's alternative to rollBackward
+            Follower{rollBackward} <- takeMVar blockFollowerVar
+            progressOrRewind <- rollBackward point
+            case progressOrRewind of
+                Progress blockFollower -> do
+                    putMVar blockFollowerVar blockFollower
+                    pure $ Progress go
+                Rewind points blockIntersector -> do
+                    pure
+                        $ Rewind points
+                        $ mkHeaderIntersector
+                            blockFollowerVar
+                            queue
+                            blockIntersector
+                Reset blockIntersector -> do
+                    pure
+                        $ Reset
+                        $ mkHeaderIntersector
+                            blockFollowerVar
+                            queue
+                            blockIntersector
+        }
+
+mkHeaderIntersector
+    :: MVar (Follower Fetched)
+    -> Queue Point
+    -> Intersector Fetched
+    -> Intersector Header
+mkHeaderIntersector blockFollowerVar q = fix $ \go blockIntersector ->
+    Intersector
+        { intersectFound = \point -> do
+            blockFollower <- intersectFound blockIntersector point
+            putMVar blockFollowerVar blockFollower
+            pure $ headerFollower blockFollowerVar q
+        , intersectNotFound = do
+            (blockIntersector', points) <- intersectNotFound blockIntersector
+            pure (go blockIntersector', points)
+        }
+
+blockFetchReceiver
+    :: MVar (Follower Fetched)
+    -> NonEmpty Point
+    -> IO (BlockFetchReceiver Block IO)
+blockFetchReceiver blockFollowerVar points = do
+    blockFollower <- takeMVar blockFollowerVar
+    pure
+        $ ($ NE.toList points)
+        $ ($ blockFollower)
+        $ fix
+        $ \fetchOne bf ps ->
+            BlockFetchReceiver
+                { handleBlock = \block -> do
+                    case ps of
+                        [] ->
+                            error
+                                "mkBlockFetchApplication: \
+                                \more blocks fetched than requested"
+                        p : ps' -> do
+                            bf' <-
+                                rollForward
+                                    bf
+                                    Fetched
+                                        { fetchedPoint = p
+                                        , fetchedBlock = block
+                                        }
+                            pure $ fetchOne bf' ps'
+                , handleBatchDone = putMVar blockFollowerVar bf
+                }
+
+blockFetchClient
+    :: Tracer IO EventQueueLength
+    -> MVar (Follower Fetched)
+    -> Queue Point
+    -> BlockFetchClient Block Point IO ()
+blockFetchClient tracer blockFollowerVar Queue{flushQueue} = fix $ \go ->
+    BlockFetchClient $ do
+        points <- flushQueue
+        traceWith tracer $ EventQueueLength $ length points
+        pure
+            $ SendMsgRequestRange
+                (mkRange points)
+                BlockFetchResponse
+                    { handleStartBatch = blockFetchReceiver blockFollowerVar points
+                    , handleNoBlocks = error "blockFetchClient: no blocks to fetch"
+                    }
+                go
+
+mkRange :: NonEmpty a -> ChainRange a
+mkRange xs@(x :| _) = ChainRange x (NE.last xs)
+
+retryNull
     :: MonadSTM m
     => [a]
-    -> STM m (ChainRange a, EventQueueLength)
-nextChainRange xs = do
-    case xs of
-        [] -> retry
-        y : ys -> pure
-            . (,EventQueueLength (length xs))
-            . ChainRange y
-            $ case ys of
-                [] -> y
-                _ -> last ys
+    -> STM m (NonEmpty a)
+retryNull [] = retry
+retryNull (y : ys) = pure (y :| ys)
 
-queue
+-- | A simple bounded queue
+data Queue a = Queue
+    { pushQueue :: a -> IO ()
+    , flushQueue :: IO (NonEmpty a)
+    , waitEmptyQueue :: IO ()
+    }
+
+newQueue
     :: Int
-    -> IO (a -> IO (), IO (ChainRange a, [a], EventQueueLength), IO ())
-queue size = do
-    q <- newTBQueueIO $ fromIntegral size
-    let push = writeTBQueue q
-        flush = do
-            xs <- flushTBQueue q
-            (range, len) <- nextChainRange xs
-            pure (range, xs, len)
-
+    -> IO (Queue a)
+newQueue size = do
+    queue <- newTBQueueIO $ fromIntegral size
+    let push = writeTBQueue queue
+        flush = flushTBQueue queue >>= retryNull
         waitEmpty = do
-            isEmpty <- isEmptyTBQueue q
+            isEmpty <- isEmptyTBQueue queue
             unless isEmpty retry
-    pure (atomically <$> push, atomically flush, atomically waitEmpty)
+    pure
+        Queue
+            { pushQueue = atomically <$> push
+            , flushQueue = atomically flush
+            , waitEmptyQueue = atomically waitEmpty
+            }
