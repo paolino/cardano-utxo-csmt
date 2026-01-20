@@ -64,7 +64,6 @@ library
     Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
     Cardano.N2N.Client.Application.Database.Implementation.Transaction
     Cardano.N2N.Client.Application.Database.Implementation.Update
-    Cardano.N2N.Client.Application.Database.InMemory
     Cardano.N2N.Client.Application.Database.Interface
     Cardano.N2N.Client.Application.Database.Properties
     Cardano.N2N.Client.Application.Database.Properties.Expected
@@ -74,7 +73,6 @@ library
     Cardano.N2N.Client.Application.Options
     Cardano.N2N.Client.Application.Run.Application
     Cardano.N2N.Client.Application.Run.GenesisData
-    Cardano.N2N.Client.Application.Run.InMemory
     Cardano.N2N.Client.Application.Run.RenderMetrics
     Cardano.N2N.Client.Application.Run.RocksDB
     Cardano.N2N.Client.Application.SampleList
@@ -151,16 +149,6 @@ executable cardano-utxo-chainsync
 
   default-language: Haskell2010
 
-executable cardano-utxo-chainsync-in-memory
-  import:           warnings
-  ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
-  main-is:          app/chainsync/in-memory.hs
-  build-depends:
-    , base
-    , cardano-utxo-csmt
-
-  default-language: Haskell2010
-
 library test-lib
   import:           warnings
   visibility:       public
@@ -191,7 +179,6 @@ test-suite unit-tests
   type:               exitcode-stdio-1.0
   main-is:            main.hs
   other-modules:
-    Cardano.N2N.Client.Application.Database.InMemorySpec
     Cardano.N2N.Client.Application.Database.RocksDBSpec
     Data.List.SampleFibonacciSpec
 

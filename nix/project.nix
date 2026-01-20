@@ -58,6 +58,4 @@ in {
     project.hsPkgs.cardano-utxo-csmt.components.tests.unit-tests;
   packages.cardano-utxo-chainsync =
     project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-chainsync;
-  packages.cardano-utxo-chainsync-in-memory =
-    project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-chainsync-in-memory;
 }
