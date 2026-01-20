@@ -2,6 +2,7 @@
 
 module Cardano.N2N.Client.Application.BlockFetch
     ( mkBlockFetchApplication
+    , Fetched (..)
     , EventQueueLength (..)
     , BlockFetchApplication
     )
@@ -51,12 +52,17 @@ newtype EventQueueLength = EventQueueLength Int
 
 makeWrapped ''EventQueueLength
 
+data Fetched = Fetched
+    { fetchedPoint :: Point
+    , fetchedBlock :: Block
+    }
+
 mkBlockFetchApplication
     :: EventQueueLength
     -- ^ max length of the event queue
     -> Tracer IO EventQueueLength
     -- ^ metrics tracer
-    -> Intersector (Point, Block)
+    -> Intersector Fetched
     -- ^ callback to process each fetched block
     -> IO (BlockFetchApplication, Intersector Header)
 mkBlockFetchApplication (EventQueueLength maxQueueLen) tr blockIntersector = do
@@ -115,7 +121,12 @@ mkBlockFetchApplication (EventQueueLength maxQueueLen) tr blockIntersector = do
                                             p : ps -> do
                                                 writeIORef pointsVar ps
                                                 modifyMVar_ blockFollowerVar
-                                                    $ flip rollForward (p, block)
+                                                    $ flip
+                                                        rollForward
+                                                        Fetched
+                                                            { fetchedPoint = p
+                                                            , fetchedBlock = block
+                                                            }
                                         pure fetchOne
                                     , handleBatchDone = pure ()
                                     }

@@ -10,7 +10,8 @@ where
 
 import CSMT ()
 import Cardano.N2N.Client.Application.BlockFetch
-    ( mkBlockFetchApplication
+    ( Fetched (..)
+    , mkBlockFetchApplication
     )
 import Cardano.N2N.Client.Application.ChainSync
     ( mkChainSyncApplication
@@ -42,8 +43,7 @@ import Cardano.N2N.Client.Application.SampleList (sampleList)
 import Cardano.N2N.Client.Application.UTxOs (Change (..), uTxOs)
 import Cardano.N2N.Client.Ouroboros.Connection (runNodeApplication)
 import Cardano.N2N.Client.Ouroboros.Types
-    ( Block
-    , Follower (..)
+    ( Follower (..)
     , Intersector (..)
     , Point
     , ProgressOrRewind (..)
@@ -102,7 +102,7 @@ getRollbackPoints dbVar = do
         [] -> pure $ origin :| []
         (p : ps) -> pure (p :| ps)
 
-intersector :: IO () -> DB -> Updater -> Intersector (Point, Block)
+intersector :: IO () -> DB -> Updater -> Intersector Fetched
 intersector trUTxO db updater =
     Intersector
         { intersectFound = \point -> do
@@ -120,10 +120,10 @@ changeToOperation :: Change -> Operation ByteString ByteString
 changeToOperation (Spend k) = Delete k
 changeToOperation (Create k v) = Insert k v
 
-follower :: IO () -> DB -> Updater -> Follower (Point, Block)
+follower :: IO () -> DB -> Updater -> Follower Fetched
 follower trUTxO db updater = fix $ \go ->
     Follower
-        { rollForward = \(point, block) -> do
+        { rollForward = \Fetched{fetchedPoint = point, fetchedBlock = block} -> do
             let ops = changeToOperation <$> uTxOs block
             -- putStrLn
             --     $ "Rolling forward to point: "
@@ -150,8 +150,8 @@ rollingBack
     -> DB
     -> Updater
     -> Point
-    -> Follower (Point, Block)
-    -> IO (ProgressOrRewind (Point, Block))
+    -> Follower Fetched
+    -> IO (ProgressOrRewind Fetched)
 rollingBack trUTxO db updater point follower' = do
     putStrLn $ "Rolling back to point: " ++ show point
     onDb db updater $ \case

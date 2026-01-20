@@ -16,7 +16,8 @@ import CSMT.Hashes
     , isoHash
     )
 import Cardano.N2N.Client.Application.BlockFetch
-    ( mkBlockFetchApplication
+    ( Fetched (..)
+    , mkBlockFetchApplication
     )
 import Cardano.N2N.Client.Application.ChainSync
     ( Follower (..)
@@ -36,9 +37,7 @@ import Cardano.N2N.Client.Application.Options
 import Cardano.N2N.Client.Application.UTxOs (uTxOs)
 import Cardano.N2N.Client.Ouroboros.Connection (runNodeApplication)
 import Cardano.N2N.Client.Ouroboros.Types
-    ( Block
-    , Intersector (..)
-    , Point
+    ( Intersector (..)
     )
 import Control.Exception (throwIO)
 import Control.Monad (forM_)
@@ -164,10 +163,10 @@ codecs =
         , nodeCodec = isoHash
         }
 
-forwarding :: RunRocksDB -> IO () -> (Point, Block) -> IO ()
-forwarding (RunRocksDB run) counting (_point, block) = run $ do
+forwarding :: RunRocksDB -> IO () -> Fetched -> IO ()
+forwarding (RunRocksDB run) counting Fetched{fetchedPoint, fetchedBlock} = run $ do
     database <- standaloneRocksDBDatabase codecs
-    forM_ (uTxOs block) $ \change -> do
+    forM_ (uTxOs fetchedBlock) $ \change -> do
         -- Transaction.run database $ case change of
         --     Spend txIn ->
         --         delete fromKVHashes StandaloneKVCol StandaloneCSMTCol
@@ -182,7 +181,7 @@ forwarding (RunRocksDB run) counting (_point, block) = run $ do
         liftIO counting
 
 blockIntersector
-    :: ((Point, Block) -> IO ()) -> Intersector (Point, Block)
+    :: (Fetched -> IO ()) -> Intersector Fetched
 blockIntersector forward =
     Intersector
         { intersectFound = \_point -> do
@@ -191,7 +190,7 @@ blockIntersector forward =
             pure (blockIntersector forward, [Network.Point Origin])
         }
 
-blockFollower :: ((Point, Block) -> IO ()) -> Follower (Point, Block)
+blockFollower :: (Fetched -> IO ()) -> Follower Fetched
 blockFollower forward = fix $ \go ->
     Follower
         { rollForward = \block -> do
