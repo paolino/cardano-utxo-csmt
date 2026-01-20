@@ -43,6 +43,9 @@ import Cardano.N2N.Client.Application.Run.Application
     , application
     , renderApplicationTrace
     )
+import Cardano.N2N.Client.Application.Run.RenderMetrics
+    ( renderMetrics
+    )
 import Cardano.N2N.Client.Ouroboros.Types
     ( Point
     )
@@ -111,7 +114,7 @@ config =
         { createIfMissing = True
         , errorIfExists = False
         , paranoidChecks = False
-        , maxFiles = Just 1
+        , maxFiles = Nothing
         , prefixLength = Nothing
         , bloomFilter = False
         }
@@ -162,7 +165,7 @@ main = do
             _ <-
                 application
                     options
-                    nullTracer
+                    (Tracer renderMetrics)
                     (contra Application)
                     state
                     slots
