@@ -1,4 +1,4 @@
-module Cardano.N2N.Client.Application.Run.RocksDB
+module Cardano.N2N.Client.Application.Run.Main
     ( main
     )
 where
