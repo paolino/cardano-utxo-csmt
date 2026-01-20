@@ -49,7 +49,9 @@ import Control.Monad (forM, forM_, when)
 import Control.Monad.Trans (lift)
 import Control.Tracer (Tracer)
 import Data.Function (fix)
-import Data.List.SampleFibonacci (sampleAll)
+import Data.List.SampleFibonacci
+    ( sampleAtFibonacciIntervals
+    )
 import Data.Monoid (Sum (..))
 import Data.Tracer.TraceWith
     ( contra
@@ -168,23 +170,24 @@ updateRollbackPoint
 updateRollbackPoint pointHash pointSlot rbpInverseOperations =
     insert RollbackPoints (At pointSlot)
         $ RollbackPoint{rbpHash = pointHash, rbpInverseOperations}
-
 sampleRollbackPoints
     :: Monad m
     => Cursor
         (CSMTTransaction m cf op slot hash key value)
         (RollbackPointKV slot hash key value)
         [slot]
-sampleRollbackPoints = keepAts . fmap entryKey <$> sampleAll prevEntry
+sampleRollbackPoints = do
+    me <- lastEntry
+    case me of
+        Nothing -> pure []
+        Just h -> do
+            rest <- sampleAtFibonacciIntervals prevEntry
+            pure $ keepAts . fmap entryKey $ h : rest
 
 keepAts :: [WithOrigin a] -> [a]
-keepAts =
-    foldr
-        ( \case
-            Origin -> id
-            At x -> (x :)
-        )
-        []
+keepAts = flip foldr [] $ \case
+    Origin -> id
+    At x -> (x :)
 
 rollbackRollbackPoint
     :: (Ord key, Monad m)
