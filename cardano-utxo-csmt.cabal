@@ -72,7 +72,6 @@ library
     Cardano.N2N.Client.Application.KeepAlive
     Cardano.N2N.Client.Application.Metrics
     Cardano.N2N.Client.Application.Options
-    Cardano.N2N.Client.Application.Run
     Cardano.N2N.Client.Application.Run.Application
     Cardano.N2N.Client.Application.Run.GenesisData
     Cardano.N2N.Client.Application.Run.InMemory
