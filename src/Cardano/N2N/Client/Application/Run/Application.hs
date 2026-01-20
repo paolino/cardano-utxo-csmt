@@ -7,7 +7,8 @@ where
 
 import CSMT ()
 import Cardano.N2N.Client.Application.BlockFetch
-    ( mkBlockFetchApplication
+    ( Fetched (..)
+    , mkBlockFetchApplication
     )
 import Cardano.N2N.Client.Application.ChainSync
     ( mkChainSyncApplication
@@ -31,8 +32,7 @@ import Cardano.N2N.Client.Application.Run.RenderMetrics
 import Cardano.N2N.Client.Application.UTxOs (Change (..), uTxOs)
 import Cardano.N2N.Client.Ouroboros.Connection (runNodeApplication)
 import Cardano.N2N.Client.Ouroboros.Types
-    ( Block
-    , Follower (..)
+    ( Follower (..)
     , Intersector (..)
     , Point
     , ProgressOrRewind (..)
@@ -51,15 +51,10 @@ import System.IO (BufferMode (..), hSetBuffering, stdout)
 origin :: Network.Point block
 origin = Network.Point{getPoint = Origin}
 
-type DBState =
-    State
-        IO
-        Point
-        ByteString
-        ByteString
+type DBState = State IO Point ByteString ByteString
 
 intersector
-    :: IO () -> IO (Maybe Point) -> DBState -> Intersector (Point, Block)
+    :: IO () -> IO (Maybe Point) -> DBState -> Intersector Fetched
 intersector trUTxO mFinality updater =
     Intersector
         { intersectFound = \point -> do
@@ -78,11 +73,11 @@ changeToOperation (Spend k) = Delete k
 changeToOperation (Create k v) = Insert k v
 
 follower
-    :: IO () -> IO (Maybe Point) -> DBState -> Follower (Point, Block)
+    :: IO () -> IO (Maybe Point) -> DBState -> Follower Fetched
 follower trUTxO newFinalityTarget db = ($ db) $ fix $ \go currentDB ->
     Follower
-        { rollForward = \(point, block) -> do
-            let ops = changeToOperation <$> uTxOs block
+        { rollForward = \Fetched{fetchedPoint, fetchedBlock} -> do
+            let ops = changeToOperation <$> uTxOs fetchedBlock
             -- putStrLn
             --     $ "Rolling forward to point: "
             --         ++ show point
@@ -92,7 +87,7 @@ follower trUTxO newFinalityTarget db = ($ db) $ fix $ \go currentDB ->
             replicateM_ (length ops) trUTxO
             newDB <- case currentDB of
                 Syncing update -> do
-                    newUpdate <- forwardTipApply update point ops
+                    newUpdate <- forwardTipApply update fetchedPoint ops
                     finality <- newFinalityTarget
                     Syncing <$> case finality of
                         Nothing -> pure newUpdate
@@ -106,9 +101,9 @@ rollingBack
     :: IO ()
     -> IO (Maybe Point)
     -> Point
-    -> (DBState -> Follower (Point, Block))
+    -> (DBState -> Follower Fetched)
     -> DBState
-    -> IO (ProgressOrRewind (Point, Block))
+    -> IO (ProgressOrRewind Fetched)
 rollingBack trUTxO newFinalityTarget point follower' state = do
     putStrLn $ "Rolling back to point: " ++ show point
     case state of
