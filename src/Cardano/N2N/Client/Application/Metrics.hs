@@ -10,6 +10,7 @@ module Cardano.N2N.Client.Application.Metrics
     )
 where
 
+import CSMT.Hashes (Hash)
 import Cardano.N2N.Client.Application.BlockFetch
     ( EventQueueLength (..)
     )
@@ -101,6 +102,8 @@ data MetricsEvent
       UTxOChangeEvent
     | -- | one block has been processed
       BlockInfoEvent Header
+    | -- | the current merkle root
+      MerkleRootEvent Hash
 
 makePrisms ''MetricsEvent
 
@@ -165,6 +168,9 @@ currentEraFold =
         6 -> "conway"
         _ -> "unknown"
 
+getCurrentMerkleRoot :: Fold TimedMetrics (Maybe Hash)
+getCurrentMerkleRoot = handles (timedEventL . _MerkleRootEvent) Fold.last
+
 -- | Tracked metrics
 data Metrics = Metrics
     { averageQueueLength :: Double
@@ -174,6 +180,7 @@ data Metrics = Metrics
     , utxoSpeed :: Double
     , blockSpeed :: Double
     , currentEra :: Maybe String
+    , currentMerkleRoot :: Maybe Hash
     }
 
 -- | Metrics configuration parameters
@@ -201,6 +208,7 @@ metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
         <*> utxoSpeedFold utxoSpeedWindow
         <*> blockSpeedFold blockSpeedWindow
         <*> currentEraFold
+        <*> getCurrentMerkleRoot
 
 -- | Create a metrics tracer that collects metrics and outputs them
 metricsTracer :: MetricsParams -> IO (Tracer IO MetricsEvent)
