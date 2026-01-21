@@ -7,20 +7,18 @@ module Cardano.N2N.Client.Application.Database.RocksDB
     )
 where
 
-import Cardano.N2N.Client.Application.Database.Implementation
-    ( Columns
-    , RunTransaction (..)
-    )
 import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     ( ArmageddonParams
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
-    ( Prisms
+    ( Columns
+    , Prisms
     , codecs
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
     , RunCSMTTransaction (..)
+    , RunTransaction (..)
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Update
     ( PartialHistory

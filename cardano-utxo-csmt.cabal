@@ -58,7 +58,6 @@ library
   exposed-modules:
     Cardano.N2N.Client.Application.BlockFetch
     Cardano.N2N.Client.Application.ChainSync
-    Cardano.N2N.Client.Application.Database.Implementation
     Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     Cardano.N2N.Client.Application.Database.Implementation.Columns
     Cardano.N2N.Client.Application.Database.Implementation.Query
