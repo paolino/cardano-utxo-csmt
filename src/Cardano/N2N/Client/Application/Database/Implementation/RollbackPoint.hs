@@ -31,6 +31,7 @@ import Ouroboros.Network.Point (WithOrigin (..))
 data RollbackPoint slot hash key value = RollbackPoint
     { rbpHash :: hash
     , rbpInverseOperations :: [Operation key value]
+    , rpbMerkleRoot :: Maybe hash
     }
 
 -- | Type alias for the KV column storing rollback points
@@ -62,7 +63,7 @@ rollbackPointPrism hashPrism keyPrism valuePrism =
     prism' encode decode
   where
     encode :: RollbackPoint slot hash key value -> ByteString
-    encode RollbackPoint{rbpHash, rbpInverseOperations} =
+    encode RollbackPoint{rbpHash, rbpInverseOperations, rpbMerkleRoot} =
         evalPutM $ do
             putReview hashPrism rbpHash
             let opsCount = fromIntegral (length rbpInverseOperations)
@@ -75,6 +76,12 @@ rollbackPointPrism hashPrism keyPrism valuePrism =
                     putWord8 1
                     putReview keyPrism k
                     putReview valuePrism v
+            case rpbMerkleRoot of
+                Nothing -> putWord8 0
+                Just h -> do
+                    putWord8 1
+                    putReview hashPrism h
+
     decode :: ByteString -> Maybe (RollbackPoint slot hash key value)
     decode = evalGetM $ do
         rbpHash <- getPreview hashPrism
@@ -90,7 +97,12 @@ rollbackPointPrism hashPrism keyPrism valuePrism =
                     v <- getPreview valuePrism
                     pure $ Insert k v
                 _ -> fail "mkRollbackPointCodecs: invalid operation tag"
-        pure $ RollbackPoint{rbpHash, rbpInverseOperations}
+        mbTag <- getWord8
+        rpbMerkleRoot <- case mbTag of
+            0 -> pure Nothing
+            1 -> Just <$> getPreview hashPrism
+            _ -> fail "mkRollbackPointCodecs: invalid merkle root tag"
+        pure $ RollbackPoint{rbpHash, rbpInverseOperations, rpbMerkleRoot}
 
 withOriginPrism
     :: forall slot

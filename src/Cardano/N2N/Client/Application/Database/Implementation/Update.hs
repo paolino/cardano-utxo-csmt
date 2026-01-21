@@ -38,6 +38,7 @@ import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     , RunCSMTTransaction (..)
     , deleteCSMT
     , insertCSMT
+    , queryMerkleRoot
     )
 import Cardano.N2N.Client.Application.Database.Interface
     ( Operation (..)
@@ -162,14 +163,19 @@ forwardTip
             updateRollbackPoint hash slot $ reverse invs
 
 updateRollbackPoint
-    :: (Ord slot)
+    :: (Ord slot, Monad m)
     => hash
     -> slot
     -> [Operation key value]
     -> CSMTTransaction m cf op slot hash key value ()
-updateRollbackPoint pointHash pointSlot rbpInverseOperations =
+updateRollbackPoint pointHash pointSlot rbpInverseOperations = do
+    rpbMerkleRoot <- queryMerkleRoot
     insert RollbackPoints (At pointSlot)
-        $ RollbackPoint{rbpHash = pointHash, rbpInverseOperations}
+        $ RollbackPoint
+            { rbpHash = pointHash
+            , rbpInverseOperations
+            , rpbMerkleRoot
+            }
 sampleRollbackPoints
     :: Monad m
     => Cursor
