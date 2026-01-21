@@ -1,3 +1,5 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 module Cardano.N2N.Client.Application.Run.Main
     ( main
     )
@@ -27,12 +29,17 @@ import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Update
     ( PartialHistory (..)
-    , UpdateTrace
+    , UpdateTrace (UpdateForwardTip)
     , newFinality
     , renderUpdateTrace
     )
 import Cardano.N2N.Client.Application.Database.RocksDB
     ( newRocksDBState
+    )
+import Cardano.N2N.Client.Application.Metrics
+    ( MetricsEvent (MerkleRootEvent)
+    , MetricsParams (..)
+    , metricsTracer
     )
 import Cardano.N2N.Client.Application.Options
     ( Options (..)
@@ -69,6 +76,7 @@ import Data.Serialize
     , putWord64be
     )
 import Data.Serialize.Extra (evalGetM, evalPutM)
+import Data.Tracer.Intercept (intercept)
 import Data.Tracer.LogFile (logTracer)
 import Data.Tracer.ThreadSafe (newThreadSafeTracer)
 import Data.Tracer.Timestamps (addTimestampsTracer)
@@ -123,7 +131,7 @@ data MainTraces
     = Boot
     | NotEmpty
     | New ArmageddonTrace
-    | Update (UpdateTrace Point)
+    | Update (UpdateTrace Point Hash)
     | Application ApplicationTrace
 
 renderMainTraces :: MainTraces -> String
@@ -146,8 +154,18 @@ main = do
             "Tracking cardano UTxOs in a CSMT in a rocksDB database"
             optionsParser
     logTracer logPath $ \basicTracer -> do
+        metricsEvent <-
+            metricsTracer
+                $ MetricsParams
+                    { qlWindow = 100
+                    , utxoSpeedWindow = 1000
+                    , blockSpeedWindow = 100
+                    , metricsOutput = renderMetrics
+                    , metricsFrequency = 1_000_000
+                    }
         TraceWith{tracer, trace, contra} <-
-            newThreadSafeTracer
+            fmap (intercept metricsEvent getMerkleRoot)
+                $ newThreadSafeTracer
                 $ contramap renderMainTraces
                 $ addTimestampsTracer basicTracer
         trace Boot
@@ -165,12 +183,17 @@ main = do
             _ <-
                 application
                     options
-                    (Tracer renderMetrics)
+                    metricsEvent
                     (contra Application)
                     state
                     slots
                     (mFinality runner)
             error "main: application exited unexpectedly"
+
+getMerkleRoot :: MainTraces -> Maybe MetricsEvent
+getMerkleRoot (Update (UpdateForwardTip _ _ _ (Just merkleRoot))) =
+    Just $ MerkleRootEvent merkleRoot
+getMerkleRoot _ = Nothing
 
 setupDB
     :: Tracer IO MainTraces
