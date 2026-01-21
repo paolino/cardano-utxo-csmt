@@ -1,5 +1,3 @@
-{-# LANGUAGE NumericUnderscores #-}
-
 module Cardano.N2N.Client.Application.Run.Application
     ( application
     , ApplicationTrace (..)
@@ -21,10 +19,7 @@ import Cardano.N2N.Client.Application.Database.Interface
     , Update (..)
     )
 import Cardano.N2N.Client.Application.Metrics
-    ( Metrics
-    , MetricsEvent (..)
-    , MetricsParams (..)
-    , metricsTracer
+    ( MetricsEvent (..)
     )
 import Cardano.N2N.Client.Application.Options
     ( Options (..)
@@ -39,7 +34,7 @@ import Cardano.N2N.Client.Ouroboros.Types
     )
 import Control.Exception (throwIO)
 import Control.Monad (replicateM_)
-import Control.Tracer (Tracer, traceWith)
+import Control.Tracer (Tracer)
 import Data.ByteString.Lazy (ByteString)
 import Data.Function (fix)
 import Data.Tracer.TraceWith
@@ -163,7 +158,7 @@ rollingBack TraceWith{trace, tracer} trUTxO newFinalityTarget point follower' st
 application
     :: Options
     -- ^ Application options
-    -> Tracer IO Metrics
+    -> Tracer IO MetricsEvent
     -- ^ Tracer for metrics events
     -> Tracer IO ApplicationTrace
     -- ^ Tracer for application events
@@ -182,22 +177,14 @@ application
         , startingPoint
         , headersQueueSize
         }
-    metricsRenderer
+    TraceWith{trace = metricTrace, contra = metricContra}
     TraceWith{tracer}
     initialDBUpdate
     availablePoints
     mFinality =
         do
             hSetBuffering stdout NoBuffering
-            TraceWith{trace = metricTrace, contra = metricContra} <-
-                metricsTracer
-                    $ MetricsParams
-                        { qlWindow = 100
-                        , utxoSpeedWindow = 1000
-                        , blockSpeedWindow = 100
-                        , metricsOutput = traceWith metricsRenderer
-                        , metricsFrequency = 1_000_000
-                        }
+
             let counting = metricTrace UTxOChangeEvent
 
             (blockFetchApplication, headerIntersector) <-
