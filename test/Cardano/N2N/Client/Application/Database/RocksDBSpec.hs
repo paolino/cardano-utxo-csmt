@@ -5,9 +5,6 @@ where
 
 import CSMT.Backend.RocksDB (RunRocksDB (..))
 import CSMT.Hashes (Hash, fromKVHashes, hashHashing, isoHash, mkHash)
-import Cardano.N2N.Client.Application.Database.Implementation
-    ( mkUpdate
-    )
 import Cardano.N2N.Client.Application.Database.Implementation.Armageddon
     ( ArmageddonParams (ArmageddonParams)
     , setup
@@ -23,6 +20,7 @@ import Cardano.N2N.Client.Application.Database.Implementation.Transaction
     )
 import Cardano.N2N.Client.Application.Database.Implementation.Update
     ( PartialHistory (..)
+    , mkUpdate
     )
 import Cardano.N2N.Client.Application.Database.Properties
     ( findValue
