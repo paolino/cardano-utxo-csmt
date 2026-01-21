@@ -83,6 +83,7 @@ library
     Cardano.N2N.Client.Ouroboros.Types
     Cardano.UTxO.CSMT.App
     Data.List.SampleFibonacci
+    Data.Tracer.Intercept
     Data.Tracer.LogFile
     Data.Tracer.ThreadSafe
     Data.Tracer.Timestamps
