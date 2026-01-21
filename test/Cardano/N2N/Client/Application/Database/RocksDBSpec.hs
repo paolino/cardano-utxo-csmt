@@ -45,8 +45,8 @@ import Cardano.N2N.Client.Application.Database.Properties.Expected
     , runWithExpected
     )
 import Cardano.N2N.Client.Application.Database.RocksDB
-    ( mkRunRocksDBCSMTTransaction
-    , mkRunRocksDBTransaction
+    ( newRunRocksDBCSMTTransaction
+    , newRunRocksDBTransaction
     )
 import Cardano.Slotting.Slot (WithOrigin (..))
 import Control.Lens (prism')
@@ -134,33 +134,31 @@ runRocksDBProperties prop =
     withSystemTempDirectory "rocksdb-test" $ \dir ->
         withRocksDB dir $ \(RunRocksDB r) -> do
             db <- r ask
-            setup nullTracer (txRunner db) armageddonParams
-            runWithExpected (context db) (update db) prop
+            runner <- txRunner db
+            contextDatabase <- query db
+            setup nullTracer runner armageddonParams
+            let context =
+                    Context
+                        { contextDatabase
+                        , contextGenerator =
+                            Generator
+                                { genSlot = do
+                                    GenSlot x <- arbitrary
+                                    pure x
+                                , genKey = do
+                                    GenKey x <- arbitrary
+                                    pure x
+                                , genValue = do
+                                    GenValue v <- arbitrary
+                                    pure v
+                                }
+                        }
+            runWithExpected context (update runner) prop
   where
-    txRunner db = mkRunRocksDBCSMTTransaction db prisms csmtContext
+    txRunner db = newRunRocksDBCSMTTransaction db prisms csmtContext
     armageddonParams = ArmageddonParams 1000 (mkHash "")
-    context db =
-        Context
-            { contextDatabase = query db
-            , contextGenerator =
-                Generator
-                    { genSlot = do
-                        GenSlot x <- arbitrary
-
-                        pure x
-                    , genKey = do
-                        GenKey x <- arbitrary
-                        pure x
-                    , genValue = do
-                        GenValue v <- arbitrary
-                        pure v
-                    }
-            }
-
-    query db = mkTransactionedQuery $ mkRunRocksDBTransaction db prisms
-    update db =
-        mkUpdate nullTracer Complete (const $ mkHash "") armageddonParams
-            $ txRunner db
+    query db = mkTransactionedQuery <$> newRunRocksDBTransaction db prisms
+    update = mkUpdate nullTracer Complete (const $ mkHash "") armageddonParams
 
 test
     :: PropertyWithExpected

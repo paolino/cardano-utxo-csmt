@@ -30,7 +30,7 @@ import Data.ByteString (ByteString)
 import Data.Function ((&))
 import Data.Functor (($>))
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
-import Database.KV.Transaction qualified as Transaction
+import Database.KV.Transaction (runTransactionUnguarded)
 import OptEnvConf (Parser, runParser, setting)
 import OptEnvConf.Setting
     ( auto
@@ -133,7 +133,7 @@ insertUTxO (RunRocksDB run) = S.mapM_ $ \(txin, term) -> do
         value' = toStrictByteString $ encodeTerm term
     run $ do
         database <- standaloneRocksDBDatabase codecs
-        Transaction.run database
+        runTransactionUnguarded database
             $ insert fromKVHashes StandaloneKVCol StandaloneCSMTCol key value'
 
 reportEvery :: Int -> Stream (Of a) IO b -> Stream (Of a) IO b

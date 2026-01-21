@@ -104,7 +104,9 @@ library
     , containers
     , contra-tracer
     , csmt
-    , csmt:rocksdb-transactions
+    , csmt:kv-transactions
+    , csmt:rocksdb-kv-transactions
+    , exceptions
     , foldl
     , lens
     , memory
