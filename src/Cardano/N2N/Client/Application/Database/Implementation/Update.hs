@@ -79,14 +79,14 @@ import Ouroboros.Network.Point (WithOrigin (..))
 
 data PartialHistory = Complete | Partial
 
-data UpdateTrace slot
+data UpdateTrace slot hash
     = UpdateArmageddon ArmageddonTrace
-    | UpdateForwardTip slot Int Int
+    | UpdateForwardTip slot Int Int (Maybe hash)
     | UpdateNewState [slot]
 
-renderUpdateTrace :: Show slot => UpdateTrace slot -> String
+renderUpdateTrace :: Show slot => UpdateTrace slot hash -> String
 renderUpdateTrace (UpdateArmageddon t) = renderArmageddonTrace t
-renderUpdateTrace (UpdateForwardTip slot nInsert nDelete) =
+renderUpdateTrace (UpdateForwardTip slot nInsert nDelete _merkleRoot) =
     "Forward tip at "
         ++ show slot
         ++ ": "
@@ -99,7 +99,7 @@ renderUpdateTrace (UpdateNewState slots) =
 
 newState
     :: (Ord key, Ord slot, MonadFail m)
-    => Tracer m (UpdateTrace slot)
+    => Tracer m (UpdateTrace slot hash)
     -> PartialHistory
     -> (slot -> hash)
     -> ArmageddonParams hash
@@ -127,7 +127,7 @@ newState
 -- We compose csmt transactions for each operation with an updateRollbackPoint one
 forwardTip
     :: (Ord key, Ord slot, MonadFail m)
-    => Tracer m (UpdateTrace slot)
+    => Tracer m (UpdateTrace slot hash)
     -> PartialHistory
     -> hash
     -> slot
@@ -159,15 +159,16 @@ forwardTip
                                         "forwardTip: cannot invert Delete operation, key not found"
                         Just x -> pure (Sum 0, Sum 1, [Insert k x])
             let (Sum nInserts, Sum nDeletes, invs) = mconcat result
-            lift . lift . lift . trace $ UpdateForwardTip slot nInserts nDeletes
-            updateRollbackPoint hash slot $ reverse invs
+            merkleRoot <- updateRollbackPoint hash slot $ reverse invs
+            lift . lift . lift . trace
+                $ UpdateForwardTip slot nInserts nDeletes merkleRoot
 
 updateRollbackPoint
     :: (Ord slot, Monad m)
     => hash
     -> slot
     -> [Operation key value]
-    -> CSMTTransaction m cf op slot hash key value ()
+    -> CSMTTransaction m cf op slot hash key value (Maybe hash)
 updateRollbackPoint pointHash pointSlot rbpInverseOperations = do
     rpbMerkleRoot <- queryMerkleRoot
     insert RollbackPoints (At pointSlot)
@@ -176,6 +177,7 @@ updateRollbackPoint pointHash pointSlot rbpInverseOperations = do
             , rbpInverseOperations
             , rpbMerkleRoot
             }
+    pure rpbMerkleRoot
 sampleRollbackPoints
     :: Monad m
     => Cursor
@@ -267,7 +269,7 @@ forwardFinality slot = do
 -- of continuations and so always propose itself as the next continuation
 mkUpdate
     :: (Ord key, Ord slot, MonadFail m)
-    => Tracer m (UpdateTrace slot)
+    => Tracer m (UpdateTrace slot hash)
     -> PartialHistory
     -> (slot -> hash)
     -> ArmageddonParams hash
