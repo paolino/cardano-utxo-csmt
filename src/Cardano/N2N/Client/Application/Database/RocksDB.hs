@@ -98,7 +98,7 @@ newRunTransaction db prisms =
 
 newRocksDBState
     :: (MonadIO m, MonadFail m, Ord key, Ord slot, MonadMask m)
-    => Tracer m (UpdateTrace slot)
+    => Tracer m (UpdateTrace slot hash)
     -> DB
     -> Prisms slot hash key value
     -> CSMTContext hash key value
