@@ -28,6 +28,7 @@ renderMetrics
         , utxoSpeed
         , blockSpeed
         , currentEra
+        , currentMerkleRoot
         } = do
         hClearScreen stdout
         hSetCursorPosition stdout 0 0
@@ -48,6 +49,8 @@ renderMetrics
                 ++ maybe "N/A" (show . blockNo . snd) lastBlockPoint
                 ++ "\nLast Received Block Time: "
                 ++ maybe "N/A" (show . fst) lastBlockPoint
+                ++ "\nCurrent Merkle Root: "
+                ++ maybe "N/A" show currentMerkleRoot
                 ++ "\nCurrent Era: "
                 ++ fromMaybe "N/A" currentEra
       where
