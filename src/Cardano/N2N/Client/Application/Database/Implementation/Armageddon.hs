@@ -104,6 +104,7 @@ setup (traceWith -> trace) (RunCSMTTransaction{txRunTransaction}) armageddonPara
             ( RollbackPoint
                 { rbpHash = noHash armageddonParams
                 , rbpInverseOperations = []
+                , rpbMerkleRoot = Nothing
                 }
             )
     trace SetupDone

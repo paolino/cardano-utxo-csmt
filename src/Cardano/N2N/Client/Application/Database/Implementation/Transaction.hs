@@ -5,11 +5,13 @@ module Cardano.N2N.Client.Application.Database.Implementation.Transaction
     , CSMTContext (..)
     , insertCSMT
     , deleteCSMT
+    , queryMerkleRoot
     )
 where
 
 import CSMT (FromKV, Hashing, inserting)
 import CSMT.Deletion (deleting)
+import CSMT.Interface (root)
 import Cardano.N2N.Client.Application.Database.Implementation.Columns
     ( Columns (..)
     )
@@ -61,3 +63,10 @@ deleteCSMT
 deleteCSMT k = do
     CSMTContext{fromKV, hashing} <- lift . lift $ ask
     deleting fromKV hashing KVCol CSMTCol k
+
+queryMerkleRoot
+    :: Monad m
+    => CSMTTransaction m cf op slot hash key value (Maybe hash)
+queryMerkleRoot = do
+    CSMTContext{hashing} <- lift . lift $ ask
+    root hashing CSMTCol
