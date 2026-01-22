@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE NumericUnderscores #-}
 
 module Cardano.UTxOCSMT.Application.Run.Main
@@ -170,7 +171,7 @@ startHTTPService trace (Just port) runServer = do
 
 main :: IO ()
 main = do
-    options@Options{dbPath, logPath, apiPort} <-
+    options@Options{dbPath, logPath, apiPort, metricsOn} <-
         runParser
             version
             "Tracking cardano UTxOs in a CSMT in a rocksDB database"
@@ -183,8 +184,8 @@ main = do
                     { qlWindow = 100
                     , utxoSpeedWindow = 1000
                     , blockSpeedWindow = 100
-                    , metricsOutput = \metrics -> do
-                        renderMetrics metrics
+                    , metricsOutput = \ !metrics -> do
+                        when metricsOn $ renderMetrics metrics
                         atomically $ writeTVar metricsVar (Just metrics)
                     , metricsFrequency = 1_000_000
                     }
