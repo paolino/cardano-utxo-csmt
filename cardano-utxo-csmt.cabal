@@ -57,15 +57,21 @@ library http
   hs-source-dirs:   http
   default-language: Haskell2010
   build-depends:
+    , aeson
     , base
     , cardano-utxo-csmt:library
+    , csmt
     , lens
+    , memory
     , network
+    , ouroboros-network-api
     , servant-server
     , servant-swagger
     , servant-swagger-ui
     , swagger2
+    , text
     , wai
+    , wai-cors
     , warp
 
   exposed-modules:
@@ -102,6 +108,7 @@ library application
     , ouroboros-network-api
     , rocksdb-haskell-jprupp
     , strict-stm
+    , with-utf8
 
   hs-source-dirs:   application
   default-language: Haskell2010

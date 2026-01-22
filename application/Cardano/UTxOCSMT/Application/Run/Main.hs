@@ -24,6 +24,9 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
     , Prisms (..)
     )
+import Cardano.UTxOCSMT.Application.Database.Implementation.Query
+    ( getAllMerkleRoots
+    )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
     , RunCSMTTransaction (..)
@@ -54,6 +57,7 @@ import Cardano.UTxOCSMT.Application.Run.Application
 import Cardano.UTxOCSMT.Application.Run.RenderMetrics
     ( renderMetrics
     )
+import Cardano.UTxOCSMT.HTTP.API (MerkleRootEntry (..))
 import Cardano.UTxOCSMT.HTTP.Server
 import Cardano.UTxOCSMT.Ouroboros.Types
     ( Point
@@ -104,6 +108,7 @@ import Database.RocksDB
     , DB
     , withDBCF
     )
+import Main.Utf8 (withUtf8)
 import OptEnvConf (runParser)
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHash (..))
 import Ouroboros.Consensus.Ledger.SupportsPeerSelection (PortNumber)
@@ -170,7 +175,7 @@ startHTTPService trace (Just port) runServer = do
     link <=< async $ runServer port
 
 main :: IO ()
-main = do
+main = withUtf8 $ do
     options@Options{dbPath, logPath, apiPort, metricsOn} <-
         runParser
             version
@@ -194,9 +199,8 @@ main = do
                 $ newThreadSafeTracer
                 $ contramap renderMainTraces
                 $ addTimestampsTracer basicTracer
-        startHTTPService (trace ServeApi) apiPort
-            $ \port -> runAPIServer port $ readTVarIO metricsVar
-        startHTTPService (trace ServeDocs) (apiDocsPort options) runDocsServer
+        startHTTPService (trace ServeDocs) (apiDocsPort options)
+            $ flip runDocsServer apiPort
         trace Boot
         withRocksDB dbPath $ \db -> do
             ((state, slots), runner) <-
@@ -208,6 +212,10 @@ main = do
                     Partial
                     slotHash
                     armageddonParams
+            startHTTPService (trace ServeApi) apiPort
+                $ \port ->
+                    runAPIServer port (readTVarIO metricsVar)
+                        $ queryMerkleRoots runner
             setupDB tracer runner
             _ <-
                 application
@@ -329,3 +337,23 @@ slotHash :: Point -> Hash
 slotHash (Network.Point Origin) = error "slotHash: Origin has no hash"
 slotHash (Network.Point (At (Network.Block _ (OneEraHash h)))) =
     Hash $ fromShort h
+
+-- | Query all merkle roots from the database
+queryMerkleRoots
+    :: RunCSMTTransaction
+        ColumnFamily
+        BatchOp
+        Point
+        Hash
+        LazyByteString
+        LazyByteString
+        IO
+    -> IO [MerkleRootEntry]
+queryMerkleRoots (RunCSMTTransaction runCSMT) =
+    runCSMT $ concatMap toMerkleRootEntry <$> getAllMerkleRoots
+  where
+    toMerkleRootEntry (slot, blockHash, merkleRoot) = case slot of
+        Origin -> []
+        At (Network.Point Origin) -> []
+        At (Network.Point (At (Network.Block slotNo _))) ->
+            [MerkleRootEntry{slotNo, blockHash, merkleRoot}]
