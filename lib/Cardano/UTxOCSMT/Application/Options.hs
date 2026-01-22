@@ -62,6 +62,8 @@ data Options = Options
     , headersQueueSize :: EventQueueLength
     , dbPath :: FilePath
     , logPath :: Maybe FilePath
+    , apiPort :: Maybe PortNumber
+    , apiDocsPort :: Maybe PortNumber
     }
 
 dbPathOption :: Parser FilePath
@@ -171,6 +173,28 @@ eventQueueSizeOption =
             , option
             ]
 
+apiPortOption :: Parser (Maybe PortNumber)
+apiPortOption =
+    optional
+        $ setting
+            [ long "api-port"
+            , help "Port number for the API server"
+            , metavar "INT"
+            , reader auto
+            , option
+            ]
+
+apiDocsPortOption :: Parser (Maybe PortNumber)
+apiDocsPortOption =
+    optional
+        $ setting
+            [ long "api-docs-port"
+            , help "Port number for the API documentation server"
+            , metavar "INT"
+            , reader auto
+            , option
+            ]
+
 optionsParser :: Parser Options
 optionsParser =
     Options
@@ -181,3 +205,5 @@ optionsParser =
         <*> eventQueueSizeOption
         <*> dbPathOption
         <*> logPathOption
+        <*> apiPortOption
+        <*> apiDocsPortOption

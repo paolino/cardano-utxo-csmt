@@ -7,6 +7,7 @@ module Cardano.UTxOCSMT.Application.Metrics
     , MetricsEvent (..)
     , MetricsParams (..)
     , Metrics (..)
+    , renderBlockPoint
     )
 where
 
@@ -58,6 +59,9 @@ import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 import GHC.IsList (IsList (..))
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHeader (..))
 import Ouroboros.Consensus.HardFork.Combinator qualified as HF
+import Ouroboros.Network.Block (SlotNo (..), blockPoint)
+import Ouroboros.Network.Block qualified as Network
+import Ouroboros.Network.Point (Block (..), WithOrigin (..))
 
 ----- libray functions to help with metrics collection -----
 
@@ -215,12 +219,20 @@ instance ToJSON Metrics where
                 , "maxQueueLength" .= maxQueueLength
                 , "utxoChangesCount" .= utxoChangesCount
                 , "lastBlockPoint"
-                    .= fmap (\(t, _h) -> Text.pack $ show t) lastBlockPoint
+                    .= fmap (Text.pack . renderBlockPoint) lastBlockPoint
                 , "utxoSpeed" .= utxoSpeed
                 , "blockSpeed" .= blockSpeed
                 , "currentEra" .= currentEra
                 , "currentMerkleRoot" .= fmap (Text.pack . show) currentMerkleRoot
                 ]
+
+renderBlockPoint :: Network.HasHeader block => (a, block) -> [Char]
+renderBlockPoint (_, header) = case blockPoint header of
+    Network.Point Origin -> "Origin"
+    Network.Point (At block) ->
+        show (blockPointHash block)
+            ++ "@"
+            ++ show (unSlotNo $ blockPointSlot block)
 
 instance ToSchema Metrics where
     declareNamedSchema _ = do
