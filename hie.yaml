@@ -1,12 +1,15 @@
 cradle:
   cabal:
+    - path: "lib"
+      component: "cardano-utxo-csmt:library"
+
     - path: "application"
-      component: "lib:cardano-utxo-csmt"
-      
+      component: "cardano-utxo-csmt:application"
+
     - path: "http"
       component: "cardano-utxo-csmt:http"
 
-    - path: "app/cli/main.hs"
+    - path: "executables/cli/main.hs"
       component: "cardano-utxo-csmt:exe:cardano-utxo-csmt"
 
     - path: "test"

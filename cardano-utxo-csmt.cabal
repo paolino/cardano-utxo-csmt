@@ -58,7 +58,7 @@ library http
   default-language: Haskell2010
   build-depends:
     , base
-    , cardano-utxo-csmt
+    , cardano-utxo-csmt:library
     , lens
     , servant-server
     , servant-swagger
@@ -72,7 +72,38 @@ library http
     Cardano.UTxOCSMT.HTTP.Server
     Cardano.UTxOCSMT.HTTP.Swagger
 
-library
+library application
+  import:           warnings
+  other-modules:    Paths_cardano_utxo_csmt
+  exposed-modules:
+    Cardano.UTxOCSMT.Application.Run.Application
+    Cardano.UTxOCSMT.Application.Run.GenesisData
+    Cardano.UTxOCSMT.Application.Run.Main
+    Cardano.UTxOCSMT.Application.Run.RenderMetrics
+
+  build-depends:
+    , ansi-terminal
+    , base
+    , bytestring
+    , cardano-ledger-byron
+    , cardano-utxo-csmt:library
+    , cereal
+    , containers
+    , contra-tracer
+    , csmt
+    , csmt:kv-transactions
+    , lens
+    , mtl
+    , opt-env-conf
+    , ouroboros-consensus
+    , ouroboros-network-api
+    , rocksdb-haskell-jprupp
+
+  hs-source-dirs:   application
+  default-language: Haskell2010
+  other-modules:    Paths_cardano_utxo_csmt
+
+library library
   import:           warnings
   other-modules:    Paths_cardano_utxo_csmt
   exposed-modules:
@@ -91,10 +122,6 @@ library
     Cardano.UTxOCSMT.Application.KeepAlive
     Cardano.UTxOCSMT.Application.Metrics
     Cardano.UTxOCSMT.Application.Options
-    Cardano.UTxOCSMT.Application.Run.Application
-    Cardano.UTxOCSMT.Application.Run.GenesisData
-    Cardano.UTxOCSMT.Application.Run.Main
-    Cardano.UTxOCSMT.Application.Run.RenderMetrics
     Cardano.UTxOCSMT.Application.SampleList
     Cardano.UTxOCSMT.Application.UTxOs
     Cardano.UTxOCSMT.Bootstrap.App
@@ -111,7 +138,6 @@ library
 
   build-depends:
     , aeson
-    , ansi-terminal
     , async
     , base
     , bytestring
@@ -122,7 +148,6 @@ library
     , cborg
     , cereal
     , comonad
-    , containers
     , contra-tracer
     , csmt
     , csmt:kv-transactions
@@ -155,27 +180,27 @@ library
     , time
     , typed-protocols
 
-  hs-source-dirs:   application
+  hs-source-dirs:   lib
   default-language: Haskell2010
   other-modules:    Paths_cardano_utxo_csmt
 
 executable cardano-utxo-csmt
   import:           warnings
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
-  main-is:          app/cli/main.hs
+  main-is:          executables/cli/main.hs
   build-depends:
     , base
-    , cardano-utxo-csmt
+    , cardano-utxo-csmt:library
 
   default-language: Haskell2010
 
 executable cardano-utxo-chainsync
   import:           warnings
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
-  main-is:          app/chainsync/main.hs
+  main-is:          executables/chainsync/main.hs
   build-depends:
     , base
-    , cardano-utxo-csmt
+    , cardano-utxo-csmt:application
 
   default-language: Haskell2010
 
@@ -194,7 +219,7 @@ test-suite unit-tests
     , base
     , bytestring
     , cardano-slotting
-    , cardano-utxo-csmt
+    , cardano-utxo-csmt:library
     , cereal
     , contra-tracer
     , csmt

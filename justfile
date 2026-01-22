@@ -10,7 +10,7 @@ format:
     #!/usr/bin/env bash
     # shellcheck disable=SC2034
     for i in {1..3}; do
-        fourmolu -i application app test test-lib bench
+        fourmolu -i application executables test test-lib bench
     done
     cabal-fmt -i cardano-utxo-csmt.cabal
     nixfmt ./*.nix
@@ -18,7 +18,7 @@ format:
 
 hlint:
     #!/usr/bin/env bash
-    hlint app application test test-lib bench
+    hlint executables application test test-lib bench
 
 bench:
     #!/usr/bin/env bash
@@ -48,8 +48,8 @@ CI:
     just build
     just unit
     cabal-fmt -c cardano-utxo-csmt.cabal
-    fourmolu -m check application app test test-lib
-    hlint -c application app test test-lib
+    fourmolu -m check application executables test test-lib
+    hlint -c application executables test test-lib
 
 
 build-docker tag='latest':
