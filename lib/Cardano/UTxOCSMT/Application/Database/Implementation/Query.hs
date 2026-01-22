@@ -1,11 +1,15 @@
 module Cardano.UTxOCSMT.Application.Database.Implementation.Query
     ( mkQuery
     , mkTransactionedQuery
+    , getAllMerkleRoots
     )
 where
 
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
+    )
+import Cardano.UTxOCSMT.Application.Database.Implementation.RollbackPoint
+    ( RollbackPoint (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( RunTransaction (..)
@@ -15,16 +19,19 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     , hoistQuery
     )
 import Control.Monad.Trans (lift)
+import Data.Function (fix)
 import Database.KV.Cursor
-    ( Entry (entryKey)
+    ( Entry (..)
     , firstEntry
     , lastEntry
+    , prevEntry
     )
 import Database.KV.Transaction
     ( Transaction
     , iterating
     , query
     )
+import Ouroboros.Network.Point (WithOrigin (..))
 
 -- | Create an query interface
 mkQuery
@@ -58,3 +65,17 @@ mkTransactionedQuery
     => RunTransaction cf op slot hash key value m
     -> Query m slot key value
 mkTransactionedQuery (RunTransaction runTx) = hoistQuery runTx mkQuery
+
+-- | Get all merkle roots by iterating in reverse over the RollbackPoints table
+-- Returns a list of (slot, blockHash, merkleRoot) tuples in reverse order (newest first)
+getAllMerkleRoots
+    :: Monad m
+    => Transaction m cf (Columns slot hash key value) op [(WithOrigin slot, hash, Maybe hash)]
+getAllMerkleRoots =
+    iterating RollbackPoints $ do
+        ml <- lastEntry
+        ($ ml) $ fix $ \go current -> case current of
+            Nothing -> pure []
+            Just Entry{entryKey, entryValue = RollbackPoint{rbpHash, rpbMerkleRoot}} -> do
+                rest <- prevEntry >>= go
+                pure $ (entryKey, rbpHash, rpbMerkleRoot) : rest
