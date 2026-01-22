@@ -4,11 +4,14 @@ module Cardano.UTxOCSMT.HTTP.Swagger
     ( swaggerDoc
     , swaggerServer
     , SwaggerAPI
+    , renderSwaggerJSON
     )
 where
 
 import Cardano.UTxOCSMT.HTTP.API (api)
 import Control.Lens ((&), (.~), (?~))
+import Data.Aeson.Encode.Pretty (encodePretty)
+import Data.ByteString.Lazy (LazyByteString)
 import Data.Swagger
     ( Host (..)
     , Swagger
@@ -49,3 +52,7 @@ swaggerServer mApiPort = SwaggerUI.swaggerSchemaUIServer (swaggerDoc mHost)
         fmap
             (\p -> Host{_hostName = "localhost", _hostPort = Just p})
             mApiPort
+
+-- | Render Swagger documentation as JSON
+renderSwaggerJSON :: LazyByteString
+renderSwaggerJSON = encodePretty $ swaggerDoc Nothing

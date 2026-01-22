@@ -50,6 +50,8 @@ CI:
     cabal-fmt -c cardano-utxo-csmt.cabal
     fourmolu -m check application executables test test-lib
     hlint -c application executables test test-lib
+    just update-swagger
+    git diff --exit-code docs/assets/swagger.json
 
 
 build-docker tag='latest':
@@ -119,3 +121,7 @@ dump-and-load-utxo socket-path address:
         -i test/assets/utxo.bin \
         -c test/assets/db \
         -n 5000 # depending on the address this is an arbitrary number
+
+update-swagger:
+    #!/usr/bin/env bash
+    nix run .#cardano-utxo-swagger > docs/assets/swagger.json

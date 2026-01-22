@@ -1231,11 +1231,11 @@
       },
       "locked": {
         "dir": "mkdocs",
-        "lastModified": 1764245756,
-        "narHash": "sha256-ZSJInH2+xEjZO1h4MlA9RU4tLsYObgPMG70Ya7SqrVY=",
+        "lastModified": 1769105627,
+        "narHash": "sha256-rrgDwBawvFcZbnOJ4Rtk+Q6t/kTa1oTdQ734mQwfOro=",
         "owner": "paolino",
         "repo": "dev-assets",
-        "rev": "1623f29257913fec47ede23d9363592e1dce0cc0",
+        "rev": "45d545c4b8b5e255947acf45f0e1874a2f44d9ef",
         "type": "github"
       },
       "original": {

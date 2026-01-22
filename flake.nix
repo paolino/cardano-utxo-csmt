@@ -57,7 +57,8 @@
           in rec {
             packages = {
               inherit (project.packages)
-                cardano-utxo-csmt bench unit-tests cardano-utxo-chainsync;
+                cardano-utxo-csmt bench unit-tests cardano-utxo-chainsync
+                cardano-utxo-swagger;
               inherit docker-image;
               default = packages.cardano-utxo-chainsync;
             };

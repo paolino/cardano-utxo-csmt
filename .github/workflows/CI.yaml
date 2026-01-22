@@ -81,3 +81,19 @@ jobs:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Check Formatting
         run: nix develop -c just format
+  swagger:
+    # check that the swagger file is up to date
+    name: Check Swagger documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: paolino/dev-assets/setup-nix@v0.0.1
+        with:
+          cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Check Swagger
+        run: |
+          nix develop -c just update-swagger
+          if ! git diff --exit-code --quiet docs/assets/swagger.json; then
+            echo "Swagger documentation is out of date. Please run 'just update-swagger' and commit the changes."
+            exit 1
+          fi
