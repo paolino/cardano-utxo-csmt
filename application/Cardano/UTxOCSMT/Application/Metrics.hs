@@ -38,8 +38,10 @@ import Control.Lens
 import Control.Lens.TH (makeLensesFor, makePrisms)
 import Control.Monad (forever, (<=<))
 import Control.Tracer (Tracer (..))
+import Data.Aeson (ToJSON (..), object, (.=))
 import Data.Profunctor (Profunctor (..))
 import Data.SOP.Strict (index_NS)
+import Data.Text qualified as Text
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHeader (..))
 import Ouroboros.Consensus.HardFork.Combinator qualified as HF
@@ -182,6 +184,19 @@ data Metrics = Metrics
     , currentEra :: Maybe String
     , currentMerkleRoot :: Maybe Hash
     }
+
+instance ToJSON Metrics where
+    toJSON m =
+        object
+            [ "averageQueueLength" .= averageQueueLength m
+            , "maxQueueLength" .= maxQueueLength m
+            , "utxoChangesCount" .= utxoChangesCount m
+            , "lastBlockPoint" .= fmap (\(t, _h) -> Text.pack $ show t) (lastBlockPoint m)
+            , "utxoSpeed" .= utxoSpeed m
+            , "blockSpeed" .= blockSpeed m
+            , "currentEra" .= currentEra m
+            , "currentMerkleRoot" .= fmap (Text.pack . show) (currentMerkleRoot m)
+            ]
 
 -- | Metrics configuration parameters
 data MetricsParams = MetricsParams

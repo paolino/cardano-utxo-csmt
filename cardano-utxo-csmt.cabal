@@ -72,8 +72,11 @@ library http
       , contra-tracer
       , csmt
       , csmt:rocksdb-kv-transactions
+      , swagger2
+      , lens
     exposed-modules:
       Cardano.UTxOCSMT.HTTP.API
+      Cardano.UTxOCSMT.HTTP.Swagger
 
 library
   import:           warnings
@@ -113,6 +116,7 @@ library
     Data.Tracer.TraceWith
 
   build-depends:
+    , aeson
     , ansi-terminal
     , async
     , base
@@ -152,6 +156,7 @@ library
     , streaming-bytestring
     , strict-sop-core
     , strict-stm
+    , text
     , time
     , typed-protocols
 
