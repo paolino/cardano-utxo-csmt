@@ -156,6 +156,7 @@ library
     , streaming-bytestring
     , strict-sop-core
     , strict-stm
+    , swagger2
     , text
     , time
     , typed-protocols

@@ -31,8 +31,12 @@ import Control.Foldl (Fold (..), handles)
 import Control.Foldl qualified as Fold
 import Control.Lens
     ( APrism'
+    , Proxy (..)
     , aside
     , to
+    , (&)
+    , (?~)
+    , (.~)
     , _Wrapped
     )
 import Control.Lens.TH (makeLensesFor, makePrisms)
@@ -41,6 +45,8 @@ import Control.Tracer (Tracer (..))
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.Profunctor (Profunctor (..))
 import Data.SOP.Strict (index_NS)
+import Data.Swagger (ToSchema (..), declareSchemaRef, description, properties, required)
+import Data.Swagger qualified as Swagger
 import Data.Text qualified as Text
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHeader (..))
@@ -197,6 +203,36 @@ instance ToJSON Metrics where
             , "currentEra" .= currentEra m
             , "currentMerkleRoot" .= fmap (Text.pack . show) (currentMerkleRoot m)
             ]
+
+instance ToSchema Metrics where
+    declareNamedSchema _ = do
+        doubleSchema <- declareSchemaRef (Proxy @Double)
+        maybeIntSchema <- declareSchemaRef (Proxy @(Maybe Int))
+        intSchema <- declareSchemaRef (Proxy @Int)
+        maybeStringSchema <- declareSchemaRef (Proxy @(Maybe String))
+        return $ Swagger.NamedSchema (Just "Metrics") $ mempty
+            & Swagger.type_ ?~ Swagger.SwaggerObject
+            & properties .~
+                [ ("averageQueueLength", doubleSchema)
+                , ("maxQueueLength", maybeIntSchema)
+                , ("utxoChangesCount", intSchema)
+                , ("lastBlockPoint", maybeStringSchema)
+                , ("utxoSpeed", doubleSchema)
+                , ("blockSpeed", doubleSchema)
+                , ("currentEra", maybeStringSchema)
+                , ("currentMerkleRoot", maybeStringSchema)
+                ]
+            & required .~
+                [ "averageQueueLength"
+                , "maxQueueLength"
+                , "utxoChangesCount"
+                , "lastBlockPoint"
+                , "utxoSpeed"
+                , "blockSpeed"
+                , "currentEra"
+                , "currentMerkleRoot"
+                ]
+            & description ?~ "Metrics about CSMT operations and blockchain synchronization"
 
 -- | Metrics configuration parameters
 data MetricsParams = MetricsParams

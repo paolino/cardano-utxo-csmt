@@ -7,7 +7,7 @@ The Cardano UTxO CSMT HTTP service includes comprehensive Swagger/OpenAPI docume
 The `Cardano.UTxOCSMT.HTTP.Swagger` module provides:
 
 - `swaggerDoc` - A Swagger specification that documents the API
-- `swaggerSchemaUIServer` - A Servant server that hosts an interactive Swagger UI
+- `swaggerServer` - A Servant server that hosts an interactive Swagger UI
 
 ## API Endpoints
 
@@ -49,7 +49,7 @@ To integrate the Swagger UI into your HTTP server:
 
 ```haskell
 import Cardano.UTxOCSMT.HTTP.API (api)
-import Cardano.UTxOCSMT.HTTP.Swagger (swaggerSchemaUIServer)
+import Cardano.UTxOCSMT.HTTP.Swagger (swaggerServer)
 import Servant ((:<|>)(..), serve)
 
 -- Combine your API with the Swagger UI
@@ -57,7 +57,7 @@ type FullAPI = API :<|> SwaggerAPI
 
 -- Create a server that serves both the API and Swagger UI
 fullServer :: Server FullAPI
-fullServer = apiServer :<|> swaggerSchemaUIServer
+fullServer = apiServer :<|> swaggerServer
 
 -- Run with Warp
 main :: IO ()

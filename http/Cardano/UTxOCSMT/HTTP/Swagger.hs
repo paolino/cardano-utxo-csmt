@@ -2,7 +2,7 @@
 
 module Cardano.UTxOCSMT.HTTP.Swagger
     ( swaggerDoc
-    , swaggerSchemaUIServer
+    , swaggerServer
     , SwaggerAPI
     )
 where
@@ -19,7 +19,8 @@ import Data.Swagger
     )
 import Servant (Server)
 import Servant.Swagger (toSwagger)
-import Servant.Swagger.UI (SwaggerSchemaUI, swaggerSchemaUIServer)
+import Servant.Swagger.UI (SwaggerSchemaUI)
+import Servant.Swagger.UI qualified as SwaggerUI
 
 -- | Generate Swagger documentation for the API
 swaggerDoc :: Swagger
@@ -37,5 +38,5 @@ swaggerDoc =
 type SwaggerAPI = SwaggerSchemaUI "swagger-ui" "swagger.json"
 
 -- | Servant server for Swagger UI
-swaggerSchemaUIServer :: Server SwaggerAPI
-swaggerSchemaUIServer = Servant.Swagger.UI.swaggerSchemaUIServer swaggerDoc
+swaggerServer :: Server SwaggerAPI
+swaggerServer = SwaggerUI.swaggerSchemaUIServer swaggerDoc
