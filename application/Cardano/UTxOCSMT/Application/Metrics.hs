@@ -33,14 +33,29 @@ import Control.Lens
     ( APrism'
     , aside
     , to
+    , (&)
+    , (.~)
+    , (?~)
     , _Wrapped
     )
 import Control.Lens.TH (makeLensesFor, makePrisms)
 import Control.Monad (forever, (<=<))
 import Control.Tracer (Tracer (..))
+import Data.Aeson (ToJSON (..), object, (.=))
 import Data.Profunctor (Profunctor (..))
+import Data.Proxy (Proxy (..))
 import Data.SOP.Strict (index_NS)
+import Data.Swagger
+    ( ToSchema (..)
+    , declareSchemaRef
+    , description
+    , properties
+    , required
+    )
+import Data.Swagger qualified as Swagger
+import Data.Text qualified as Text
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
+import GHC.IsList (IsList (..))
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHeader (..))
 import Ouroboros.Consensus.HardFork.Combinator qualified as HF
 
@@ -182,6 +197,64 @@ data Metrics = Metrics
     , currentEra :: Maybe String
     , currentMerkleRoot :: Maybe Hash
     }
+
+instance ToJSON Metrics where
+    toJSON
+        Metrics
+            { averageQueueLength
+            , maxQueueLength
+            , utxoChangesCount
+            , lastBlockPoint
+            , utxoSpeed
+            , blockSpeed
+            , currentEra
+            , currentMerkleRoot
+            } =
+            object
+                [ "averageQueueLength" .= averageQueueLength
+                , "maxQueueLength" .= maxQueueLength
+                , "utxoChangesCount" .= utxoChangesCount
+                , "lastBlockPoint"
+                    .= fmap (\(t, _h) -> Text.pack $ show t) lastBlockPoint
+                , "utxoSpeed" .= utxoSpeed
+                , "blockSpeed" .= blockSpeed
+                , "currentEra" .= currentEra
+                , "currentMerkleRoot" .= fmap (Text.pack . show) currentMerkleRoot
+                ]
+
+instance ToSchema Metrics where
+    declareNamedSchema _ = do
+        doubleSchema <- declareSchemaRef (Proxy @Double)
+        maybeIntSchema <- declareSchemaRef (Proxy @(Maybe Int))
+        intSchema <- declareSchemaRef (Proxy @Int)
+        maybeStringSchema <- declareSchemaRef (Proxy @(Maybe String))
+        return
+            $ Swagger.NamedSchema (Just "Metrics")
+            $ mempty
+            & Swagger.type_ ?~ Swagger.SwaggerObject
+            & properties
+                .~ fromList
+                    [ ("averageQueueLength", doubleSchema)
+                    , ("maxQueueLength", maybeIntSchema)
+                    , ("utxoChangesCount", intSchema)
+                    , ("lastBlockPoint", maybeStringSchema)
+                    , ("utxoSpeed", doubleSchema)
+                    , ("blockSpeed", doubleSchema)
+                    , ("currentEra", maybeStringSchema)
+                    , ("currentMerkleRoot", maybeStringSchema)
+                    ]
+            & required
+                .~ [ "averageQueueLength"
+                   , "maxQueueLength"
+                   , "utxoChangesCount"
+                   , "lastBlockPoint"
+                   , "utxoSpeed"
+                   , "blockSpeed"
+                   , "currentEra"
+                   , "currentMerkleRoot"
+                   ]
+            & description
+                ?~ "Metrics about CSMT operations and blockchain synchronization"
 
 -- | Metrics configuration parameters
 data MetricsParams = MetricsParams
