@@ -66,6 +66,11 @@ nix bundle github:paolino/cardano-utxo-csmt -o utxo-csmt
 - [x] Can preload a UTxO set from a cardano-cli dump
 - [ ] Can follow the chain
 - [ ] Can serve HTTP API
+- [x] Swagger/OpenAPI documentation for the HTTP API
+
+## Documentation
+
+- [Swagger API Documentation](swagger-api.md) - Details about the REST API and how to use the Swagger UI
 
 ## Demo
 
