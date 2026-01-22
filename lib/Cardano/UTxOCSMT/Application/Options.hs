@@ -34,7 +34,7 @@ import OptEnvConf
     , short
     , str
     , strOption
-    , value
+    , value, switch
     )
 import Ouroboros.Consensus.Byron.Ledger (ByronBlock)
 import Ouroboros.Consensus.Cardano.Block
@@ -64,6 +64,7 @@ data Options = Options
     , logPath :: Maybe FilePath
     , apiPort :: Maybe PortNumber
     , apiDocsPort :: Maybe PortNumber
+    , metricsOn :: Bool
     }
 
 dbPathOption :: Parser FilePath
@@ -140,6 +141,16 @@ startingPointOption =
             , option
             ]
 
+metricsSwitch :: Parser Bool
+metricsSwitch =
+    setting
+        [ long "enable-metrics-reporting"
+        , help "Enable metrics reporting on stdout"
+        , reader auto
+        , value False
+        , switch True
+        ]
+
 readChainPoint
     :: String
     -> Maybe
@@ -207,3 +218,4 @@ optionsParser =
         <*> logPathOption
         <*> apiPortOption
         <*> apiDocsPortOption
+        <*> metricsSwitch
