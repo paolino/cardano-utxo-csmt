@@ -64,9 +64,12 @@ library http
     , servant-swagger
     , servant-swagger-ui
     , swagger2
+    , wai
+    , warp
 
   exposed-modules:
     Cardano.UTxOCSMT.HTTP.API
+    Cardano.UTxOCSMT.HTTP.Server
     Cardano.UTxOCSMT.HTTP.Swagger
 
 library
