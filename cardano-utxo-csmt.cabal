@@ -56,32 +56,32 @@ library
   import:           warnings
   other-modules:    Paths_cardano_utxo_csmt
   exposed-modules:
-    Cardano.N2N.Client.Application.BlockFetch
-    Cardano.N2N.Client.Application.ChainSync
-    Cardano.N2N.Client.Application.Database.Implementation.Armageddon
-    Cardano.N2N.Client.Application.Database.Implementation.Columns
-    Cardano.N2N.Client.Application.Database.Implementation.Query
-    Cardano.N2N.Client.Application.Database.Implementation.RollbackPoint
-    Cardano.N2N.Client.Application.Database.Implementation.Transaction
-    Cardano.N2N.Client.Application.Database.Implementation.Update
-    Cardano.N2N.Client.Application.Database.Interface
-    Cardano.N2N.Client.Application.Database.Properties
-    Cardano.N2N.Client.Application.Database.Properties.Expected
-    Cardano.N2N.Client.Application.Database.RocksDB
-    Cardano.N2N.Client.Application.KeepAlive
-    Cardano.N2N.Client.Application.Metrics
-    Cardano.N2N.Client.Application.Options
-    Cardano.N2N.Client.Application.Run.Application
-    Cardano.N2N.Client.Application.Run.GenesisData
-    Cardano.N2N.Client.Application.Run.Main
-    Cardano.N2N.Client.Application.Run.RenderMetrics
-    Cardano.N2N.Client.Application.SampleList
-    Cardano.N2N.Client.Application.UTxOs
-    Cardano.N2N.Client.Ouroboros.Application
-    Cardano.N2N.Client.Ouroboros.Codecs
-    Cardano.N2N.Client.Ouroboros.Connection
-    Cardano.N2N.Client.Ouroboros.Types
-    Cardano.UTxO.CSMT.App
+    Cardano.UTxOCSMT.Application.BlockFetch
+    Cardano.UTxOCSMT.Application.ChainSync
+    Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
+    Cardano.UTxOCSMT.Application.Database.Implementation.Columns
+    Cardano.UTxOCSMT.Application.Database.Implementation.Query
+    Cardano.UTxOCSMT.Application.Database.Implementation.RollbackPoint
+    Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
+    Cardano.UTxOCSMT.Application.Database.Implementation.Update
+    Cardano.UTxOCSMT.Application.Database.Interface
+    Cardano.UTxOCSMT.Application.Database.Properties
+    Cardano.UTxOCSMT.Application.Database.Properties.Expected
+    Cardano.UTxOCSMT.Application.Database.RocksDB
+    Cardano.UTxOCSMT.Application.KeepAlive
+    Cardano.UTxOCSMT.Application.Metrics
+    Cardano.UTxOCSMT.Application.Options
+    Cardano.UTxOCSMT.Application.Run.Application
+    Cardano.UTxOCSMT.Application.Run.GenesisData
+    Cardano.UTxOCSMT.Application.Run.Main
+    Cardano.UTxOCSMT.Application.Run.RenderMetrics
+    Cardano.UTxOCSMT.Application.SampleList
+    Cardano.UTxOCSMT.Application.UTxOs
+    Cardano.UTxOCSMT.Bootstrap.App
+    Cardano.UTxOCSMT.Ouroboros.Application
+    Cardano.UTxOCSMT.Ouroboros.Codecs
+    Cardano.UTxOCSMT.Ouroboros.Connection
+    Cardano.UTxOCSMT.Ouroboros.Types
     Data.List.SampleFibonacci
     Data.Tracer.Intercept
     Data.Tracer.LogFile
@@ -186,7 +186,7 @@ test-suite unit-tests
   type:               exitcode-stdio-1.0
   main-is:            main.hs
   other-modules:
-    Cardano.N2N.Client.Application.Database.RocksDBSpec
+    Cardano.UTxOCSMT.Application.Database.RocksDBSpec
     Data.List.SampleFibonacciSpec
 
 benchmark bench
