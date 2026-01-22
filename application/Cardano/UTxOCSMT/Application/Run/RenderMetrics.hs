@@ -6,15 +6,10 @@ where
 import CSMT ()
 import Cardano.UTxOCSMT.Application.Metrics
     ( Metrics (..)
+    , renderBlockPoint
     )
 import Data.Maybe (fromMaybe)
-import Ouroboros.Network.Block (SlotNo (..), blockNo, blockPoint)
-import Ouroboros.Network.Block qualified as Network
-import Ouroboros.Network.Point
-    ( WithOrigin (..)
-    , blockPointHash
-    , blockPointSlot
-    )
+import Ouroboros.Network.Block (blockNo)
 import System.Console.ANSI (hClearScreen, hSetCursorPosition)
 import System.IO (stdout)
 
@@ -53,10 +48,3 @@ renderMetrics
                 ++ maybe "N/A" show currentMerkleRoot
                 ++ "\nCurrent Era: "
                 ++ fromMaybe "N/A" currentEra
-      where
-        renderBlockPoint (_, header) = case blockPoint header of
-            Network.Point Origin -> "Origin"
-            Network.Point (At block) ->
-                show (blockPointHash block)
-                    ++ "@"
-                    ++ show (unSlotNo $ blockPointSlot block)

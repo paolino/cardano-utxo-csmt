@@ -53,11 +53,19 @@ import Cardano.UTxOCSMT.Application.Run.Application
 import Cardano.UTxOCSMT.Application.Run.RenderMetrics
     ( renderMetrics
     )
+import Cardano.UTxOCSMT.HTTP.Server
 import Cardano.UTxOCSMT.Ouroboros.Types
     ( Point
     )
+import Control.Concurrent.Async (async, link)
+import Control.Concurrent.Class.MonadSTM.Strict
+    ( MonadSTM (..)
+    , newTVarIO
+    , readTVarIO
+    , writeTVar
+    )
 import Control.Lens (Prism', lazy, prism', strict, view)
-import Control.Monad (unless, when)
+import Control.Monad (unless, when, (<=<))
 import Control.Tracer
     ( Contravariant (..)
     , Tracer (..)
@@ -97,6 +105,7 @@ import Database.RocksDB
     )
 import OptEnvConf (runParser)
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHash (..))
+import Ouroboros.Consensus.Ledger.SupportsPeerSelection (PortNumber)
 import Ouroboros.Network.Block (SlotNo (..))
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point (WithOrigin (..))
@@ -133,6 +142,8 @@ data MainTraces
     | New ArmageddonTrace
     | Update (UpdateTrace Point Hash)
     | Application ApplicationTrace
+    | ServeApi
+    | ServeDocs
 
 renderMainTraces :: MainTraces -> String
 renderMainTraces Boot = "Starting up Cardano UTxO CSMT client..."
@@ -145,22 +156,36 @@ renderMainTraces (Update ut) =
     "Database update: " ++ renderUpdateTrace ut
 renderMainTraces (Application at) =
     "Application event: " ++ renderApplicationTrace at
+renderMainTraces ServeApi =
+    "Starting API server..."
+renderMainTraces ServeDocs =
+    "Starting API documentation server..."
+
+startHTTPService
+    :: IO () -> Maybe PortNumber -> (PortNumber -> IO ()) -> IO ()
+startHTTPService _ Nothing _ = return ()
+startHTTPService trace (Just port) runServer = do
+    trace
+    link <=< async $ runServer port
 
 main :: IO ()
 main = do
-    options@Options{dbPath, logPath} <-
+    options@Options{dbPath, logPath, apiPort} <-
         runParser
             version
             "Tracking cardano UTxOs in a CSMT in a rocksDB database"
             optionsParser
     logTracer logPath $ \basicTracer -> do
+        metricsVar <- newTVarIO Nothing
         metricsEvent <-
             metricsTracer
                 $ MetricsParams
                     { qlWindow = 100
                     , utxoSpeedWindow = 1000
                     , blockSpeedWindow = 100
-                    , metricsOutput = renderMetrics
+                    , metricsOutput = \metrics -> do
+                        renderMetrics metrics
+                        atomically $ writeTVar metricsVar (Just metrics)
                     , metricsFrequency = 1_000_000
                     }
         TraceWith{tracer, trace, contra} <-
@@ -168,6 +193,9 @@ main = do
                 $ newThreadSafeTracer
                 $ contramap renderMainTraces
                 $ addTimestampsTracer basicTracer
+        startHTTPService (trace ServeApi) apiPort
+            $ \port -> runAPIServer port $ readTVarIO metricsVar
+        startHTTPService (trace ServeDocs) (apiDocsPort options) runDocsServer
         trace Boot
         withRocksDB dbPath $ \db -> do
             ((state, slots), runner) <-

@@ -60,6 +60,7 @@ library http
     , base
     , cardano-utxo-csmt:library
     , lens
+    , network
     , servant-server
     , servant-swagger
     , servant-swagger-ui
@@ -83,9 +84,11 @@ library application
 
   build-depends:
     , ansi-terminal
+    , async
     , base
     , bytestring
     , cardano-ledger-byron
+    , cardano-utxo-csmt:http
     , cardano-utxo-csmt:library
     , cereal
     , containers
@@ -98,6 +101,7 @@ library application
     , ouroboros-consensus
     , ouroboros-network-api
     , rocksdb-haskell-jprupp
+    , strict-stm
 
   hs-source-dirs:   application
   default-language: Haskell2010
