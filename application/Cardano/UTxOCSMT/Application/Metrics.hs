@@ -224,13 +224,9 @@ instance ToSchema Metrics where
                 ]
             & required .~
                 [ "averageQueueLength"
-                , "maxQueueLength"
                 , "utxoChangesCount"
-                , "lastBlockPoint"
                 , "utxoSpeed"
                 , "blockSpeed"
-                , "currentEra"
-                , "currentMerkleRoot"
                 ]
             & description ?~ "Metrics about CSMT operations and blockchain synchronization"
 
