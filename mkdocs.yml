@@ -1,4 +1,4 @@
-site_name: Cardano UTXO CSMT Documentation
+site_name: Cardano UTXO CSMT
 site_url: https://paolino.github.io/cardano-utxo-csmt/
 repo_url: https://github.com/paolino/cardano-utxo-csmt
 
@@ -15,6 +15,22 @@ theme:
 plugins:
   - search
   - asciinema-player
+  - swagger-ui-tag
+  - macros
 
 markdown_extensions:
   - callouts
+  - pymdownx.snippets:             # ← ADD THIS LINE (or section)
+      base_path: !relative          # ← magic: now relative to each .md file's directory
+      check_paths: true             # optional: fail build if file missing (good for debug)
+  - pymdownx.highlight:           # usually already there for code highlighting
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences          # often paired with it, good to have
+
+nav:
+  - Home: index.md
+  - API Documentation:
+      - Swagger UI: swagger-ui.md

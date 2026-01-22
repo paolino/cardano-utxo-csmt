@@ -1,0 +1,117 @@
+{
+    "definitions": {
+        "MerkleRootEntry": {
+            "description": "A merkle root entry at a given slot",
+            "properties": {
+                "blockHash": {
+                    "type": "string"
+                },
+                "merkleRoot": {
+                    "type": "string"
+                },
+                "slotNo": {
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "slotNo",
+                "blockHash",
+                "merkleRoot"
+            ],
+            "type": "object"
+        },
+        "Metrics": {
+            "description": "Metrics about CSMT operations and blockchain synchronization",
+            "properties": {
+                "averageQueueLength": {
+                    "format": "double",
+                    "type": "number"
+                },
+                "blockSpeed": {
+                    "format": "double",
+                    "type": "number"
+                },
+                "currentEra": {
+                    "type": "string"
+                },
+                "currentMerkleRoot": {
+                    "type": "string"
+                },
+                "lastBlockPoint": {
+                    "type": "string"
+                },
+                "maxQueueLength": {
+                    "maximum": 9223372036854775807,
+                    "minimum": -9223372036854775808,
+                    "type": "integer"
+                },
+                "utxoChangesCount": {
+                    "maximum": 9223372036854775807,
+                    "minimum": -9223372036854775808,
+                    "type": "integer"
+                },
+                "utxoSpeed": {
+                    "format": "double",
+                    "type": "number"
+                }
+            },
+            "required": [
+                "averageQueueLength",
+                "maxQueueLength",
+                "utxoChangesCount",
+                "lastBlockPoint",
+                "utxoSpeed",
+                "blockSpeed",
+                "currentEra",
+                "currentMerkleRoot"
+            ],
+            "type": "object"
+        }
+    },
+    "info": {
+        "description": "An HTTP service that exposes a Compact Sparse Merkle Tree (CSMT) data structure over the current UTxO set of the Cardano blockchain. This API provides metrics about the CSMT operations.",
+        "license": {
+            "name": "Apache 2.0"
+        },
+        "title": "Cardano UTxO CSMT API",
+        "version": "0.1.0.0"
+    },
+    "paths": {
+        "/merkle-roots": {
+            "get": {
+                "produces": [
+                    "application/json;charset=utf-8"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "items": {
+                                "$ref": "#/definitions/MerkleRootEntry"
+                            },
+                            "type": "array"
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics": {
+            "get": {
+                "produces": [
+                    "application/json;charset=utf-8"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/Metrics"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "swagger": "2.0"
+}

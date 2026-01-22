@@ -58,4 +58,6 @@ in {
     project.hsPkgs.cardano-utxo-csmt.components.tests.unit-tests;
   packages.cardano-utxo-chainsync =
     project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-chainsync;
+  packages.cardano-utxo-swagger =
+    project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-csmt-swagger;
 }

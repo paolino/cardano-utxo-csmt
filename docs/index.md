@@ -64,16 +64,8 @@ nix bundle github:paolino/cardano-utxo-csmt -o utxo-csmt
 ## Current status
 
 - [x] Can preload a UTxO set from a cardano-cli dump
-- [ ] Can follow the chain
-- [ ] Can serve HTTP API
+- [x] Can follow the chain
+- [x] Can serve HTTP API
+   - [x] Merkle-roots
+   - [ ] Inclusion proofs
 
-## Demo
-
-```asciinema-player
-{ "file": "assets/ingestion.cast"
-, "mkap_theme": "none"
-, "cols": 100
-}
-```
-
-<script type="text/javascript">window.$crisp=[];window.CRISP_WEBSITE_ID="72a6d442-f78e-44b5-ac02-fca35c7d3a76";(function(){d=document;s=d.createElement("script");s.application="https://client.crisp.chat/l.js";s.async=1;d.getElementsByTagName("head")[0].appendChild(s);})();</script>

@@ -12,6 +12,12 @@ cradle:
     - path: "executables/cli/main.hs"
       component: "cardano-utxo-csmt:exe:cardano-utxo-csmt"
 
+    - path: "executables/swagger/main.hs"
+      component: "cardano-utxo-csmt:exe:cardano-utxo-csmt-swagger"
+
+    - path: "executables/chainsync/main.hs"
+      component: "cardano-utxo-csmt:exe:cardano-utxo-chainsync"
+
     - path: "test"
       component: "cardano-utxo-csmt:test:unit-tests"
 
