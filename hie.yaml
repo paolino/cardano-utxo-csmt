@@ -1,6 +1,6 @@
 cradle:
   cabal:
-    - path: "src"
+    - path: "application"
       component: "lib:cardano-utxo-csmt"
 
     - path: "app/cli/main.hs"
@@ -15,5 +15,5 @@ cradle:
     - path: "bench"
       component: "cardano-utxo-csmt:bench:bench"
 
-    - path: "CI/rewrite-libs/src/rewrite-libs.hs"
+    - path: "CI/rewrite-libs/application/rewrite-libs.hs"
       component: "rewrite-libs:exe:rewrite-libs"
