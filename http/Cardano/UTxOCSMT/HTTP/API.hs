@@ -1,5 +1,6 @@
 module Cardano.UTxOCSMT.HTTP.API
     ( api
+    , API
     )
 where
 

@@ -3,6 +3,7 @@
 module Cardano.UTxOCSMT.HTTP.Swagger
     ( swaggerDoc
     , swaggerSchemaUIServer
+    , SwaggerAPI
     )
 where
 
