@@ -157,9 +157,11 @@ library library
     , async
     , base
     , bytestring
+    , cardano-crypto-class
     , cardano-ledger-api
     , cardano-ledger-binary
     , cardano-ledger-byron
+    , cardano-ledger-core
     , cardano-read-ledger
     , cborg
     , cereal
@@ -201,15 +203,15 @@ library library
   other-modules:    Paths_cardano_utxo_csmt
 
 executable cardano-utxo-csmt-swagger
-    import:           warnings
-    ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
-    main-is:          executables/swagger/main.hs
-    build-depends:
-        , base
-        , bytestring
-        , cardano-utxo-csmt:http
+  import:           warnings
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
+  main-is:          executables/swagger/main.hs
+  build-depends:
+    , base
+    , bytestring
+    , cardano-utxo-csmt:http
 
-    default-language: Haskell2010
+  default-language: Haskell2010
 
 executable cardano-utxo-csmt
   import:           warnings
