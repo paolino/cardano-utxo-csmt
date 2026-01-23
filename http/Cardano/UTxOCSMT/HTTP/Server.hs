@@ -42,9 +42,7 @@ apiServer getMetrics getMerkleRoots getProof =
   where
     metricsHandler = do
         r <- liftIO getMetrics
-        case r of
-            Just metrics -> return metrics
-            Nothing -> fail "Metrics not yet available"
+        maybe (throwError err404) return r
 
     merkleRootsHandler = liftIO getMerkleRoots
 
