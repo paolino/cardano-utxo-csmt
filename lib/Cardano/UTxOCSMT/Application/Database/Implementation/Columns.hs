@@ -2,6 +2,7 @@ module Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
     , Prisms (..)
     , codecs
+    , ConfigKey (..)
     )
 where
 
@@ -11,7 +12,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.RollbackPoint
     , rollbackPointPrism
     , withOriginPrism
     )
-import Control.Lens (Prism', type (:~:) (Refl))
+import Control.Lens (Prism', prism', type (:~:) (Refl))
 import Data.ByteString (ByteString)
 import Database.KV.Transaction
     ( Codecs (..)
@@ -24,6 +25,21 @@ import Database.KV.Transaction
     , mkCols
     )
 
+-- | Keys for the configuration column
+data ConfigKey = BaseCheckpointKey
+    deriving (Eq, Ord, Show)
+
+configKeyPrism :: Prism' ByteString ConfigKey
+configKeyPrism = prism' encode decode
+  where
+    encode :: ConfigKey -> ByteString
+    encode BaseCheckpointKey = "base_checkpoint"
+
+    decode :: ByteString -> Maybe ConfigKey
+    decode bs
+        | bs == "base_checkpoint" = Just BaseCheckpointKey
+        | otherwise = Nothing
+
 -- | Structure of the database used by this application
 data Columns slot hash key value x where
     KVCol :: Columns slot hash key value (KV key value)
@@ -33,11 +49,15 @@ data Columns slot hash key value x where
     RollbackPoints
         :: Columns slot hash key value (RollbackPointKV slot hash key value)
         -- ^ Column for storing rollback points
+    ConfigCol
+        :: Columns slot hash key value (KV ConfigKey slot)
+        -- ^ Column for storing configuration (e.g., base checkpoint)
 
 instance GEq (Columns slot hash key value) where
     geq KVCol KVCol = Just Refl
     geq CSMTCol CSMTCol = Just Refl
     geq RollbackPoints RollbackPoints = Just Refl
+    geq ConfigCol ConfigCol = Just Refl
     geq _ _ = Nothing
 
 instance GCompare (Columns slot hash key value) where
@@ -45,9 +65,12 @@ instance GCompare (Columns slot hash key value) where
     gcompare KVCol _ = GLT
     gcompare _ KVCol = GGT
     gcompare CSMTCol CSMTCol = GEQ
-    gcompare CSMTCol RollbackPoints = GLT
+    gcompare CSMTCol _ = GLT
     gcompare RollbackPoints CSMTCol = GGT
     gcompare RollbackPoints RollbackPoints = GEQ
+    gcompare RollbackPoints ConfigCol = GLT
+    gcompare ConfigCol ConfigCol = GEQ
+    gcompare ConfigCol _ = GGT
 
 -- | Prisms for serializing/deserializing keys and values
 data Prisms slot hash key value = Prisms
@@ -69,5 +92,10 @@ codecs Prisms{keyP, hashP, slotP, valueP} =
             :=> Codecs
                 { keyCodec = withOriginPrism slotP
                 , valueCodec = rollbackPointPrism hashP keyP valueP
+                }
+        , ConfigCol
+            :=> Codecs
+                { keyCodec = configKeyPrism
+                , valueCodec = slotP
                 }
         ]

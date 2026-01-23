@@ -7,7 +7,8 @@ where
 
 import CSMT ()
 import Cardano.UTxOCSMT.Application.BlockFetch
-    ( Fetched (..)
+    ( EventQueueLength
+    , Fetched (..)
     , mkBlockFetchApplication
     )
 import Cardano.UTxOCSMT.Application.ChainSync
@@ -20,9 +21,6 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     )
 import Cardano.UTxOCSMT.Application.Metrics
     ( MetricsEvent (..)
-    )
-import Cardano.UTxOCSMT.Application.Options
-    ( Options (..)
     )
 import Cardano.UTxOCSMT.Application.UTxOs (Change (..), uTxOs)
 import Cardano.UTxOCSMT.Ouroboros.Connection (runNodeApplication)
@@ -45,6 +43,8 @@ import Data.Tracer.TraceWith
     )
 import Data.Void (Void)
 import Ouroboros.Network.Block qualified as Network
+import Ouroboros.Network.Magic (NetworkMagic)
+import Ouroboros.Network.PeerSelection.RelayAccessPoint (PortNumber)
 import Ouroboros.Network.Point
     ( WithOrigin (..)
     )
@@ -156,8 +156,16 @@ rollingBack TraceWith{trace, tracer} trUTxO newFinalityTarget point follower' st
         _ -> error "rollingBack: cannot roll back while intersecting"
 
 application
-    :: Options
-    -- ^ Application options
+    :: NetworkMagic
+    -- ^ Network magic
+    -> String
+    -- ^ Node name
+    -> PortNumber
+    -- ^ Port number
+    -> Point
+    -- ^ Starting point
+    -> EventQueueLength
+    -- ^ Headers queue size
     -> Tracer IO MetricsEvent
     -- ^ Tracer for metrics events
     -> Tracer IO ApplicationTrace
@@ -170,13 +178,11 @@ application
     -- ^ Finality target. TODO redesign the Update object to avoid this
     -> IO Void
 application
-    Options
-        { networkMagic
-        , nodeName
-        , portNumber
-        , startingPoint
-        , headersQueueSize
-        }
+    networkMagic
+    nodeName
+    portNumber
+    startingPoint
+    headersQueueSize
     TraceWith{trace = metricTrace, contra = metricContra}
     TraceWith{tracer}
     initialDBUpdate
