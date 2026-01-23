@@ -1,13 +1,17 @@
 module Cardano.UTxOCSMT.Application.UTxOs
     ( uTxOs
     , Change (..)
+    , mkShelleyTxIn
+    , unsafeMkTxIn
     )
 where
 
 import Cardano.Chain.UTxO qualified as Byron
+import Cardano.Crypto.Hash.Class (Hash (..))
 import Cardano.Ledger.Api.Tx.In (mkTxIxPartial)
 import Cardano.Ledger.Api.Tx.In qualified as Shelley
 import Cardano.Ledger.Binary (EncCBOR, natVersion, serialize)
+import Cardano.Ledger.Hashes (unsafeMakeSafeHash)
 import Cardano.Read.Ledger.Block.Block (fromConsensusBlock)
 import Cardano.Read.Ledger.Block.Txs (getEraTransactions)
 import Cardano.Read.Ledger.Eras.EraValue (applyEraFun)
@@ -25,6 +29,7 @@ import Data.ByteArray.Encoding (Base (..), convertToBase)
 import Data.ByteString.Char8 qualified as B
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BL
+import Data.ByteString.Short (ShortByteString)
 import Data.Foldable (toList)
 import Data.Word (Word16)
 
@@ -55,22 +60,29 @@ changes = concatMap $ \tx ->
 mkCreate :: IsEra era => Tx era -> Word16 -> ByteString -> Change
 mkCreate tx index = Create (mkTxIn tx index)
 
+unsafeMkTxId :: ShortByteString -> Shelley.TxId
+unsafeMkTxId = Shelley.TxId . unsafeMakeSafeHash . UnsafeHash
+
+unsafeMkTxIn :: ShortByteString -> Word16 -> ByteString
+unsafeMkTxIn txId index = mkShelleyTxIn index (unsafeMkTxId txId)
+
 {-# INLINEABLE mkTxIn #-}
 mkTxIn :: forall era. IsEra era => Tx era -> Word16 -> ByteString
 mkTxIn tx index = case theEra @era of
     Byron -> cborEncode $ Byron.TxInUtxo (unTxId $ getEraTxId tx) index
-    Shelley -> afterByron $ unTxId $ getEraTxId tx
-    Allegra -> afterByron $ unTxId $ getEraTxId tx
-    Mary -> afterByron $ unTxId $ getEraTxId tx
-    Alonzo -> afterByron $ unTxId $ getEraTxId tx
-    Babbage -> afterByron $ unTxId $ getEraTxId tx
-    Conway -> afterByron $ unTxId $ getEraTxId tx
-  where
-    afterByron h =
-        cborEncode
-            $ Shelley.TxIn h
-            $ mkTxIxPartial
-            $ fromIntegral index
+    Shelley -> mkShelleyTxIn index $ unTxId $ getEraTxId tx
+    Allegra -> mkShelleyTxIn index $ unTxId $ getEraTxId tx
+    Mary -> mkShelleyTxIn index $ unTxId $ getEraTxId tx
+    Alonzo -> mkShelleyTxIn index $ unTxId $ getEraTxId tx
+    Babbage -> mkShelleyTxIn index $ unTxId $ getEraTxId tx
+    Conway -> mkShelleyTxIn index $ unTxId $ getEraTxId tx
+
+mkShelleyTxIn :: Word16 -> Shelley.TxId -> ByteString
+mkShelleyTxIn index h =
+    cborEncode
+        $ Shelley.TxIn h
+        $ mkTxIxPartial
+        $ fromIntegral index
 
 {-# INLINEABLE extractInputs #-}
 extractInputs :: forall era. IsEra era => Inputs era -> [ByteString]
