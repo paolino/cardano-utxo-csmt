@@ -78,6 +78,7 @@ library http
 
   exposed-modules:
     Cardano.UTxOCSMT.HTTP.API
+    Cardano.UTxOCSMT.HTTP.Base16
     Cardano.UTxOCSMT.HTTP.Server
     Cardano.UTxOCSMT.HTTP.Swagger
 
@@ -86,7 +87,6 @@ library application
   other-modules:    Paths_cardano_utxo_csmt
   exposed-modules:
     Cardano.UTxOCSMT.Application.Run.Application
-    Cardano.UTxOCSMT.Application.Run.Base16
     Cardano.UTxOCSMT.Application.Run.GenesisData
     Cardano.UTxOCSMT.Application.Run.Main
     Cardano.UTxOCSMT.Application.Run.RenderMetrics

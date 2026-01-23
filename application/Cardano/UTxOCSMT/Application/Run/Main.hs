@@ -57,10 +57,6 @@ import Cardano.UTxOCSMT.Application.Run.Application
     , application
     , renderApplicationTrace
     )
-import Cardano.UTxOCSMT.Application.Run.Base16
-    ( encodeBase16Text
-    , unsafeDecodeBase16Text
-    )
 import Cardano.UTxOCSMT.Application.Run.RenderMetrics
     ( renderMetrics
     )
@@ -68,6 +64,10 @@ import Cardano.UTxOCSMT.Application.UTxOs (unsafeMkTxIn)
 import Cardano.UTxOCSMT.HTTP.API
     ( InclusionProofResponse (..)
     , MerkleRootEntry (..)
+    )
+import Cardano.UTxOCSMT.HTTP.Base16
+    ( encodeBase16Text
+    , unsafeDecodeBase16Text
     )
 import Cardano.UTxOCSMT.HTTP.Server
 import Cardano.UTxOCSMT.Ouroboros.Types

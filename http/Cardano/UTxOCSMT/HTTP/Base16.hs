@@ -1,4 +1,4 @@
-module Cardano.UTxOCSMT.Application.Run.Base16
+module Cardano.UTxOCSMT.HTTP.Base16
     ( encodeBase16Text
     , decodeBase16Text
     , unsafeDecodeBase16Text
