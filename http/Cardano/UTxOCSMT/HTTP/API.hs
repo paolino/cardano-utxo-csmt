@@ -4,6 +4,7 @@ module Cardano.UTxOCSMT.HTTP.API
     , DOCS
     , docs
     , MerkleRootEntry (..)
+    , InclusionProofResponse (..)
     )
 where
 
@@ -23,9 +24,10 @@ import Data.Swagger
 import Data.Swagger qualified as Swagger
 import Data.Text (Text)
 import Data.Text.Encoding qualified as Text
+import Data.Word (Word16)
 import GHC.IsList (IsList (..))
 import Ouroboros.Network.Block (SlotNo (..))
-import Servant (Get, JSON, type (:<|>), type (:>))
+import Servant (Capture, Get, JSON, type (:<|>), type (:>))
 import Servant.Swagger.UI (SwaggerSchemaUI)
 
 -- | Type alias for API documentation endpoint
@@ -41,6 +43,10 @@ type API =
         :> Get '[JSON] Metrics
         :<|> "merkle-roots"
             :> Get '[JSON] [MerkleRootEntry]
+        :<|> "proof"
+            :> Capture "txId" Text
+            :> Capture "txIx" Word16
+            :> Get '[JSON] InclusionProofResponse
 
 -- | Proxy for the API
 api :: Proxy API
@@ -54,6 +60,15 @@ data MerkleRootEntry = MerkleRootEntry
     }
     deriving (Show, Eq)
 
+data InclusionProofResponse = InclusionProofResponse
+    { proofTxId :: Text
+    , proofTxIx :: Word16
+    , proofTxOut :: Text
+    , proofBytes :: Text
+    , proofMerkleRoot :: Maybe Text
+    }
+    deriving (Show, Eq)
+
 renderHashBase16 :: Hash -> Text
 renderHashBase16 = Text.decodeUtf8 . convertToBase Base16 . renderHash
 
@@ -63,6 +78,16 @@ instance ToJSON MerkleRootEntry where
             [ "slotNo" .= unSlotNo slotNo
             , "blockHash" .= renderHashBase16 blockHash
             , "merkleRoot" .= fmap renderHashBase16 merkleRoot
+            ]
+
+instance ToJSON InclusionProofResponse where
+    toJSON InclusionProofResponse{proofTxId, proofTxIx, proofTxOut, proofBytes, proofMerkleRoot} =
+        object
+            [ "txId" .= proofTxId
+            , "txIx" .= proofTxIx
+            , "txOut" .= proofTxOut
+            , "proof" .= proofBytes
+            , "merkleRoot" .= proofMerkleRoot
             ]
 
 instance ToSchema MerkleRootEntry where
@@ -82,3 +107,24 @@ instance ToSchema MerkleRootEntry where
                     ]
             & required .~ ["slotNo", "blockHash", "merkleRoot"]
             & description ?~ "A merkle root entry at a given slot"
+
+instance ToSchema InclusionProofResponse where
+    declareNamedSchema _ = do
+        stringSchema <- declareSchemaRef (Proxy @String)
+        word16Schema <- declareSchemaRef (Proxy @Word16)
+        maybeStringSchema <- declareSchemaRef (Proxy @(Maybe String))
+        return
+            $ Swagger.NamedSchema (Just "InclusionProofResponse")
+            $ mempty
+            & Swagger.type_ ?~ Swagger.SwaggerObject
+            & properties
+                .~ fromList
+                    [ ("txId", stringSchema)
+                    , ("txIx", word16Schema)
+                    , ("txOut", stringSchema)
+                    , ("proof", stringSchema)
+                    , ("merkleRoot", maybeStringSchema)
+                    ]
+            & required .~ ["txId", "txIx", "txOut", "proof"]
+            & description
+                ?~ "Current inclusion proof and output for the given transaction input."
