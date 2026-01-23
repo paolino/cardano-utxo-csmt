@@ -81,14 +81,21 @@ instance ToJSON MerkleRootEntry where
             ]
 
 instance ToJSON InclusionProofResponse where
-    toJSON InclusionProofResponse{proofTxId, proofTxIx, proofTxOut, proofBytes, proofMerkleRoot} =
-        object
-            [ "txId" .= proofTxId
-            , "txIx" .= proofTxIx
-            , "txOut" .= proofTxOut
-            , "proof" .= proofBytes
-            , "merkleRoot" .= proofMerkleRoot
-            ]
+    toJSON
+        InclusionProofResponse
+            { proofTxId
+            , proofTxIx
+            , proofTxOut
+            , proofBytes
+            , proofMerkleRoot
+            } =
+            object
+                [ "txId" .= proofTxId
+                , "txIx" .= proofTxIx
+                , "txOut" .= proofTxOut
+                , "proof" .= proofBytes
+                , "merkleRoot" .= proofMerkleRoot
+                ]
 
 instance ToSchema MerkleRootEntry where
     declareNamedSchema _ = do

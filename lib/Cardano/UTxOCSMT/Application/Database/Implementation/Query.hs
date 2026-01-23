@@ -70,12 +70,18 @@ mkTransactionedQuery (RunTransaction runTx) = hoistQuery runTx mkQuery
 -- Returns a list of (slot, blockHash, merkleRoot) tuples in reverse order (newest first)
 getAllMerkleRoots
     :: Monad m
-    => Transaction m cf (Columns slot hash key value) op [(WithOrigin slot, hash, Maybe hash)]
+    => Transaction
+        m
+        cf
+        (Columns slot hash key value)
+        op
+        [(WithOrigin slot, hash, Maybe hash)]
 getAllMerkleRoots =
     iterating RollbackPoints $ do
         ml <- lastEntry
         ($ ml) $ fix $ \go current -> case current of
             Nothing -> pure []
-            Just Entry{entryKey, entryValue = RollbackPoint{rbpHash, rpbMerkleRoot}} -> do
-                rest <- prevEntry >>= go
-                pure $ (entryKey, rbpHash, rpbMerkleRoot) : rest
+            Just
+                Entry{entryKey, entryValue = RollbackPoint{rbpHash, rpbMerkleRoot}} -> do
+                    rest <- prevEntry >>= go
+                    pure $ (entryKey, rbpHash, rpbMerkleRoot) : rest

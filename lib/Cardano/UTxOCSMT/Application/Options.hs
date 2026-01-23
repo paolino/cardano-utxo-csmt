@@ -34,7 +34,8 @@ import OptEnvConf
     , short
     , str
     , strOption
-    , value, switch
+    , switch
+    , value
     )
 import Ouroboros.Consensus.Byron.Ledger (ByronBlock)
 import Ouroboros.Consensus.Cardano.Block

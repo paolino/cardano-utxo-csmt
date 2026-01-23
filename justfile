@@ -9,8 +9,9 @@ default:
 format:
     #!/usr/bin/env bash
     # shellcheck disable=SC2034
+
     for i in {1..3}; do
-        fourmolu -i application executables test test-lib bench
+        find . -type f -name '*.hs'  -not -path '*/dist-newstyle/*'  -exec fourmolu -i {} +
     done
     cabal-fmt -i cardano-utxo-csmt.cabal
     nixfmt ./*.nix
