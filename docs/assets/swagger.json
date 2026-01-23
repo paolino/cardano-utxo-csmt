@@ -1,5 +1,34 @@
 {
     "definitions": {
+        "InclusionProofResponse": {
+            "description": "Current inclusion proof and output for the given transaction input.",
+            "properties": {
+                "merkleRoot": {
+                    "type": "string"
+                },
+                "proof": {
+                    "type": "string"
+                },
+                "txId": {
+                    "type": "string"
+                },
+                "txIx": {
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "txOut": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "txId",
+                "txIx",
+                "txOut",
+                "proof"
+            ],
+            "type": "object"
+        },
         "MerkleRootEntry": {
             "description": "A merkle root entry at a given slot",
             "properties": {
@@ -108,6 +137,40 @@
                         "schema": {
                             "$ref": "#/definitions/Metrics"
                         }
+                    }
+                }
+            }
+        },
+        "/proof/{txId}/{txIx}": {
+            "get": {
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "txId",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "in": "path",
+                        "maximum": 65535,
+                        "minimum": 0,
+                        "name": "txIx",
+                        "required": true,
+                        "type": "integer"
+                    }
+                ],
+                "produces": [
+                    "application/json;charset=utf-8"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/InclusionProofResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid `txIx` or `txId`"
                     }
                 }
             }
