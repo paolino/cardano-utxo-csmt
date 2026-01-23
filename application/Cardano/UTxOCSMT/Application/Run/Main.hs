@@ -10,9 +10,11 @@ import CSMT (FromKV (..))
 import CSMT.Hashes
     ( Hash (..)
     , fromKVHashes
+    , generateInclusionProof
     , hashHashing
     , isoHash
     , mkHash
+    , renderHash
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     ( ArmageddonParams (..)
@@ -30,6 +32,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
     , RunCSMTTransaction (..)
+    , queryMerkleRoot
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     ( PartialHistory (..)
@@ -54,10 +57,18 @@ import Cardano.UTxOCSMT.Application.Run.Application
     , application
     , renderApplicationTrace
     )
+import Cardano.UTxOCSMT.Application.Run.Base16
+    ( encodeBase16Text
+    , unsafeDecodeBase16Text
+    )
 import Cardano.UTxOCSMT.Application.Run.RenderMetrics
     ( renderMetrics
     )
-import Cardano.UTxOCSMT.HTTP.API (MerkleRootEntry (..))
+import Cardano.UTxOCSMT.Application.UTxOs (unsafeMkTxIn)
+import Cardano.UTxOCSMT.HTTP.API
+    ( InclusionProofResponse (..)
+    , MerkleRootEntry (..)
+    )
 import Cardano.UTxOCSMT.HTTP.Server
 import Cardano.UTxOCSMT.Ouroboros.Types
     ( Point
@@ -75,9 +86,14 @@ import Control.Tracer
     ( Contravariant (..)
     , Tracer (..)
     )
-import Data.ByteString (StrictByteString)
+import Data.ByteArray ()
+import Data.ByteArray.Encoding
+    ( Base (..)
+    , convertToBase
+    )
+import Data.ByteString (StrictByteString, toStrict)
 import Data.ByteString.Lazy (LazyByteString)
-import Data.ByteString.Short (fromShort)
+import Data.ByteString.Short (fromShort, toShort)
 import Data.ByteString.Short qualified as B
 import Data.Maybe (isNothing)
 import Data.Serialize
@@ -89,6 +105,8 @@ import Data.Serialize
     , putWord64be
     )
 import Data.Serialize.Extra (evalGetM, evalPutM)
+import Data.Text (Text)
+import Data.Text.Encoding qualified as Text
 import Data.Tracer.Intercept (intercept)
 import Data.Tracer.LogFile (logTracer)
 import Data.Tracer.ThreadSafe (newThreadSafeTracer)
@@ -99,8 +117,9 @@ import Data.Tracer.TraceWith
     , tracer
     , pattern TraceWith
     )
+import Data.Word (Word16)
 import Database.KV.Cursor (firstEntry)
-import Database.KV.Transaction (iterating)
+import Database.KV.Transaction (iterating, query)
 import Database.RocksDB
     ( BatchOp
     , ColumnFamily
@@ -214,8 +233,11 @@ main = withUtf8 $ do
                     armageddonParams
             startHTTPService (trace ServeApi) apiPort
                 $ \port ->
-                    runAPIServer port (readTVarIO metricsVar)
-                        $ queryMerkleRoots runner
+                    runAPIServer
+                        port
+                        (readTVarIO metricsVar)
+                        (queryMerkleRoots runner)
+                        (queryInclusionProof runner)
             setupDB tracer runner
             _ <-
                 application
@@ -357,3 +379,43 @@ queryMerkleRoots (RunCSMTTransaction runCSMT) =
         At (Network.Point Origin) -> []
         At (Network.Point (At (Network.Block slotNo _))) ->
             [MerkleRootEntry{slotNo, blockHash, merkleRoot}]
+
+-- | Retrieve the current inclusion proof and UTxO value for a given tx-in.
+-- Returns 'Nothing' missing entries.
+queryInclusionProof
+    :: RunCSMTTransaction
+        ColumnFamily
+        BatchOp
+        Point
+        Hash
+        LazyByteString
+        LazyByteString
+        IO
+    -> Text
+    -> Word16
+    -> IO (Maybe InclusionProofResponse)
+queryInclusionProof (RunCSMTTransaction runCSMT) txIdText txIx = do
+    runCSMT $ do
+        proofBytes <- generateInclusionProof fromKVLazy CSMTCol txIn
+        txOut <- query KVCol txIn
+        merkle <- queryMerkleRoot
+        pure $ do
+            proof' <- proofBytes
+            out <- txOut
+            let merkleText = fmap (Text.decodeUtf8 . convertToBase Base16 . renderHash) merkle
+            pure
+                InclusionProofResponse
+                    { proofTxId = txIdText
+                    , proofTxIx = txIx
+                    , proofTxOut = encodeBase16Text $ toStrict out
+                    , proofBytes = Text.decodeUtf8 $ convertToBase Base16 proof'
+                    , proofMerkleRoot = merkleText
+                    }
+  where
+    fromKVLazy =
+        FromKV
+            { fromK = fromK fromKVHashes . view strict
+            , fromV = fromV fromKVHashes . view strict
+            }
+
+    txIn = unsafeMkTxIn (toShort $ unsafeDecodeBase16Text txIdText) txIx
