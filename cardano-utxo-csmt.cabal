@@ -86,6 +86,7 @@ library application
   other-modules:    Paths_cardano_utxo_csmt
   exposed-modules:
     Cardano.UTxOCSMT.Application.Run.Application
+    Cardano.UTxOCSMT.Application.Run.Base16
     Cardano.UTxOCSMT.Application.Run.GenesisData
     Cardano.UTxOCSMT.Application.Run.Main
     Cardano.UTxOCSMT.Application.Run.RenderMetrics
@@ -104,12 +105,14 @@ library application
     , csmt
     , csmt:kv-transactions
     , lens
+    , memory
     , mtl
     , opt-env-conf
     , ouroboros-consensus
     , ouroboros-network-api
     , rocksdb-haskell-jprupp
     , strict-stm
+    , text
     , with-utf8
 
   hs-source-dirs:   application
