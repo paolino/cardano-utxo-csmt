@@ -58,6 +58,9 @@
                     "format": "double",
                     "type": "number"
                 },
+                "baseCheckpoint": {
+                    "type": "string"
+                },
                 "blockSpeed": {
                     "format": "double",
                     "type": "number"
@@ -94,7 +97,8 @@
                 "utxoSpeed",
                 "blockSpeed",
                 "currentEra",
-                "currentMerkleRoot"
+                "currentMerkleRoot",
+                "baseCheckpoint"
             ],
             "type": "object"
         }

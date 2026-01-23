@@ -2,11 +2,14 @@ module Cardano.UTxOCSMT.Application.Database.Implementation.Query
     ( mkQuery
     , mkTransactionedQuery
     , getAllMerkleRoots
+    , putBaseCheckpoint
+    , getBaseCheckpoint
     )
 where
 
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
+    , ConfigKey (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
@@ -28,6 +31,7 @@ import Database.KV.Cursor
     )
 import Database.KV.Transaction
     ( Transaction
+    , insert
     , iterating
     , query
     )
@@ -85,3 +89,12 @@ getAllMerkleRoots =
                 Entry{entryKey, entryValue = RollbackPoint{rbpHash, rpbMerkleRoot}} -> do
                     rest <- prevEntry >>= go
                     pure $ (entryKey, rbpHash, rpbMerkleRoot) : rest
+
+getBaseCheckpoint
+    :: Transaction m cf (Columns slot hash key value) op (Maybe slot)
+getBaseCheckpoint = query ConfigCol BaseCheckpointKey
+
+putBaseCheckpoint
+    :: slot
+    -> Transaction m cf (Columns slot hash key value) op ()
+putBaseCheckpoint = insert ConfigCol BaseCheckpointKey

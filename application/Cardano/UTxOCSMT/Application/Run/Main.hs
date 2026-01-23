@@ -28,6 +28,8 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     ( getAllMerkleRoots
+    , getBaseCheckpoint
+    , putBaseCheckpoint
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
@@ -44,7 +46,7 @@ import Cardano.UTxOCSMT.Application.Database.RocksDB
     ( newRocksDBState
     )
 import Cardano.UTxOCSMT.Application.Metrics
-    ( MetricsEvent (MerkleRootEvent)
+    ( MetricsEvent (BaseCheckpointEvent, MerkleRootEvent)
     , MetricsParams (..)
     , metricsTracer
     )
@@ -69,7 +71,7 @@ import Cardano.UTxOCSMT.HTTP.Base16
     ( encodeBase16Text
     , unsafeDecodeBase16Text
     )
-import Cardano.UTxOCSMT.HTTP.Server
+import Cardano.UTxOCSMT.HTTP.Server (runAPIServer, runDocsServer)
 import Cardano.UTxOCSMT.Ouroboros.Types
     ( Point
     )
@@ -81,7 +83,7 @@ import Control.Concurrent.Class.MonadSTM.Strict
     , writeTVar
     )
 import Control.Lens (Prism', lazy, prism', strict, view)
-import Control.Monad (unless, when, (<=<))
+import Control.Monad (when, (<=<))
 import Control.Tracer
     ( Contravariant (..)
     , Tracer (..)
@@ -148,6 +150,7 @@ withRocksDB path = do
         [ ("kv", config)
         , ("csmt", config)
         , ("rollbacks", config)
+        , ("config", config)
         ]
 
 config :: Config
@@ -163,7 +166,7 @@ config =
 
 data MainTraces
     = Boot
-    | NotEmpty
+    | NotEmpty Point
     | New ArmageddonTrace
     | Update (UpdateTrace Point Hash)
     | Application ApplicationTrace
@@ -172,8 +175,9 @@ data MainTraces
 
 renderMainTraces :: MainTraces -> String
 renderMainTraces Boot = "Starting up Cardano UTxO CSMT client..."
-renderMainTraces NotEmpty =
-    "Database is not empty, skipping initial setup."
+renderMainTraces (NotEmpty point) =
+    "Database is not empty, skipping initial setup. Current base checkpoint at point: "
+        ++ show point
 renderMainTraces (New a) =
     "Database is empty, performing initial setup."
         ++ renderArmageddonTrace a
@@ -195,7 +199,17 @@ startHTTPService trace (Just port) runServer = do
 
 main :: IO ()
 main = withUtf8 $ do
-    options@Options{dbPath, logPath, apiPort, metricsOn} <-
+    options@Options
+        { dbPath
+        , logPath
+        , apiPort
+        , metricsOn
+        , startingPoint
+        , nodeName
+        , portNumber
+        , networkMagic
+        , headersQueueSize
+        } <-
         runParser
             version
             "Tracking cardano UTxOs in a CSMT in a rocksDB database"
@@ -214,7 +228,7 @@ main = withUtf8 $ do
                     , metricsFrequency = 1_000_000
                     }
         TraceWith{tracer, trace, contra} <-
-            fmap (intercept metricsEvent getMerkleRoot)
+            fmap (intercept metricsEvent stealMetricsEvent)
                 $ newThreadSafeTracer
                 $ contramap renderMainTraces
                 $ addTimestampsTracer basicTracer
@@ -238,10 +252,15 @@ main = withUtf8 $ do
                         (readTVarIO metricsVar)
                         (queryMerkleRoots runner)
                         (queryInclusionProof runner)
-            setupDB tracer runner
+            startingPoint' <- setupDB tracer startingPoint runner
+            -- Emit the base checkpoint to metrics
             _ <-
                 application
-                    options
+                    networkMagic
+                    nodeName
+                    portNumber
+                    startingPoint'
+                    headersQueueSize
                     metricsEvent
                     (contra Application)
                     state
@@ -249,13 +268,16 @@ main = withUtf8 $ do
                     (mFinality runner)
             error "main: application exited unexpectedly"
 
-getMerkleRoot :: MainTraces -> Maybe MetricsEvent
-getMerkleRoot (Update (UpdateForwardTip _ _ _ (Just merkleRoot))) =
+stealMetricsEvent :: MainTraces -> Maybe MetricsEvent
+stealMetricsEvent (Update (UpdateForwardTip _ _ _ (Just merkleRoot))) =
     Just $ MerkleRootEvent merkleRoot
-getMerkleRoot _ = Nothing
+stealMetricsEvent (NotEmpty point) =
+    Just $ BaseCheckpointEvent point
+stealMetricsEvent _ = Nothing
 
 setupDB
     :: Tracer IO MainTraces
+    -> Point
     -> RunCSMTTransaction
         ColumnFamily
         BatchOp
@@ -264,11 +286,22 @@ setupDB
         LazyByteString
         LazyByteString
         IO
-    -> IO ()
-setupDB TraceWith{trace, contra} runner = do
+    -> IO Point
+setupDB TraceWith{trace, contra} startingPoint runner@RunCSMTTransaction{txRunTransaction} = do
     new <- checkEmptyRollbacks runner
-    unless new $ trace NotEmpty
-    when new $ setup (contra New) runner armageddonParams
+    if new
+        then do
+            setup (contra New) runner armageddonParams
+            txRunTransaction $ putBaseCheckpoint startingPoint
+            return startingPoint
+        else do
+            response <- txRunTransaction getBaseCheckpoint
+            case response of
+                Nothing ->
+                    error "setupDB: Database is not empty but no base checkpoint found"
+                Just point -> do
+                    trace $ NotEmpty point
+                    return point
 
 checkEmptyRollbacks
     :: RunCSMTTransaction

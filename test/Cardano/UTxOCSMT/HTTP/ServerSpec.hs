@@ -247,6 +247,7 @@ sampleMetrics =
         , blockSpeed = 0.0
         , currentEra = Nothing
         , currentMerkleRoot = Nothing
+        , baseCheckpoint = Nothing
         }
 
 session

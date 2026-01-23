@@ -8,6 +8,7 @@ module Cardano.UTxOCSMT.Application.Metrics
     , MetricsParams (..)
     , Metrics (..)
     , renderBlockPoint
+    , renderPoint
     )
 where
 
@@ -15,7 +16,7 @@ import CSMT.Hashes (Hash)
 import Cardano.UTxOCSMT.Application.BlockFetch
     ( EventQueueLength (..)
     )
-import Cardano.UTxOCSMT.Ouroboros.Types (Header)
+import Cardano.UTxOCSMT.Ouroboros.Types (Header, Point)
 import Control.Comonad (Comonad (..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, link)
@@ -123,6 +124,8 @@ data MetricsEvent
       BlockInfoEvent Header
     | -- | the current merkle root
       MerkleRootEvent Hash
+    | -- | the base checkpoint for the UTxO set
+      BaseCheckpointEvent Point
 
 makePrisms ''MetricsEvent
 
@@ -190,6 +193,9 @@ currentEraFold =
 getCurrentMerkleRoot :: Fold TimedMetrics (Maybe Hash)
 getCurrentMerkleRoot = handles (timedEventL . _MerkleRootEvent) Fold.last
 
+getBaseCheckpoint :: Fold TimedMetrics (Maybe Point)
+getBaseCheckpoint = handles (timedEventL . _BaseCheckpointEvent) Fold.last
+
 -- | Tracked metrics
 data Metrics = Metrics
     { averageQueueLength :: Double
@@ -200,6 +206,7 @@ data Metrics = Metrics
     , blockSpeed :: Double
     , currentEra :: Maybe String
     , currentMerkleRoot :: Maybe Hash
+    , baseCheckpoint :: Maybe Point
     }
 
 instance ToJSON Metrics where
@@ -213,6 +220,7 @@ instance ToJSON Metrics where
             , blockSpeed
             , currentEra
             , currentMerkleRoot
+            , baseCheckpoint
             } =
             object
                 [ "averageQueueLength" .= averageQueueLength
@@ -224,15 +232,20 @@ instance ToJSON Metrics where
                 , "blockSpeed" .= blockSpeed
                 , "currentEra" .= currentEra
                 , "currentMerkleRoot" .= fmap (Text.pack . show) currentMerkleRoot
+                , "baseCheckpoint" .= fmap (Text.pack . renderPoint) baseCheckpoint
                 ]
 
-renderBlockPoint :: Network.HasHeader block => (a, block) -> [Char]
-renderBlockPoint (_, header) = case blockPoint header of
-    Network.Point Origin -> "Origin"
-    Network.Point (At block) ->
-        show (blockPointHash block)
-            ++ "@"
-            ++ show (unSlotNo $ blockPointSlot block)
+renderBlockPoint :: (a, Header) -> [Char]
+renderBlockPoint (_, header) = renderPoint $ blockPoint header
+
+-- | Render a Point as a string for display
+renderPoint
+    :: Point -> [Char]
+renderPoint (Network.Point Origin) = "Origin"
+renderPoint (Network.Point (At block)) =
+    show (blockPointHash block)
+        ++ "@"
+        ++ show (unSlotNo $ blockPointSlot block)
 
 instance ToSchema Metrics where
     declareNamedSchema _ = do
@@ -254,6 +267,7 @@ instance ToSchema Metrics where
                     , ("blockSpeed", doubleSchema)
                     , ("currentEra", maybeStringSchema)
                     , ("currentMerkleRoot", maybeStringSchema)
+                    , ("baseCheckpoint", maybeStringSchema)
                     ]
             & required
                 .~ [ "averageQueueLength"
@@ -264,6 +278,7 @@ instance ToSchema Metrics where
                    , "blockSpeed"
                    , "currentEra"
                    , "currentMerkleRoot"
+                   , "baseCheckpoint"
                    ]
             & description
                 ?~ "Metrics about CSMT operations and blockchain synchronization"
@@ -294,6 +309,7 @@ metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
         <*> blockSpeedFold blockSpeedWindow
         <*> currentEraFold
         <*> getCurrentMerkleRoot
+        <*> getBaseCheckpoint
 
 -- | Create a metrics tracer that collects metrics and outputs them
 metricsTracer :: MetricsParams -> IO (Tracer IO MetricsEvent)
