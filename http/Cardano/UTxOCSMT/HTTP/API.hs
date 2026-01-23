@@ -10,8 +10,10 @@ where
 
 import CSMT.Hashes (Hash, renderHash)
 import Cardano.UTxOCSMT.Application.Metrics (Metrics)
+import Cardano.UTxOCSMT.HTTP.Base16 (decodeBase16Text)
 import Control.Lens ((&), (.~), (?~))
-import Data.Aeson (ToJSON (..), object, (.=))
+import Data.Aeson
+import Data.Aeson.Types (Parser)
 import Data.ByteArray.Encoding (Base (..), convertToBase)
 import Data.Proxy (Proxy (..))
 import Data.Swagger
@@ -80,6 +82,18 @@ instance ToJSON MerkleRootEntry where
             , "merkleRoot" .= fmap renderHashBase16 merkleRoot
             ]
 
+instance FromJSON MerkleRootEntry where
+    parseJSON = withObject "MerkleRootEntry" $ \v ->
+        (MerkleRootEntry . SlotNo <$> (v .: "slotNo"))
+            <*> (v .: "blockHash" >>= parseHashBase16)
+            <*> (v .: "merkleRoot" >>= mapM parseHashBase16)
+      where
+        parseHashBase16 :: Text -> Parser Hash
+        parseHashBase16 txt =
+            case decodeBase16Text txt of
+                Left err -> fail $ "Invalid base16 hash: " ++ err
+                Right h -> return h
+
 instance ToJSON InclusionProofResponse where
     toJSON
         InclusionProofResponse
@@ -97,6 +111,14 @@ instance ToJSON InclusionProofResponse where
                 , "merkleRoot" .= proofMerkleRoot
                 ]
 
+instance FromJSON InclusionProofResponse where
+    parseJSON = withObject "InclusionProofResponse" $ \v ->
+        InclusionProofResponse
+            <$> v .: "txId"
+            <*> v .: "txIx"
+            <*> v .: "txOut"
+            <*> v .: "proof"
+            <*> v .: "merkleRoot"
 instance ToSchema MerkleRootEntry where
     declareNamedSchema _ = do
         word64Schema <- declareSchemaRef (Proxy @Word)
