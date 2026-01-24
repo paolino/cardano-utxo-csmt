@@ -123,8 +123,9 @@ newState
                 armageddonParams
                 runTransaction
 
--- | Apply forward tip .
--- We compose csmt transactions for each operation with an updateRollbackPoint one
+{- | Apply forward tip .
+We compose csmt transactions for each operation with an updateRollbackPoint one
+-}
 forwardTip
     :: (Ord key, Ord slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)
@@ -211,16 +212,17 @@ data RollbackResult
     = RollbackSucceeded
     | RollbackImpossible
 
--- | Create a transaction that performs a rollback to the given slot
--- Returns whether the rollback was successful, failed but possible (with a list
--- of rollback points to intersect against), or impossible (in which case the
--- database should be truncated)
--- It DOES NOT encode the truncation as a transaction because that would potentially
--- be too big to fit in memory
--- Rollback is performed by seeking the exact rollback point, and then applying all
--- inverse operations down to that point excluded
--- If the exact rollback point is not found, we return a list of available rollback points
--- If the list is empty, rollback is impossible and the database should be truncated
+{- | Create a transaction that performs a rollback to the given slot
+Returns whether the rollback was successful, failed but possible (with a list
+of rollback points to intersect against), or impossible (in which case the
+database should be truncated)
+It DOES NOT encode the truncation as a transaction because that would potentially
+be too big to fit in memory
+Rollback is performed by seeking the exact rollback point, and then applying all
+inverse operations down to that point excluded
+If the exact rollback point is not found, we return a list of available rollback points
+If the list is empty, rollback is impossible and the database should be truncated
+-}
 rollbackTip
     :: (Ord slot, Ord key, MonadFail m)
     => slot
@@ -265,8 +267,9 @@ forwardFinality slot = do
                     lift $ delete RollbackPoints entryKey
                     nextEntry >>= go
 
--- | Create an database update state object. This implementation does not take advantage
--- of continuations and so always propose itself as the next continuation
+{- | Create an database update state object. This implementation does not take advantage
+of continuations and so always propose itself as the next continuation
+-}
 mkUpdate
     :: (Ord key, Ord slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)

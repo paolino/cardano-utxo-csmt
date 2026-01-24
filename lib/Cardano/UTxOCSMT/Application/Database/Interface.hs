@@ -1,3 +1,16 @@
+{- |
+Module      : Cardano.UTxOCSMT.Application.Database.Interface
+Description : Abstract database interface for UTxO storage
+
+This module defines the core interfaces for database operations:
+
+* 'Query' - Read-only access to database state
+* 'Update' - Write operations with tip/finality tracking
+* 'State' - FSM states for chain sync protocol handling
+
+The database tracks both a mutable tip (latest applied slot) and an
+immutable finality point (confirmed slot beyond which no rollbacks occur).
+-}
 module Cardano.UTxOCSMT.Application.Database.Interface
     ( -- * Query interface
       Query (..)
@@ -32,17 +45,19 @@ data Operation key value
 data State m slot key value
     = -- | Database is syncing, accepts forward and rollback operations
       Syncing (Update m slot key value)
-    | -- | Database is intersecting, has a list of slots to intersect against
-      -- Contrary to what one believes there is nothing to do with the choosen slot
-      -- Only rollbacks can really move the tip
+    | {- | Database is intersecting, has a list of slots to intersect against
+      Contrary to what one believes there is nothing to do with the choosen slot
+      Only rollbacks can really move the tip
+      -}
       Intersecting [slot] (Update m slot key value)
     | -- | Database is truncating, no possible rollbacks, the protocol should reset to Origin
       Truncating (Update m slot key value)
 
--- | Represents an update to the database. We offer a continuation-based API so that
--- the database implementation can thread an internal state without messing up with the
--- monad stack.
--- Valid consumers should always pick the continuation
+{- | Represents an update to the database. We offer a continuation-based API so that
+the database implementation can thread an internal state without messing up with the
+monad stack.
+Valid consumers should always pick the continuation
+-}
 data Update m slot key value = Update
     { forwardTipApply
         :: slot
@@ -56,14 +71,19 @@ data Update m slot key value = Update
     , forwardFinalityApply
         :: slot
         -> m (Update m slot key value)
-    -- ^ Move the finality point forward. It's a bit of a pain to have to compute the slot
-    -- as we pratically need to keep a window of the changes.
+    {- ^ Move the finality point forward. It's a bit of a pain to have to compute the slot
+    as we pratically need to keep a window of the changes.
+    -}
     }
 
+-- | Read-only database query interface.
 data Query m slot key value = Query
     { getValue :: key -> m (Maybe value)
+    -- ^ Look up a value by key
     , getTip :: m (WithOrigin slot)
+    -- ^ Get the current tip slot (latest applied)
     , getFinality :: m (WithOrigin slot)
+    -- ^ Get the finality slot (immutable point)
     }
 
 -- | Let a transaction runner apply to all queries
@@ -78,8 +98,9 @@ hoistQuery nat Query{getValue, getTip, getFinality} =
         , getFinality = nat getFinality
         }
 
--- | Get the inverse of an operation, needs access to the database to retrieve
---   values for deletions
+{- | Get the inverse of an operation, needs access to the database to retrieve
+  values for deletions
+-}
 inverseOp
     :: Monad m
     => (key -> m (Maybe value))
@@ -110,8 +131,9 @@ emptyDump =
         , dumpAssocs = []
         }
 
--- | Dump the contents of the database for the given keys. It's up to the caller
---   to provide the keys of interest.
+{- | Dump the contents of the database for the given keys. It's up to the caller
+  to provide the keys of interest.
+-}
 dumpDatabase
     :: (Monad m, Ord key)
     => [key]

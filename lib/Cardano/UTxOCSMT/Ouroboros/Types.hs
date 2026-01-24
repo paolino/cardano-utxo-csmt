@@ -1,3 +1,17 @@
+{- |
+Module      : Cardano.UTxOCSMT.Ouroboros.Types
+Description : Type aliases for Ouroboros network protocols
+
+This module defines type aliases for working with Cardano's Ouroboros
+network protocols. It provides concrete types for:
+
+* Blocks, headers, and chain points
+* ChainSync and BlockFetch protocol clients
+* Follower/Intersector callbacks for chain following
+
+These aliases simplify working with the complex generic types from
+ouroboros-network.
+-}
 module Cardano.UTxOCSMT.Ouroboros.Types
     ( Block
     , Header

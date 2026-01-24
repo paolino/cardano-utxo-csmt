@@ -1,3 +1,14 @@
+{- |
+Module      : Cardano.UTxOCSMT.Application.Database.RocksDB
+Description : RocksDB-backed database implementation
+
+This module provides the RocksDB backend for the UTxO CSMT database.
+It handles:
+
+* Transaction management with atomic batch operations
+* Column family setup for different data types (UTxOs, CSMT, rollback points)
+* Integration with the abstract 'Update' and 'Query' interfaces
+-}
 module Cardano.UTxOCSMT.Application.Database.RocksDB
     ( RocksDBTransaction
     , RocksDBQuery

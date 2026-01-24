@@ -12,8 +12,9 @@ mkContra (Tracer f) = Contra (\g -> Tracer (f . g))
 
 {-# COMPLETE TraceWith #-}
 
--- | A pattern synonym to deconstruct a 'Tracer' into itself, its underlying emitter function,
--- and a contravariant mapping function against itself
+{- | A pattern synonym to deconstruct a 'Tracer' into itself, its underlying emitter function,
+and a contravariant mapping function against itself
+-}
 pattern TraceWith
     :: Tracer m a
     -> (a -> m ())

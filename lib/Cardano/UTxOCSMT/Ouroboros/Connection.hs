@@ -1,3 +1,11 @@
+{- |
+Module      : Cardano.UTxOCSMT.Ouroboros.Connection
+Description : Node-to-node connection establishment
+
+This module handles connecting to a Cardano node using the node-to-node
+protocol. It performs the version handshake and sets up the multiplexed
+connection for running ChainSync, BlockFetch, and KeepAlive protocols.
+-}
 module Cardano.UTxOCSMT.Ouroboros.Connection
     ( runNodeApplication
     , ChainSyncApplication

@@ -1,3 +1,16 @@
+{- |
+Module      : Cardano.UTxOCSMT.Bootstrap.App
+Description : CLI tool to import UTxO data into CSMT database
+
+This module provides a command-line tool for bulk importing UTxO data
+from a CBOR file into a RocksDB-backed CSMT database. It supports:
+
+* Incremental CBOR parsing for memory efficiency
+* Progress reporting during import
+* Optional limit on number of entries to process
+
+Useful for bootstrapping the database from a UTxO snapshot.
+-}
 module Cardano.UTxOCSMT.Bootstrap.App
     ( main
     )

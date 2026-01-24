@@ -2,6 +2,20 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Module      : Cardano.UTxOCSMT.Application.Metrics
+Description : Real-time metrics collection for chain synchronization
+
+This module provides a metrics collection system that tracks:
+
+* Block fetch queue statistics
+* UTxO change processing speed
+* Block processing speed
+* Current blockchain era
+* Current Merkle root
+
+Metrics are collected via a 'Tracer' and can be output at configurable intervals.
+-}
 module Cardano.UTxOCSMT.Application.Metrics
     ( metricsTracer
     , MetricsEvent (..)

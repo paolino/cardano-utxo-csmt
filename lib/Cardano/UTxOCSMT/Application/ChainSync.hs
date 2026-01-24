@@ -1,3 +1,17 @@
+{- |
+Module      : Cardano.UTxOCSMT.Application.ChainSync
+Description : Chain synchronization client for Cardano node
+
+This module implements the ChainSync mini-protocol client that connects
+to a Cardano node and follows the chain. It handles:
+
+* Finding intersection points with the local state
+* Processing roll-forward events (new blocks)
+* Processing roll-backward events (chain reorganizations)
+
+The client uses a 'Follower' abstraction to decouple protocol handling
+from actual database updates.
+-}
 module Cardano.UTxOCSMT.Application.ChainSync
     ( mkChainSyncApplication
     , ChainSyncApplication
@@ -30,15 +44,19 @@ import Ouroboros.Network.Protocol.ChainSync.Client
 -- The idle state of the chain sync client
 type ChainSyncIdle = ClientStIdle Header Point Tip IO ()
 
--- | boots the protocol and step into initialise
+{- | Create a ChainSync client application.
+
+The client will attempt to find an intersection with the node's chain
+starting from the provided points, then follow the chain forward.
+-}
 mkChainSyncApplication
     :: Tracer IO Header
+    -- ^ Tracer for logging received headers
     -> Intersector Header
-    -- ^ queue to write roll events to
+    -- ^ Callback handlers for intersection results
     -> [Point]
-    -- ^ starting point
+    -- ^ Starting points to find intersection (usually tip + finality)
     -> ChainSyncApplication
-    -- ^ the chain sync client application
 mkChainSyncApplication tracer intersector startingPoints =
     ChainSyncClient $ pure $ intersect tracer startingPoints intersector
 

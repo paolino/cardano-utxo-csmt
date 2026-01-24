@@ -12,7 +12,7 @@ fixities:
   - infixl 6 ^.
   - infixl 3 =.
   - infixl 1 <|>, <&>
-haddock-style: single-line
+haddock-style: multi-line
 in-style: left-align
 indent-wheres: false
 indentation: 4
