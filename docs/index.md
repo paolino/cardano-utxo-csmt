@@ -1,71 +1,82 @@
-# Cardano UTxOs CSMT
+# Cardano UTxO CSMT
 
-Welcome to the documentation for the Cardano UTxOs CSMT project. This documentation provides an overview of the project, its architecture, and how to get started with development and usage.
+A service that maintains a Compact Sparse Merkle Tree over Cardano's UTxO set, enabling efficient inclusion proofs.
 
-## What is Cardano UTxOs CSMT?
+## Features
 
-Cardano UTxOs CSMT is an HTTP service that
+- **Real-time Sync**: Follows the Cardano blockchain via node-to-node protocol
+- **Merkle Proofs**: Generate cryptographic inclusion proofs for any UTxO
+- **Multi-Era Support**: Works with all Cardano eras (Byron through Conway)
+- **Rollback Handling**: Gracefully handles chain reorganizations
+- **REST API**: Simple HTTP interface for queries and proofs
 
-- tracks via a chain-follower the UTxO set of a Cardano blockchain
-- maintains a Compressed Sparse Merkle Tree (CSMT) representation of the UTxO set
-- serves an HTTP API that
-    - provides
-        - inclusion proofs for UTxOs in the CSMT
-        - txouts lookup by txina
-    - will provide
-        - exclusion proofs for UTxOs not in the CSMT
-        - proof of utxos at address completeness
+## How It Works
+
+The service connects to a Cardano node and maintains:
+
+1. **UTxO Set**: Current unspent transaction outputs
+2. **CSMT**: A Merkle tree with path compression for efficient proofs
+3. **Rollback History**: State snapshots for handling chain reorgs
+
+Each block updates the tree, producing a new Merkle root that commits to the entire UTxO set state.
+
+## Use Cases
+
+- **Light Clients**: Verify UTxO existence without downloading the full chain
+- **Bridges**: Prove UTxO state to external systems
+- **Auditing**: Cryptographic proof of UTxO set at any point
+
+## Quick Start
+
+```bash
+# Using Docker
+docker run -p 8080:8080 \
+  ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt \
+  --peer-name <node-host> \
+  --peer-port 3001 \
+  --network-magic 764824073
+
+# Check status
+curl http://localhost:8080/metrics
+```
+
+See [Getting Started](getting-started.md) for detailed setup instructions.
 
 ## Installation
 
-### Docker images
-
-Docker images are available as CI artifacts. Get the latest image from the latest successful run of the `cardano-utxo-csmt-image` workflow.
+### Docker
 
 ```bash
 gh run download -n cardano-utxo-csmt-image
 docker load < output-docker-image
-docker run ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt
 ```
 
 ### Nix
-You can build the project using Nix, more instructions are in the plans.
-
-Setup caching with Cachix:
 
 ```bash
+# Setup caching
 nix shell nixpkgs#cachix -c cachix use paolino
-```
 
-To get a shell with the project and its dependencies, run:
+# Run directly
+nix run github:paolino/cardano-utxo-csmt
 
-```bash
-nix shell github:paolino/cardano-utxo-csmt
-```
-
-To build the docker image, run:
-
-
-```bash
-nix build github:paolino/cardano-utxo-csmt#docker-image
-docker load < result
-version=$(nix eval --raw github:paolino/cardano-utxo-csmt#version)
-docker run "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt:$version"
-
-```
-
-To build an arx for linux, run:
-
-```bash
+# Or build a standalone binary
 nix bundle github:paolino/cardano-utxo-csmt -o utxo-csmt
-./utxo-csmt
 ```
 
-## Current status
+## Project Status
 
-- [x] Can preload a UTxO set from a cardano-cli dump
-- [x] Can follow the chain
-- [x] Can serve HTTP API
-   - [x] Merkle-roots
-   - [ ] Inclusion proofs
+- [x] Chain synchronization via node-to-node protocol
+- [x] UTxO set tracking with RocksDB persistence
+- [x] CSMT maintenance with Merkle root computation
+- [x] HTTP API with Swagger documentation
+- [x] Merkle roots endpoint
+- [x] Inclusion proofs endpoint
+- [ ] Exclusion proofs
+- [ ] Address completeness proofs
 
+## Links
+
+- [GitHub Repository](https://github.com/paolino/cardano-utxo-csmt)
+- [API Documentation](swagger-ui.md)
+- [Architecture Overview](architecture.md)
