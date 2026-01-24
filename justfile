@@ -8,18 +8,14 @@ default:
 
 format:
     #!/usr/bin/env bash
-    # shellcheck disable=SC2034
-
-    for i in {1..3}; do
-        find . -type f -name '*.hs'  -not -path '*/dist-newstyle/*'  -exec fourmolu -i {} +
-    done
+    find . -type f -name '*.hs' -not -path '*/dist-newstyle/*' -exec fourmolu -i {} +
     cabal-fmt -i cardano-utxo-csmt.cabal
     nixfmt ./*.nix
     nixfmt nix/*.nix
 
 hlint:
     #!/usr/bin/env bash
-    hlint executables application test test-lib bench
+    find . -type f -name '*.hs' -not -path '*/dist-newstyle/*' -exec hlint {} +
 
 bench:
     #!/usr/bin/env bash
@@ -49,8 +45,8 @@ CI:
     just build
     just unit
     cabal-fmt -c cardano-utxo-csmt.cabal
-    fourmolu -m check application executables test test-lib
-    hlint -c application executables test test-lib
+    find . -type f -name '*.hs' -not -path '*/dist-newstyle/*' -exec fourmolu -m check {} +
+    find . -type f -name '*.hs' -not -path '*/dist-newstyle/*' -exec hlint {} +
     just update-swagger
     git diff --exit-code docs/assets/swagger.json
 
@@ -79,11 +75,11 @@ build-and-start-docker bg="false":
 
 logs-docker:
     #!/usr/bin/env bash
-    docker compose -f CD/proxy/docker-compose.yaml logs -ft
+    docker compose -f CD/docker-compose.yaml logs -ft
 
 stop-docker:
     #!/usr/bin/env bash
-    docker compose -f CD/proxy/docker-compose.yaml down
+    docker compose -f CD/docker-compose.yaml down
 
 push-docker tag='latest':
     #!/usr/bin/env bash
