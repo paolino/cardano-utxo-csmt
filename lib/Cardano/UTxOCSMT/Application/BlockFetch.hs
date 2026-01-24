@@ -60,8 +60,9 @@ data Fetched = Fetched
     , fetchedBlock :: Block
     }
 
--- | Create a block fetch application and promote compute an header intersector
--- for the chain sync application
+{- | Create a block fetch application and promote compute an header intersector
+for the chain sync application
+-}
 mkBlockFetchApplication
     :: EventQueueLength
     -- ^ maximum length of the headers queue

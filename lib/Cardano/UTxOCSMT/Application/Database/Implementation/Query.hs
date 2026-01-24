@@ -62,16 +62,18 @@ mkQuery =
                     Just e -> pure $ entryKey e
         }
 
--- | Create a 'Query' interface for RocksDB where all queries are run in separate transactions
--- Useful for property testing
+{- | Create a 'Query' interface for RocksDB where all queries are run in separate transactions
+Useful for property testing
+-}
 mkTransactionedQuery
     :: (Ord key, MonadFail m)
     => RunTransaction cf op slot hash key value m
     -> Query m slot key value
 mkTransactionedQuery (RunTransaction runTx) = hoistQuery runTx mkQuery
 
--- | Get all merkle roots by iterating in reverse over the RollbackPoints table
--- Returns a list of (slot, blockHash, merkleRoot) tuples in reverse order (newest first)
+{- | Get all merkle roots by iterating in reverse over the RollbackPoints table
+Returns a list of (slot, blockHash, merkleRoot) tuples in reverse order (newest first)
+-}
 getAllMerkleRoots
     :: Monad m
     => Transaction

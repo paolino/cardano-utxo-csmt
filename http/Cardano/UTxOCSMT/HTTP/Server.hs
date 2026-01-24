@@ -62,9 +62,10 @@ apiApp
 apiApp getMetrics getMerkleRoots getProof =
     simpleCors $ serve api $ apiServer getMetrics getMerkleRoots getProof
 
--- | Run the API server on the specified port
--- Takes a port number, an IO action that provides the current Metrics,
--- and an IO action that retrieves all merkle roots
+{- | Run the API server on the specified port
+Takes a port number, an IO action that provides the current Metrics,
+and an IO action that retrieves all merkle roots
+-}
 runAPIServer
     :: PortNumber
     -> IO (Maybe Metrics)
@@ -78,7 +79,8 @@ runAPIServer port getMetrics getMerkleRoots getProof =
 docsApp :: Maybe PortNumber -> Application
 docsApp mApiPort = serve docs (swaggerServer mApiPort)
 
--- | Run the documentation server on the specified port
--- Takes the docs port and optionally the API port (for Swagger to point to)
+{- | Run the documentation server on the specified port
+Takes the docs port and optionally the API port (for Swagger to point to)
+-}
 runDocsServer :: PortNumber -> Maybe PortNumber -> IO ()
 runDocsServer port mApiPort = run (fromIntegral port) (docsApp mApiPort)

@@ -73,9 +73,10 @@ cleanUpBatch
                         go (next, count + 1)
             when r batch
 
--- | Perform an "armageddon" cleanup of the database
--- by deleting all entries in all columns in batches
--- THIS IS NOT GOING TO RUN ATOMICALLY
+{- | Perform an "armageddon" cleanup of the database
+by deleting all entries in all columns in batches
+THIS IS NOT GOING TO RUN ATOMICALLY
+-}
 armageddon
     :: (Ord key, Ord slot, Monad m)
     => Tracer m ArmageddonTrace

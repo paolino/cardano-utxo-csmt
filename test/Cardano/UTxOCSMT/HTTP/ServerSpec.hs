@@ -86,8 +86,9 @@ import Ouroboros.Network.Block (SlotNo (..))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 
--- | Test prisms for serializing slots, hashes, keys, values
--- Uses SlotNo for slots and ByteString for keys/values (matching RocksDBSpec.hs)
+{- | Test prisms for serializing slots, hashes, keys, values
+Uses SlotNo for slots and ByteString for keys/values (matching RocksDBSpec.hs)
+-}
 testPrisms :: Prisms SlotNo Hash BL.ByteString BL.ByteString
 testPrisms =
     Prisms
@@ -149,8 +150,9 @@ mkTestValue = BL.fromStrict . BC.pack
 encodeBase16 :: ByteString -> Text
 encodeBase16 = TE.decodeUtf8 . convertToBase Base16
 
--- | Query all merkle roots and convert to MerkleRootEntry format
--- Adapted for test types (SlotNo slots -> SlotNo)
+{- | Query all merkle roots and convert to MerkleRootEntry format
+Adapted for test types (SlotNo slots -> SlotNo)
+-}
 queryTestMerkleRoots
     :: RunCSMTTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
     -> IO [MerkleRootEntry]
@@ -167,8 +169,9 @@ queryTestMerkleRoots (RunCSMTTransaction runCSMT) =
                 }
             ]
 
--- | Query inclusion proof for a given key
--- For tests, we use a simplified lookup where txId is the hex of the key prefix
+{- | Query inclusion proof for a given key
+For tests, we use a simplified lookup where txId is the hex of the key prefix
+-}
 queryTestInclusionProof
     :: RunCSMTTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
     -> BL.ByteString

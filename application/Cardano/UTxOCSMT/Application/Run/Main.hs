@@ -413,8 +413,9 @@ queryMerkleRoots (RunCSMTTransaction runCSMT) =
         At (Network.Point (At (Network.Block slotNo _))) ->
             [MerkleRootEntry{slotNo, blockHash, merkleRoot}]
 
--- | Retrieve the current inclusion proof and UTxO value for a given tx-in.
--- Returns 'Nothing' missing entries.
+{- | Retrieve the current inclusion proof and UTxO value for a given tx-in.
+Returns 'Nothing' missing entries.
+-}
 queryInclusionProof
     :: RunCSMTTransaction
         ColumnFamily

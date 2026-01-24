@@ -144,8 +144,9 @@ generateOperations = do
     Positive n <- pick arbitrary
     pick $ go n availableKeys
 
--- | Populate the database with some more content. This should be freely interleaved
---   with properties.
+{- | Populate the database with some more content. This should be freely interleaved
+  with properties.
+-}
 populateWithSomeContent
     :: (PropertyConstraints m slot key value, HasCallStack)
     => PropertyWithExpected
@@ -177,8 +178,9 @@ populateWithSomeContent = do
             forwardFinality finality
     pure past
 
--- | Property: forwarding at or before tip is a no-op
--- forwarding must move the tip ahead
+{- | Property: forwarding at or before tip is a no-op
+forwarding must move the tip ahead
+-}
 propertyForwardBeforeTipIsNoOp
     :: PropertyConstraints m slot key value
     => PropertyWithExpected m slot key value ()
@@ -201,11 +203,12 @@ propertyForwardBeforeTipIsNoOp = do
                 "Forwarding at or before tip should be no-op"
                 $ newDump == oldDump
 
--- | Property: forwarding after tip applies the changes correctly
--- finality stays where it is
--- tip moves to the new slot
--- associations are updated by applying the changes
--- old associations that were not deleted remain
+{- | Property: forwarding after tip applies the changes correctly
+finality stays where it is
+tip moves to the new slot
+associations are updated by applying the changes
+old associations that were not deleted remain
+-}
 propertyForwardAfterTipAppliesChanges
     :: PropertyConstraints m slot key value
     => PropertyWithExpected m slot key value ()
@@ -257,8 +260,9 @@ propertyForwardAfterTipAppliesChanges = do
             (k, v) `elem` newContents
                 || k `elem` [key | Delete key <- ops]
 
--- | Property: rolling back at or after tip does nothing
--- rollback to a slot after or at tip should preserve the database as is
+{- | Property: rolling back at or after tip does nothing
+rollback to a slot after or at tip should preserve the database as is
+-}
 propertyRollbackAfterTipDoesNothing
     :: PropertyConstraints m slot key value
     => PropertyWithExpected m slot key value ()
@@ -279,9 +283,10 @@ propertyRollbackAfterTipDoesNothing = do
         "Rollback at or after tip should be no-op"
         $ newDump == oldDump
 
--- | Property: rolling back to a slot before tip undoes the changes made after it
--- given we know some snapshots of the database at various slots,
--- rolling back after or at the first one will restore the database to that state
+{- | Property: rolling back to a slot before tip undoes the changes made after it
+given we know some snapshots of the database at various slots,
+rolling back after or at the first one will restore the database to that state
+-}
 propertyRollbackAfterBeforeTipUndoesChanges
     :: PropertyConstraints m slot key value
     => NonEmpty (WithOrigin slot, Dump slot key value)
@@ -330,8 +335,9 @@ propertyRollbackBeforeFinalityTruncatesTheDatabase = do
         "Rolling back before finality should truncate the database"
         $ newDump == emptyDump
 
--- | Property: forwarding finality before finality is a no-op
--- forwarding finality should work only if the new slot is after the current finality
+{- | Property: forwarding finality before finality is a no-op
+forwarding finality should work only if the new slot is after the current finality
+-}
 propertyForwardFinalityBeforeFinalityIsNoOp
     :: PropertyConstraints m slot key value
     => PropertyWithExpected m slot key value ()
@@ -349,11 +355,12 @@ propertyForwardFinalityBeforeFinalityIsNoOp = do
                 "Forwarding finality slot before or at finality should be no-op"
                 $ newDump == oldDump
 
--- | Property: forwarding finality after finality reduces the rollback window
--- given we know some snapshots of the database at various slots,
--- forwarding finality to a slot after the current finality
--- rolling back to the old finality should fail
--- rolling back to the new finality should restore the database to that state
+{- | Property: forwarding finality after finality reduces the rollback window
+given we know some snapshots of the database at various slots,
+forwarding finality to a slot after the current finality
+rolling back to the old finality should fail
+rolling back to the new finality should restore the database to that state
+-}
 propertyForwardFinalityAfterFinalityReduceTheRollbackWindow
     :: PropertyConstraints m slot key value
     => NonEmpty (WithOrigin slot, Dump slot key value)
@@ -385,10 +392,11 @@ propertyForwardFinalityAfterFinalityReduceTheRollbackWindow history = do
                         "Rollback to forwarded finality moves the database to a previous state"
                         $ finalDump == oldFixedDump
 
--- | Property: forwarding finality beyond tip sets finality as tip
--- finality is set to tip
--- opposites are cleared
--- associations remain as is
+{- | Property: forwarding finality beyond tip sets finality as tip
+finality is set to tip
+opposites are cleared
+associations remain as is
+-}
 propertyForwardFinalityBeyondTipSetsFinalityAsTip
     :: PropertyConstraints m slot key value
     => PropertyWithExpected m slot key value ()

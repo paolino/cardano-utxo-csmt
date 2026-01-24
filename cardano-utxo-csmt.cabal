@@ -103,7 +103,6 @@ library application
     , containers
     , contra-tracer
     , csmt
-    , rocksdb-kv-transactions:kv-transactions
     , lens
     , memory
     , mtl
@@ -111,6 +110,7 @@ library application
     , ouroboros-consensus
     , ouroboros-network-api
     , rocksdb-haskell-jprupp
+    , rocksdb-kv-transactions:kv-transactions
     , strict-stm
     , text
     , with-utf8
@@ -168,8 +168,6 @@ library library
     , comonad
     , contra-tracer
     , csmt
-    , rocksdb-kv-transactions:kv-transactions
-    , rocksdb-kv-transactions
     , exceptions
     , foldl
     , lens
@@ -188,6 +186,8 @@ library library
     , profunctors
     , QuickCheck
     , rocksdb-haskell-jprupp
+    , rocksdb-kv-transactions
+    , rocksdb-kv-transactions:kv-transactions
     , serialise
     , streaming
     , streaming-bytestring
@@ -254,7 +254,6 @@ test-suite unit-tests
     , cereal
     , contra-tracer
     , csmt
-    , rocksdb-kv-transactions:kv-transactions
     , hspec
     , http-types
     , lens
@@ -262,6 +261,7 @@ test-suite unit-tests
     , ouroboros-network-api
     , QuickCheck
     , rocksdb-haskell-jprupp
+    , rocksdb-kv-transactions:kv-transactions
     , temporary
     , text
     , transformers

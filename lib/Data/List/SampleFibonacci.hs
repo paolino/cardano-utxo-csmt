@@ -45,9 +45,10 @@ fibonacciSequenceIntervals = scan (+) 0 fibonacciSequence
 fibonacciIntervals :: [Int]
 fibonacciIntervals = toList fibonacciSequenceIntervals
 
--- | Try to get at most n elements from the monadic action
--- if the action returns Nothing before n is reached, it returns the previously
--- collect element
+{- | Try to get at most n elements from the monadic action
+if the action returns Nothing before n is reached, it returns the previously
+collect element
+-}
 atMost :: Monad m => Int -> m (Maybe a) -> m (Maybe a)
 atMost n _
     | n <= 0 = pure Nothing
@@ -63,10 +64,11 @@ atMost n f = do
                     Nothing -> pure $ Just l
                     Just y -> go y $ m - 1
 
--- | Sample elements from the monadic action at positions defined by the Fibonacci sequence
--- it's implied that the action will eventually return Nothing
--- it's implied that the action will move forward one element at every call in some sequence
--- if the sequence is not empty the last element will be always returned even if not at a Fibonacci position
+{- | Sample elements from the monadic action at positions defined by the Fibonacci sequence
+it's implied that the action will eventually return Nothing
+it's implied that the action will move forward one element at every call in some sequence
+if the sequence is not empty the last element will be always returned even if not at a Fibonacci position
+-}
 sampleAtFibonacciIntervals
     :: Monad m => m (Maybe a) -> m [a]
 sampleAtFibonacciIntervals f = ($ fibonacciSequence) $ fix $ \go (Cons n ns) -> do
