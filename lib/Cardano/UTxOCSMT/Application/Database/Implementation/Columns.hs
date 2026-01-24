@@ -22,7 +22,7 @@ import Database.KV.Transaction
     , GEq (..)
     , GOrdering (..)
     , KV
-    , mkCols
+    , fromList
     )
 
 -- | Keys for the configuration column
@@ -85,7 +85,7 @@ codecs
     :: Prisms slot hash key value
     -> DMap (Columns slot hash key value) Codecs
 codecs Prisms{keyP, hashP, slotP, valueP} =
-    mkCols
+    fromList
         [ KVCol :=> Codecs{keyCodec = keyP, valueCodec = valueP}
         , CSMTCol :=> csmtCodecs hashP
         , RollbackPoints
