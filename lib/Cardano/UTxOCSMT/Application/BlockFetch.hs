@@ -1,5 +1,19 @@
 {-# LANGUAGE TemplateHaskell #-}
 
+{- |
+Module      : Cardano.UTxOCSMT.Application.BlockFetch
+Description : Block fetching client for Cardano node
+
+This module implements the BlockFetch mini-protocol client that retrieves
+full block data from the Cardano node. It works in coordination with
+the ChainSync client:
+
+1. ChainSync receives headers and queues them
+2. BlockFetch retrieves full blocks for queued headers
+3. Fetched blocks are passed to the database update layer
+
+The bounded queue prevents memory exhaustion during fast sync periods.
+-}
 module Cardano.UTxOCSMT.Application.BlockFetch
     ( mkBlockFetchApplication
     , Fetched (..)

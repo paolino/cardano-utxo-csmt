@@ -1,3 +1,15 @@
+{- |
+Module      : Cardano.UTxOCSMT.Application.UTxOs
+Description : UTxO extraction from Cardano blocks
+
+This module extracts UTxO changes (spends and creates) from Cardano blocks
+across all eras (Byron through Conway). Each transaction produces:
+
+* 'Spend' entries for consumed inputs
+* 'Create' entries for new outputs
+
+UTxO references are CBOR-encoded for consistent storage and lookup.
+-}
 module Cardano.UTxOCSMT.Application.UTxOs
     ( uTxOs
     , Change (..)

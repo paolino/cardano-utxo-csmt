@@ -1,3 +1,16 @@
+{- |
+Module      : Cardano.UTxOCSMT.HTTP.API
+Description : REST API type definitions for UTxO CSMT service
+
+This module defines the Servant API types and data structures for
+the HTTP service endpoints:
+
+* @GET /metrics@ - Current synchronization metrics
+* @GET /merkle-roots@ - Historical merkle roots by slot
+* @GET /proof/:txId/:txIx@ - Inclusion proof for a specific UTxO
+
+Response types include JSON serialization and Swagger schema definitions.
+-}
 module Cardano.UTxOCSMT.HTTP.API
     ( api
     , API

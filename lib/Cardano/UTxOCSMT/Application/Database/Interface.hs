@@ -1,3 +1,16 @@
+{- |
+Module      : Cardano.UTxOCSMT.Application.Database.Interface
+Description : Abstract database interface for UTxO storage
+
+This module defines the core interfaces for database operations:
+
+* 'Query' - Read-only access to database state
+* 'Update' - Write operations with tip/finality tracking
+* 'State' - FSM states for chain sync protocol handling
+
+The database tracks both a mutable tip (latest applied slot) and an
+immutable finality point (confirmed slot beyond which no rollbacks occur).
+-}
 module Cardano.UTxOCSMT.Application.Database.Interface
     ( -- * Query interface
       Query (..)
@@ -63,10 +76,14 @@ data Update m slot key value = Update
     -}
     }
 
+-- | Read-only database query interface.
 data Query m slot key value = Query
     { getValue :: key -> m (Maybe value)
+    -- ^ Look up a value by key
     , getTip :: m (WithOrigin slot)
+    -- ^ Get the current tip slot (latest applied)
     , getFinality :: m (WithOrigin slot)
+    -- ^ Get the finality slot (immutable point)
     }
 
 -- | Let a transaction runner apply to all queries
