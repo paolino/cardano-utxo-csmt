@@ -20,8 +20,14 @@ repository cardano-haskell-packages
 source-repository-package
   type: git
   location: https://github.com/paolino/haskell-csmt
-  tag: 455153cb6cf9fe1732bef3885d590873c09abd63
-  --sha256: sha256-WTCzPMZcxQoQrOuESRbO6Qc6AeB5md0ZJZrLxQO4OI8=
+  tag: e33d7110ca9e708f367ca19c69020fc853be4980
+  --sha256: sha256-krDEh3RM6ZJ5c4BMdbFd3/UX2TX5x/rafUmz/vpR/XA=
+
+source-repository-package
+  type: git
+  location: https://github.com/paolino/rocksdb-kv-transactions
+  tag: 2e151146f8bddcbc2ae694e451692e5c51b337ac
+  --sha256: sha256-hhgKUAApaBw2YBBLGqjgj8ZP1tbfAWuqRi1AJcez2jE=
 
 source-repository-package
   type: git

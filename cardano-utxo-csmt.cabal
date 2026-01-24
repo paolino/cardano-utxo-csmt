@@ -103,7 +103,7 @@ library application
     , containers
     , contra-tracer
     , csmt
-    , csmt:kv-transactions
+    , rocksdb-kv-transactions:kv-transactions
     , lens
     , memory
     , mtl
@@ -168,8 +168,8 @@ library library
     , comonad
     , contra-tracer
     , csmt
-    , csmt:kv-transactions
-    , csmt:rocksdb-kv-transactions
+    , rocksdb-kv-transactions:kv-transactions
+    , rocksdb-kv-transactions
     , exceptions
     , foldl
     , lens
@@ -254,7 +254,7 @@ test-suite unit-tests
     , cereal
     , contra-tracer
     , csmt
-    , csmt:kv-transactions
+    , rocksdb-kv-transactions:kv-transactions
     , hspec
     , http-types
     , lens
