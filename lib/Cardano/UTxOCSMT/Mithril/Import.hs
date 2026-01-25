@@ -30,7 +30,7 @@ import Cardano.UTxOCSMT.Mithril.Client
     , MithrilError
     , MithrilTrace (..)
     , SnapshotMetadata (..)
-    , downloadSnapshot
+    , downloadSnapshotHttp
     , fetchLatestSnapshot
     , renderMithrilError
     , renderMithrilTrace
@@ -167,7 +167,7 @@ importFromMithril tracer config runner = do
                 $ ImportMithril
                 $ MithrilDownloading digest (mithrilDownloadDir config)
 
-            downloadResult <- downloadSnapshot config digest
+            downloadResult <- downloadSnapshotHttp config snapshot
 
             case downloadResult of
                 Left err -> do
