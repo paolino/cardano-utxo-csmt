@@ -3,16 +3,31 @@
 Mithril enables fast bootstrapping of the Cardano UTxO CSMT database by downloading
 certified snapshots instead of syncing from genesis.
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Fetch snapshot metadata | ✅ Working | All networks (mainnet, preprod, preview) |
+| HTTP download (no verification) | ✅ Working | Downloads ancillary data with ledger state |
+| Find ledger state files | ✅ Working | Supports both old (.lstate) and new UTxO-HD formats |
+| CLI options | ✅ Working | `--mithril-bootstrap`, `--mithril-network`, etc. |
+| UTxO extraction from ledger state | ❌ TODO | Requires UTxO-HD API support (MapKind parameter) |
+| Import UTxOs to CSMT | ❌ TODO | Blocked by extraction |
+| Verified download (mithril-client) | ❌ TODO | Binary not available in nix shell |
+
 ## Overview
 
-When enabled, Mithril bootstrapping:
+When fully implemented, Mithril bootstrapping will:
 
 1. Downloads the latest certified snapshot from Mithril aggregators
 2. Extracts the ledger state containing the UTxO set
 3. Imports UTxOs into the CSMT database
 4. Continues chain sync from the snapshot point
 
-This can reduce initial sync time from days to minutes.
+This will reduce initial sync time from days to minutes.
+
+**Current state**: Steps 1-2 work (download and locate ledger state). Steps 3-4 are blocked
+pending UTxO-HD API support in `ouroboros-consensus-cardano`.
 
 ## Demo
 
@@ -104,6 +119,18 @@ ledger/
 ```
 
 Each directory is named by slot number and contains the serialized ledger state.
+
+### 4. UTxO Extraction (TODO)
+
+Extracting UTxOs from the ledger state requires decoding the `ExtLedgerState` type
+from `ouroboros-consensus-cardano`. Recent versions use the UTxO-HD API which adds
+a `MapKind` type parameter. This decoding is not yet implemented.
+
+### 5. CSMT Import (TODO)
+
+Once UTxOs are extracted, they will be streamed into the CSMT database using the
+same CBOR encoding as the chain sync module. The `Streaming.hs` module provides
+the infrastructure for batched imports with progress reporting.
 
 ## Security Considerations
 

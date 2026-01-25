@@ -1,44 +1,37 @@
 #!/usr/bin/env bash
-# Demo: Mithril Bootstrap for Cardano UTxO CSMT
-# This script shows how to use Mithril to quickly bootstrap the database
-
+# Demo: Mithril Bootstrap - Working Functionality
 set -e
 
-echo "=== Mithril Bootstrap Demo ==="
+echo "=== Mithril Snapshot Download Demo ==="
 echo ""
-echo "# Step 1: Check available Mithril options"
+
+echo "# Step 1: Fetch snapshot metadata"
+sleep 1
+echo '$ curl -s ".../artifact/snapshots" | jq ".[0] | {digest, beacon, ancillary_size}"'
+curl -s "https://aggregator.pre-release-preview.api.mithril.network/aggregator/artifact/snapshots" \
+    | jq ".[0] | {digest, beacon, ancillary_size}"
 sleep 2
-echo ""
-echo '$ cardano-utxo-chainsync --help | grep -A2 mithril'
-cardano-utxo-chainsync --help 2>/dev/null | grep -A2 mithril || true
-sleep 3
 
 echo ""
-echo "# Step 2: Fetch latest snapshot metadata from preview network"
-sleep 2
-echo ""
-echo '$ curl -s "https://aggregator.pre-release-preview.api.mithril.network/aggregator/artifact/snapshots" | jq ".[0]"'
-curl -s "https://aggregator.pre-release-preview.api.mithril.network/aggregator/artifact/snapshots" | jq ".[0]"
-sleep 3
+echo "# Step 2: Download ledger state (~400MB)"
+sleep 1
+TMPDIR=$(mktemp -d)
+URL=$(curl -s "https://aggregator.pre-release-preview.api.mithril.network/aggregator/artifact/snapshots" \
+    | jq -r ".[0].ancillary_locations[0]")
+echo "$ curl -s \"\$URL\" | tar -I zstd -xf - -C $TMPDIR"
+curl -s "$URL" | tar -I zstd -xf - -C "$TMPDIR"
+echo "Done."
+sleep 1
 
 echo ""
-echo "# Step 3: Bootstrap with Mithril (preview network example)"
-sleep 2
+echo "# Step 3: Ledger state files"
+sleep 1
+SLOT=$(ls "$TMPDIR/ledger" | sort -n | tail -1)
+echo "$ ls $TMPDIR/ledger/$SLOT/"
+ls "$TMPDIR/ledger/$SLOT/"
 echo ""
-echo '$ cardano-utxo-chainsync \'
-echo '    --mithril-bootstrap \'
-echo '    --mithril-network preview \'
-echo '    --csmt-db-path /tmp/csmt-db \'
-echo '    --node-name preview-node.world.dev.cardano.org \'
-echo '    --port 30002 \'
-echo '    --network-magic 2'
-echo ""
-echo "# This will:"
-echo "#   1. Download the latest certified snapshot (~400MB ancillary data)"
-echo "#   2. Extract ledger state to temporary directory"
-echo "#   3. Import UTxOs into the CSMT database"
-echo "#   4. Continue chain sync from the snapshot point"
-sleep 3
+echo "Ledger state at slot: $SLOT"
 
+rm -rf "$TMPDIR"
 echo ""
-echo "=== Demo Complete ==="
+echo "=== Done ==="
