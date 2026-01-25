@@ -122,3 +122,12 @@ dump-and-load-utxo socket-path address:
 update-swagger:
     #!/usr/bin/env bash
     nix run .#cardano-utxo-swagger > docs/assets/swagger.json
+
+# Run Mithril E2E tests (requires mithril-client in PATH)
+mithril-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cabal test unit-tests \
+        --test-show-details=direct \
+        --test-option=--match \
+        --test-option="Mithril"
