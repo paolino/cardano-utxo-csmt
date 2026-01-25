@@ -150,6 +150,7 @@ import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point (WithOrigin (..))
 import Ouroboros.Network.Point qualified as Network
 import Paths_cardano_utxo_csmt (version)
+import System.Exit (exitSuccess)
 import System.IO.Temp (withSystemTempDirectory)
 
 withRocksDB
@@ -186,6 +187,7 @@ data MainTraces
     | ServeApi
     | ServeDocs
     | Mithril ImportTrace
+    | BootstrapOnlyExit Point
 
 renderMainTraces :: MainTraces -> String
 renderMainTraces Boot = "Starting up Cardano UTxO CSMT client..."
@@ -205,6 +207,9 @@ renderMainTraces ServeDocs =
     "Starting API documentation server..."
 renderMainTraces (Mithril mt) =
     "Mithril: " ++ renderImportTrace mt
+renderMainTraces (BootstrapOnlyExit point) =
+    "Bootstrap complete, exiting (--mithril-bootstrap-only). Checkpoint: "
+        ++ show point
 
 startHTTPService
     :: IO () -> Maybe PortNumber -> (PortNumber -> IO ()) -> IO ()
@@ -270,6 +275,12 @@ main = withUtf8 $ do
                         (queryMerkleRoots runner)
                         (queryInclusionProof runner)
             startingPoint' <- setupDB tracer startingPoint mithrilOptions runner
+
+            -- Check if we should exit after bootstrap
+            when (Mithril.mithrilBootstrapOnly mithrilOptions) $ do
+                trace $ BootstrapOnlyExit startingPoint'
+                exitSuccess
+
             -- Emit the base checkpoint to metrics
             _ <-
                 application

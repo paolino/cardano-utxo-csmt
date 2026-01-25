@@ -167,8 +167,10 @@ library library
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-api
+    , cardano-ledger-babbage
     , cardano-ledger-binary
     , cardano-ledger-byron
+    , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-read-ledger
     , cborg
@@ -184,6 +186,7 @@ library library
     , http-types
     , lens
     , memory
+    , mempack
     , mtl
     , network
     , network-mux

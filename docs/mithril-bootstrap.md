@@ -12,7 +12,8 @@ certified snapshots instead of syncing from genesis.
 | Find ledger state files | ✅ Working | Supports both old (.lstate) and new UTxO-HD formats |
 | CLI options | ✅ Working | `--mithril-bootstrap`, `--mithril-network`, etc. |
 | UTxO extraction from ledger state | ✅ Working | Streams MemPack-encoded (TxIn, TxOut) pairs from tvar file |
-| TxIn/TxOut decoding | ✅ Verified | Decodes as Conway-era `TxIn` and `BabbageTxOut` (chain sync compatible) |
+| TxIn/TxOut decoding | ✅ Verified | Decodes as Conway-era `TxIn` and `BabbageTxOut` |
+| CBOR re-encoding | ✅ Working | Converts MemPack to CBOR for chain sync compatibility |
 | STM certificate verification | 🔮 Planned | See [FFI plan](mithril-stm-ffi-plan.md) on `feature/mithril-stm-ffi-plan` branch |
 
 ## Overview
@@ -21,7 +22,8 @@ Mithril bootstrapping:
 
 1. Downloads the latest certified snapshot from Mithril aggregators
 2. Extracts the UTxO set from the InMemory backing store (`tables/tvar`)
-3. Decodes MemPack-encoded (TxIn, TxOut) pairs as Conway-era ledger types
+3. Decodes MemPack to Conway-era types, re-encodes to CBOR for chain sync compatibility
+4. Streams into CSMT database using the standard import interface
 
 This provides a fast way to obtain UTxO set data without syncing from genesis.
 
@@ -53,6 +55,7 @@ cardano-utxo-chainsync \
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--mithril-bootstrap` | Enable Mithril bootstrapping | `false` |
+| `--mithril-bootstrap-only` | Exit after bootstrap (skip chain sync) | `false` |
 | `--mithril-network NETWORK` | Network: `mainnet`, `preprod`, `preview` | `mainnet` |
 | `--mithril-aggregator URL` | Override aggregator URL | Network default |
 | `--mithril-download-dir DIR` | Directory for downloads | Temp directory |
