@@ -131,3 +131,8 @@ mithril-e2e:
         --test-show-details=direct \
         --test-option=--match \
         --test-option="Mithril"
+
+# Serve documentation locally
+serve-docs:
+    #!/usr/bin/env bash
+    mkdocs serve
