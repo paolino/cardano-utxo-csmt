@@ -19,11 +19,15 @@ import Cardano.UTxOCSMT.Mithril.Client
     )
 import Cardano.UTxOCSMT.Mithril.Extraction
     ( ExtractionError (..)
+    , extractUTxOsFromSnapshot
     , findLedgerStateFile
     )
+import Control.Tracer (nullTracer)
 import Data.List (isInfixOf)
+import Data.Word (Word64)
 import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
+import Streaming.Prelude qualified as S
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
     ( Spec
@@ -43,7 +47,7 @@ spec = describe "Mithril Client E2E" $ do
             $ testFetchSnapshot MithrilMainnet
 
     describe "downloadSnapshotHttp" $ do
-        it "downloads preview snapshot with ledger state" $ do
+        it "downloads preview snapshot and extracts UTxOs" $ do
             manager <- newManager tlsManagerSettings
             withSystemTempDirectory "mithril-test" $ \tmpDir -> do
                 let config =
@@ -80,8 +84,28 @@ spec = describe "Mithril Client E2E" $ do
                                         -- Old format: ledger/<slot>-<hash>.lstate
                                         filePath
                                             `shouldSatisfy` ( \p ->
-                                                "ledger" `isInfixOf` p
+                                                                "ledger" `isInfixOf` p
                                                             )
+                                        -- Extract UTxOs and count them
+                                        extractResult <-
+                                            extractUTxOsFromSnapshot
+                                                nullTracer
+                                                dbPath
+                                                countUtxos
+                                        case extractResult of
+                                            Left err ->
+                                                fail
+                                                    $ "Extraction failed: "
+                                                        ++ show err
+                                            Right count ->
+                                                -- Preview should have UTxOs
+                                                count
+                                                    `shouldSatisfy` (> 0)
+  where
+    countUtxos
+        :: S.Stream (S.Of a) IO ()
+        -> IO Word64
+    countUtxos = S.fold_ (\n _ -> n + 1) 0 id
 
 testFetchSnapshot :: MithrilNetwork -> IO ()
 testFetchSnapshot network = do

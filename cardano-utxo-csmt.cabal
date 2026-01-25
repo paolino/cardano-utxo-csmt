@@ -170,12 +170,10 @@ library library
     , cardano-ledger-binary
     , cardano-ledger-byron
     , cardano-ledger-core
-    , cardano-ledger-shelley
     , cardano-read-ledger
     , cborg
     , cereal
     , comonad
-    , containers
     , contra-tracer
     , csmt
     , directory
@@ -279,6 +277,7 @@ test-suite unit-tests
     , QuickCheck
     , rocksdb-haskell-jprupp
     , rocksdb-kv-transactions:kv-transactions
+    , streaming
     , temporary
     , text
     , transformers

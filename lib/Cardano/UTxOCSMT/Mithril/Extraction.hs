@@ -1,3 +1,6 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 {- |
 Module      : Cardano.UTxOCSMT.Mithril.Extraction
 Description : UTxO extraction from Mithril ledger state snapshots
@@ -5,17 +8,11 @@ Description : UTxO extraction from Mithril ledger state snapshots
 This module provides functionality to extract UTxOs from Cardano ledger
 state files downloaded via Mithril. It supports:
 
-* Locating ledger state files in the db/ledger/ directory
-* Decoding the ExtLedgerState using ouroboros-consensus-cardano
-* Extracting UTxOs across all post-Byron eras
-* Streaming UTxOs as CBOR-encoded key-value pairs
+* Locating ledger state files in the ledger/ directory
+* Streaming UTxOs from the InMemory backing store format
 
-The extraction uses the same CBOR encoding format as the chain sync
-module for consistency in the CSMT database.
-
-Note: Full ledger state decoding requires compatibility with the current
-cardano-node ledger format, which includes UTxO-HD support. The decoding
-implementation is marked as TODO pending stabilization of the UTxO-HD API.
+The extraction reads the raw CBOR bytes from the tables/tvar file
+which stores UTxOs in the InMemory backing store format.
 -}
 module Cardano.UTxOCSMT.Mithril.Extraction
     ( -- * Extraction
@@ -35,18 +32,25 @@ module Cardano.UTxOCSMT.Mithril.Extraction
     )
 where
 
+import Codec.CBOR.Decoding qualified as CBOR
 import Codec.CBOR.Read (DeserialiseFailure)
+import Codec.CBOR.Read qualified as CBOR
 import Control.Exception (IOException, try)
+import Control.Monad (when)
+import Control.Monad.Trans (lift)
 import Control.Tracer (Tracer, traceWith)
 import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy qualified as LBS
 import Data.List (sortOn)
 import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
 import Streaming (Of, Stream)
+import Streaming.Prelude qualified as S
 import System.Directory
     ( doesDirectoryExist
+    , doesFileExist
     , listDirectory
     )
 import System.FilePath (takeExtension, (</>))
@@ -72,6 +76,10 @@ data ExtractionError
       UnsupportedLedgerEra Text
     | -- | IO error during extraction
       ExtractionIOError IOException
+    | -- | Tables file not found
+      TablesNotFound FilePath
+    | -- | Failed to decode tables
+      TablesDecodeFailed DeserialiseFailure
     deriving stock (Show)
 
 -- | Render extraction error for logging
@@ -91,6 +99,10 @@ renderExtractionError (UnsupportedLedgerEra era) =
     "Unsupported ledger era: " <> T.unpack era
 renderExtractionError (ExtractionIOError e) =
     "IO error during extraction: " <> show e
+renderExtractionError (TablesNotFound path) =
+    "UTxO tables file not found: " <> path
+renderExtractionError (TablesDecodeFailed err) =
+    "Failed to decode UTxO tables: " <> show err
 
 -- | Trace events during extraction
 data ExtractionTrace
@@ -186,18 +198,17 @@ findLedgerStateFile snapshotPath = do
 {- | Extract UTxOs from a Mithril snapshot ledger state
 
 This function:
-1. Locates the ledger state file in the snapshot
-2. Reads and decodes the ExtLedgerState
-3. Extracts UTxOs from the current era's ledger state
-4. Streams UTxOs as CBOR-encoded (TxIn, TxOut) pairs
+1. Locates the ledger state directory in the snapshot
+2. Reads the InMemory tables file (tables/tvar)
+3. Streams UTxOs as raw CBOR-encoded (TxIn, TxOut) byte pairs
 
-The ledger state decoding uses ouroboros-consensus-cardano types.
+The tables/tvar file format is:
+- WithOrigin SlotNo (CBOR)
+- List of length 1 containing the map
+- Map of key-value pairs (CBOR bytes for each)
+
 The streaming approach allows processing large UTxO sets without
 loading everything into memory at once.
-
-Note: The current implementation returns an error indicating that
-ledger state decoding requires additional work to support the
-UTxO-HD API changes in recent cardano-node versions.
 -}
 extractUTxOsFromSnapshot
     :: Tracer IO ExtractionTrace
@@ -208,7 +219,7 @@ extractUTxOsFromSnapshot
        )
     -- ^ Consumer for the UTxO stream
     -> IO (Either ExtractionError a)
-extractUTxOsFromSnapshot tracer dbPath _consumer = do
+extractUTxOsFromSnapshot tracer dbPath consumer = do
     result <- try $ do
         -- Find the ledger state file
         findResult <- findLedgerStateFile dbPath
@@ -216,16 +227,130 @@ extractUTxOsFromSnapshot tracer dbPath _consumer = do
             Left err -> pure $ Left err
             Right (filePath, slot) -> do
                 traceWith tracer $ ExtractionFoundLedgerState filePath slot
-                traceWith tracer $ ExtractionStarting filePath
 
-                -- TODO: Implement ledger state decoding
-                -- The ExtLedgerState type now requires a MapKind parameter
-                -- for UTxO-HD support. This needs to be addressed once
-                -- the UTxO-HD API stabilizes.
-                pure
-                    $ Left
-                    $ UnsupportedLedgerEra
-                        "Ledger state decoding requires UTxO-HD API support"
+                -- Check for InMemory tables file
+                let tablesFile = filePath </> "tables" </> "tvar"
+                tablesExists <- doesFileExist tablesFile
+
+                if not tablesExists
+                    then pure $ Left $ TablesNotFound tablesFile
+                    else do
+                        traceWith tracer $ ExtractionStarting tablesFile
+
+                        -- Stream UTxOs from tables/tvar
+                        streamResult <- streamUtxos tracer tablesFile consumer
+
+                        case streamResult of
+                            Left err -> pure $ Left err
+                            Right a -> do
+                                traceWith tracer $ ExtractionComplete slot
+                                pure $ Right a
     case result of
         Left (e :: IOException) -> pure $ Left $ ExtractionIOError e
         Right r -> pure r
+
+-- | Stream UTxOs from the tables/tvar file
+streamUtxos
+    :: Tracer IO ExtractionTrace
+    -> FilePath
+    -- ^ Path to tvar file
+    -> (Stream (Of (ByteString, ByteString)) IO () -> IO a)
+    -- ^ Consumer
+    -> IO (Either ExtractionError a)
+streamUtxos tracer tvarPath consumer = do
+    -- Read the file content
+    content <- LBS.readFile tvarPath
+
+    -- Parse the header and get the remaining bytes with the map
+    case parseHeader content of
+        Left err -> pure $ Left $ TablesDecodeFailed err
+        Right (remaining, mapLen) -> do
+            -- Create a stream of UTxO key-value pairs
+            let stream' = streamKVPairs mapLen remaining
+                trackedStream = trackProgress tracer 0 stream'
+            a <- consumer trackedStream
+            pure $ Right a
+
+{- | Parse the tvar file header and return remaining bytes + map length
+
+The tvar file format (Mithril snapshot) is:
+1. List of length 1 (the tables wrapper)
+2. Map (indefinite-length in practice)
+3. Key-value pairs as CBOR bytes
+-}
+parseHeader
+    :: ByteString -> Either DeserialiseFailure (ByteString, Maybe Int)
+parseHeader = CBOR.deserialiseFromBytes headerDecoder
+  where
+    headerDecoder :: CBOR.Decoder s (Maybe Int)
+    headerDecoder = do
+        -- Decode list wrapper (length 1)
+        _ <- CBOR.decodeListLen
+        -- Decode map length (Nothing = indefinite)
+        CBOR.decodeMapLenOrIndef
+
+-- | Stream key-value pairs from the remaining bytes
+streamKVPairs
+    :: Maybe Int
+    -- ^ Map length (Nothing = indefinite)
+    -> ByteString
+    -- ^ Remaining bytes after header
+    -> Stream (Of (ByteString, ByteString)) IO ()
+streamKVPairs mLen content = case mLen of
+    Nothing -> streamIndefinite content
+    Just n -> streamFixed n content
+  where
+    -- Decode a single key-value pair (both are CBOR bytes)
+    kvDecoder :: CBOR.Decoder s (ByteString, ByteString)
+    kvDecoder = do
+        k <- LBS.fromStrict <$> CBOR.decodeBytes
+        v <- LBS.fromStrict <$> CBOR.decodeBytes
+        pure (k, v)
+
+    streamFixed
+        :: Int -> ByteString -> Stream (Of (ByteString, ByteString)) IO ()
+    streamFixed 0 _ = pure ()
+    streamFixed n bs =
+        case CBOR.deserialiseFromBytes kvDecoder bs of
+            Left _ -> pure ()
+            Right (rest, kv) -> do
+                S.yield kv
+                streamFixed (n - 1) rest
+
+    streamIndefinite
+        :: ByteString -> Stream (Of (ByteString, ByteString)) IO ()
+    streamIndefinite bs =
+        case CBOR.deserialiseFromBytes breakOrKv bs of
+            Left _ -> pure ()
+            Right (_, Nothing) -> pure () -- Break marker
+            Right (rest, Just kv) -> do
+                S.yield kv
+                streamIndefinite rest
+
+    breakOrKv :: CBOR.Decoder s (Maybe (ByteString, ByteString))
+    breakOrKv = do
+        isBreak <- CBOR.decodeBreakOr
+        if isBreak
+            then pure Nothing
+            else Just <$> kvDecoder
+
+-- | Track progress and trace every 10000 UTxOs
+trackProgress
+    :: Tracer IO ExtractionTrace
+    -> Word64
+    -> Stream (Of (ByteString, ByteString)) IO ()
+    -> Stream (Of (ByteString, ByteString)) IO ()
+trackProgress tracer = go
+  where
+    go !count stream' = do
+        next <- lift $ S.next stream'
+        case next of
+            Left () -> pure ()
+            Right (item, rest) -> do
+                S.yield item
+                let newCount = count + 1
+                when (newCount `mod` 10000 == 0)
+                    $ lift
+                    $ traceWith tracer
+                    $ ExtractionProgress newCount
+                go newCount rest
