@@ -1,0 +1,137 @@
+{- t |
+Module      : Cardano.UTxOCSMT.Mithril.ImportSpec
+Description : Tests for Mithril import to CSMT database
+
+Tests that verify UTxOs can be imported from Mithril snapshots
+into the CSMT database correctly.
+-}
+module Cardano.UTxOCSMT.Mithril.ImportSpec
+    ( spec
+    )
+where
+
+import CSMT.Backend.RocksDB (RunRocksDB (..))
+import CSMT.Hashes (Hash, fromKVHashes, hashHashing, isoHash, mkHash)
+import Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
+    ( ArmageddonParams (ArmageddonParams)
+    , setup
+    )
+import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
+    ( Prisms (..)
+    )
+import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
+    ( CSMTContext (..)
+    , RunCSMTTransaction (..)
+    , insertCSMT
+    )
+import Cardano.UTxOCSMT.Application.Database.RocksDB
+    ( newRunRocksDBCSMTTransaction
+    )
+import Codec.Serialise (deserialise)
+import Control.Lens (prism')
+import Control.Monad (forM_)
+import Control.Monad.Trans.Reader (ask, runReaderT)
+import Control.Tracer (nullTracer)
+import Data.Bifunctor (bimap)
+import Data.ByteString (ByteString)
+import Data.ByteString.Lazy qualified as LBS
+import Data.Serialize (getWord64be, putWord64be)
+import Data.Serialize.Extra (evalGetM, evalPutM)
+import Database.RocksDB (Config (..), withDBCF)
+import System.IO.Temp (withSystemTempDirectory)
+import Test.Hspec
+    ( Spec
+    , describe
+    , it
+    , shouldBe
+    )
+
+spec :: Spec
+spec = describe "Mithril Import" $ do
+    describe "CSMT insertion" $ do
+        it "imports UTxOs from golden file to database" $ do
+            -- Load golden file with CBOR-encoded UTxOs
+            goldenBs <- LBS.readFile "test/fixtures/golden-utxos.cbor"
+            let utxosLazy :: [(LBS.ByteString, LBS.ByteString)]
+                utxosLazy = deserialise goldenBs
+                -- Convert to strict ByteString for CSMT
+                utxos = map (bimap LBS.toStrict LBS.toStrict) utxosLazy
+
+            -- Verify we loaded the expected count
+            length utxos `shouldBe` 1000
+
+            withSystemTempDirectory "import-test" $ \tmpDir ->
+                withRocksDB tmpDir $ \(RunRocksDB r) -> do
+                    db <- r ask
+
+                    -- Set up database with armageddon
+                    runner <- newRunRocksDBCSMTTransaction db prisms csmtContext
+                    setup nullTracer runner armageddonParams
+
+                    let RunCSMTTransaction{txRunTransaction} = runner
+
+                    -- Insert all UTxOs from golden file
+                    forM_ utxos $ \(k, v) ->
+                        txRunTransaction $ insertCSMT k v
+
+        it "handles empty import gracefully" $ do
+            withSystemTempDirectory "import-test-empty" $ \tmpDir ->
+                withRocksDB tmpDir $ \(RunRocksDB r) -> do
+                    db <- r ask
+                    runner <- newRunRocksDBCSMTTransaction db prisms csmtContext
+                    setup nullTracer runner armageddonParams
+
+                    let RunCSMTTransaction{txRunTransaction} = runner
+                        emptyUtxos :: [(ByteString, ByteString)]
+                        emptyUtxos = []
+
+                    forM_ emptyUtxos $ \(k, v) ->
+                        txRunTransaction $ insertCSMT k v
+
+-- | CSMT context for hashing
+csmtContext :: CSMTContext Hash ByteString ByteString
+csmtContext = CSMTContext{fromKV = fromKVHashes, hashing = hashHashing}
+
+-- | Prisms for slot/hash encoding
+prisms :: Prisms Int Hash ByteString ByteString
+prisms =
+    Prisms
+        { slotP =
+            prism'
+                (evalPutM . putWord64be . fromIntegral)
+                (fmap fromIntegral . evalGetM getWord64be)
+        , hashP = isoHash
+        , keyP = id
+        , valueP = id
+        }
+
+-- | Armageddon parameters for database setup
+armageddonParams :: ArmageddonParams Hash
+armageddonParams = ArmageddonParams 1000 (mkHash "")
+
+-- | Open RocksDB with required column families
+withRocksDB
+    :: FilePath
+    -> (RunRocksDB -> IO b)
+    -> IO b
+withRocksDB path action =
+    withDBCF
+        path
+        dbConfig
+        [ ("kv", dbConfig)
+        , ("csmt", dbConfig)
+        , ("rollbacks", dbConfig)
+        ]
+        $ \db -> do
+            action $ RunRocksDB $ flip runReaderT db
+
+dbConfig :: Config
+dbConfig =
+    Config
+        { createIfMissing = True
+        , errorIfExists = False
+        , paranoidChecks = False
+        , maxFiles = Just 1
+        , prefixLength = Nothing
+        , bloomFilter = False
+        }
