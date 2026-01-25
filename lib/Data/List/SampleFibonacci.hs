@@ -56,7 +56,7 @@ atMost n f = do
     mh <- f
     case mh of
         Nothing -> pure Nothing
-        Just l0 -> ($ (n - 1)) . ($ l0) $ fix $ \go l -> \case
+        Just l0 -> flip ($ l0) (n - 1) $ fix $ \go l -> \case
             0 -> pure $ Just l
             m -> do
                 mh' <- f
