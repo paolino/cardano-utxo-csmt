@@ -123,32 +123,55 @@ renderExtractionTrace (ExtractionProgress count) =
 renderExtractionTrace (ExtractionComplete count) =
     "Extraction complete: " <> show count <> " UTxOs"
 
-{- | Find the latest ledger state file in the db/ledger/ directory
+{- | Find the latest ledger state in the ledger/ directory
 
-Ledger state files follow the naming pattern: @\<slot\>-\<hash\>.lstate@
-This function finds the file with the highest slot number.
+Supports two formats:
+1. Old format: @\<slot\>-\<hash\>.lstate@ files in db\/ledger\/
+2. New UTxO-HD format: @\<slot\>\/@ directories in ledger\/
+
+This function finds the entry with the highest slot number.
 -}
 findLedgerStateFile
     :: FilePath
-    -- ^ Path to db directory (e.g., from Mithril download)
+    -- ^ Path to snapshot directory (e.g., from Mithril download)
     -> IO (Either ExtractionError (FilePath, Word64))
-findLedgerStateFile dbPath = do
-    let ledgerDir = dbPath </> "ledger"
-    exists <- doesDirectoryExist ledgerDir
-    if not exists
-        then pure $ Left $ LedgerStateNotFound ledgerDir
+findLedgerStateFile snapshotPath = do
+    -- Try new format first: ledger/<slot>/ directories
+    let newLedgerDir = snapshotPath </> "ledger"
+    newExists <- doesDirectoryExist newLedgerDir
+    if newExists
+        then findNewFormat newLedgerDir
         else do
-            files <- listDirectory ledgerDir
-            let lstateFiles =
-                    filter (\f -> takeExtension f == ".lstate") files
-                parsedFiles = parseSlotFromFilename <$> lstateFiles
-                validFiles =
-                    [(f, s) | (f, Just s) <- zip lstateFiles parsedFiles]
-            case sortOn (Down . snd) validFiles of
-                [] -> pure $ Left $ NoLedgerStateFiles ledgerDir
-                ((file, slot) : _) ->
-                    pure $ Right (ledgerDir </> file, slot)
+            -- Try old format: db/ledger/<slot>-<hash>.lstate
+            let oldLedgerDir = snapshotPath </> "db" </> "ledger"
+            oldExists <- doesDirectoryExist oldLedgerDir
+            if oldExists
+                then findOldFormat oldLedgerDir
+                else pure $ Left $ LedgerStateNotFound snapshotPath
   where
+    -- New UTxO-HD format: directories named by slot number
+    findNewFormat ledgerDir = do
+        entries <- listDirectory ledgerDir
+        let parsedEntries =
+                [(e, s) | e <- entries, Just s <- [readMaybe e]]
+        case sortOn (Down . snd) parsedEntries of
+            [] -> pure $ Left $ NoLedgerStateFiles ledgerDir
+            ((dir, slot) : _) ->
+                pure $ Right (ledgerDir </> dir, slot)
+
+    -- Old format: <slot>-<hash>.lstate files
+    findOldFormat ledgerDir = do
+        files <- listDirectory ledgerDir
+        let lstateFiles =
+                filter (\f -> takeExtension f == ".lstate") files
+            parsedFiles = parseSlotFromFilename <$> lstateFiles
+            validFiles =
+                [(f, s) | (f, Just s) <- zip lstateFiles parsedFiles]
+        case sortOn (Down . snd) validFiles of
+            [] -> pure $ Left $ NoLedgerStateFiles ledgerDir
+            ((file, slot) : _) ->
+                pure $ Right (ledgerDir </> file, slot)
+
     parseSlotFromFilename :: FilePath -> Maybe Word64
     parseSlotFromFilename name =
         case T.splitOn "-" (T.pack $ takeWhile (/= '.') name) of

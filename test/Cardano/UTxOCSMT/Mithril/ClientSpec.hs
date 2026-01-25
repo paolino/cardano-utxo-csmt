@@ -14,9 +14,8 @@ import Cardano.UTxOCSMT.Mithril.Client
     ( MithrilNetwork (..)
     , SnapshotMetadata (..)
     , defaultMithrilConfig
-    , downloadSnapshot
+    , downloadSnapshotHttp
     , fetchLatestSnapshot
-    , snapshotDigest
     )
 import Cardano.UTxOCSMT.Mithril.Extraction
     ( ExtractionError (..)
@@ -25,13 +24,11 @@ import Cardano.UTxOCSMT.Mithril.Extraction
 import Data.List (isInfixOf)
 import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
-import System.Directory (findExecutable)
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
     ( Spec
     , describe
     , it
-    , pendingWith
     , shouldSatisfy
     )
 
@@ -45,61 +42,46 @@ spec = describe "Mithril Client E2E" $ do
         it "can fetch snapshot metadata from mainnet aggregator"
             $ testFetchSnapshot MithrilMainnet
 
-    describe "downloadSnapshot" $ do
+    describe "downloadSnapshotHttp" $ do
         it "downloads preview snapshot with ledger state" $ do
-            hasMithril <- findExecutable "mithril-client"
-            case hasMithril of
-                Nothing ->
-                    pendingWith "mithril-client not found in PATH"
-                Just _ -> do
-                    manager <- newManager tlsManagerSettings
-                    withSystemTempDirectory "mithril-test" $ \tmpDir -> do
-                        let config =
-                                defaultMithrilConfig
-                                    manager
-                                    MithrilPreview
-                                    tmpDir
-                        -- Fetch snapshot metadata
-                        fetchResult <- fetchLatestSnapshot config
-                        case fetchResult of
+            manager <- newManager tlsManagerSettings
+            withSystemTempDirectory "mithril-test" $ \tmpDir -> do
+                let config =
+                        defaultMithrilConfig
+                            manager
+                            MithrilPreview
+                            tmpDir
+                -- Fetch snapshot metadata
+                fetchResult <- fetchLatestSnapshot config
+                case fetchResult of
+                    Left err ->
+                        fail $ "Failed to fetch snapshot: " ++ show err
+                    Right snapshot -> do
+                        -- Download via HTTP (no verification)
+                        downloadResult <-
+                            downloadSnapshotHttp config snapshot
+                        case downloadResult of
                             Left err ->
-                                fail
-                                    $ "Failed to fetch snapshot: "
-                                    ++ show err
-                            Right snapshot -> do
-                                -- Download the snapshot
-                                downloadResult <-
-                                    downloadSnapshot
-                                        config
-                                        (snapshotDigest snapshot)
-                                case downloadResult of
-                                    Left err ->
+                                fail $ "Failed to download: " ++ show err
+                            Right dbPath -> do
+                                -- Check that ledger state exists
+                                ledgerResult <- findLedgerStateFile dbPath
+                                case ledgerResult of
+                                    Left (LedgerStateNotFound _) ->
                                         fail
-                                            $ "Failed to download: "
-                                            ++ show err
-                                    Right dbPath -> do
-                                        -- Check that ledger state exists
-                                        ledgerResult <-
-                                            findLedgerStateFile dbPath
-                                        case ledgerResult of
-                                            Left (LedgerStateNotFound _) ->
-                                                fail
-                                                    "Ledger state directory \
-                                                    \not found"
-                                            Left (NoLedgerStateFiles _) ->
-                                                fail
-                                                    "No ledger state files \
-                                                    \found"
-                                            Left err ->
-                                                fail $ "Error: " ++ show err
-                                            Right (filePath, slot) -> do
-                                                slot
-                                                    `shouldSatisfy` (> 0)
-                                                filePath
-                                                    `shouldSatisfy` ( \p ->
-                                                        ".lstate"
-                                                            `isInfixOf` p
-                                                                      )
+                                            "Ledger state directory not found"
+                                    Left (NoLedgerStateFiles _) ->
+                                        fail "No ledger state files found"
+                                    Left err ->
+                                        fail $ "Error: " ++ show err
+                                    Right (filePath, slot) -> do
+                                        slot `shouldSatisfy` (> 0)
+                                        -- New format: ledger/<slot>/
+                                        -- Old format: ledger/<slot>-<hash>.lstate
+                                        filePath
+                                            `shouldSatisfy` ( \p ->
+                                                "ledger" `isInfixOf` p
+                                                            )
 
 testFetchSnapshot :: MithrilNetwork -> IO ()
 testFetchSnapshot network = do
