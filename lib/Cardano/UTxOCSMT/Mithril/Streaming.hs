@@ -21,6 +21,9 @@ module Cardano.UTxOCSMT.Mithril.Streaming
     , StreamConfig (..)
     , defaultStreamConfig
 
+      -- * Encoding conversion
+    , convertToCBOR
+
       -- * Tracing
     , StreamTrace (..)
     , renderStreamTrace
