@@ -132,7 +132,13 @@ mithril-e2e:
         --test-option=--match \
         --test-option="Mithril"
 
-# Serve documentation locally
+# Serve documentation locally (finds free port)
 serve-docs:
     #!/usr/bin/env bash
-    mkdocs serve
+    set -euo pipefail
+    port=8000
+    while nc -z localhost $port 2>/dev/null; do
+        port=$((port + 1))
+    done
+    echo "Serving docs on http://localhost:$port"
+    mkdocs serve -a "localhost:$port"
