@@ -323,7 +323,7 @@ newFinality isFinal = do
     tip <- getTip mkQuery
     iterating RollbackPoints $ do
         me <- firstEntry
-        ($ Origin) . ($ me) $ fix $ \go current finality ->
+        flip ($ me) Origin $ fix $ \go current finality ->
             case current of
                 Nothing -> pure Nothing
                 Just Entry{entryKey} ->

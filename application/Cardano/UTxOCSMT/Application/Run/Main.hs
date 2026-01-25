@@ -51,7 +51,8 @@ import Cardano.UTxOCSMT.Application.Metrics
     , metricsTracer
     )
 import Cardano.UTxOCSMT.Application.Options
-    ( Options (..)
+    ( MithrilOptions (..)
+    , Options (..)
     , optionsParser
     )
 import Cardano.UTxOCSMT.Application.Run.Application
@@ -72,6 +73,15 @@ import Cardano.UTxOCSMT.HTTP.Base16
     , unsafeDecodeBase16Text
     )
 import Cardano.UTxOCSMT.HTTP.Server (runAPIServer, runDocsServer)
+import Cardano.UTxOCSMT.Mithril.Client (defaultMithrilConfig)
+import Cardano.UTxOCSMT.Mithril.Client qualified as MithrilClient
+import Cardano.UTxOCSMT.Mithril.Import
+    ( ImportResult (..)
+    , ImportTrace (..)
+    , importFromMithril
+    , renderImportTrace
+    )
+import Cardano.UTxOCSMT.Mithril.Options qualified as Mithril
 import Cardano.UTxOCSMT.Ouroboros.Types
     ( Point
     )
@@ -97,7 +107,7 @@ import Data.ByteString (StrictByteString, toStrict)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.ByteString.Short (fromShort, toShort)
 import Data.ByteString.Short qualified as B
-import Data.Maybe (isNothing)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Serialize
     ( getShortByteString
     , getWord32be
@@ -130,6 +140,8 @@ import Database.RocksDB
     , withDBCF
     )
 import Main.Utf8 (withUtf8)
+import Network.HTTP.Client (newManager)
+import Network.HTTP.Client.TLS (tlsManagerSettings)
 import OptEnvConf (runParser)
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHash (..))
 import Ouroboros.Consensus.Ledger.SupportsPeerSelection (PortNumber)
@@ -138,6 +150,7 @@ import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point (WithOrigin (..))
 import Ouroboros.Network.Point qualified as Network
 import Paths_cardano_utxo_csmt (version)
+import System.IO.Temp (withSystemTempDirectory)
 
 withRocksDB
     :: FilePath
@@ -172,6 +185,7 @@ data MainTraces
     | Application ApplicationTrace
     | ServeApi
     | ServeDocs
+    | Mithril ImportTrace
 
 renderMainTraces :: MainTraces -> String
 renderMainTraces Boot = "Starting up Cardano UTxO CSMT client..."
@@ -189,6 +203,8 @@ renderMainTraces ServeApi =
     "Starting API server..."
 renderMainTraces ServeDocs =
     "Starting API documentation server..."
+renderMainTraces (Mithril mt) =
+    "Mithril: " ++ renderImportTrace mt
 
 startHTTPService
     :: IO () -> Maybe PortNumber -> (PortNumber -> IO ()) -> IO ()
@@ -209,6 +225,7 @@ main = withUtf8 $ do
         , portNumber
         , networkMagic
         , headersQueueSize
+        , mithrilOptions
         } <-
         runParser
             version
@@ -252,7 +269,7 @@ main = withUtf8 $ do
                         (readTVarIO metricsVar)
                         (queryMerkleRoots runner)
                         (queryInclusionProof runner)
-            startingPoint' <- setupDB tracer startingPoint runner
+            startingPoint' <- setupDB tracer startingPoint mithrilOptions runner
             -- Emit the base checkpoint to metrics
             _ <-
                 application
@@ -278,6 +295,7 @@ stealMetricsEvent _ = Nothing
 setupDB
     :: Tracer IO MainTraces
     -> Point
+    -> MithrilOptions
     -> RunCSMTTransaction
         ColumnFamily
         BatchOp
@@ -287,13 +305,14 @@ setupDB
         LazyByteString
         IO
     -> IO Point
-setupDB TraceWith{trace, contra} startingPoint runner@RunCSMTTransaction{txRunTransaction} = do
+setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransaction{txRunTransaction} = do
     new <- checkEmptyRollbacks runner
     if new
         then do
-            setup (contra New) runner armageddonParams
-            txRunTransaction $ putBaseCheckpoint startingPoint
-            return startingPoint
+            -- Check if Mithril bootstrap is enabled
+            if mithrilEnabled mithrilOpts
+                then bootstrapFromMithril
+                else regularSetup
         else do
             response <- txRunTransaction getBaseCheckpoint
             case response of
@@ -302,6 +321,60 @@ setupDB TraceWith{trace, contra} startingPoint runner@RunCSMTTransaction{txRunTr
                 Just point -> do
                     trace $ NotEmpty point
                     return point
+  where
+    regularSetup = do
+        setup (contra New) runner armageddonParams
+        txRunTransaction $ putBaseCheckpoint startingPoint
+        return startingPoint
+
+    bootstrapFromMithril = do
+        -- Create HTTP manager for Mithril API calls
+        manager <- newManager tlsManagerSettings
+
+        -- Determine download directory
+        let downloadDir = Mithril.mithrilDownloadDir mithrilOpts
+
+        case downloadDir of
+            Just dir -> runMithrilBootstrap manager dir
+            Nothing ->
+                -- Use temporary directory for downloads
+                withSystemTempDirectory "mithril-snapshot" $ \tempDir ->
+                    runMithrilBootstrap manager tempDir
+
+    runMithrilBootstrap manager downloadDir = do
+        let baseConfig =
+                defaultMithrilConfig
+                    manager
+                    (Mithril.mithrilNetwork mithrilOpts)
+                    downloadDir
+            mithrilConfig =
+                baseConfig
+                    { MithrilClient.mithrilAggregatorUrl =
+                        fromMaybe
+                            (MithrilClient.mithrilAggregatorUrl baseConfig)
+                            (Mithril.mithrilAggregatorUrl mithrilOpts)
+                    , MithrilClient.mithrilClientPath =
+                        Mithril.mithrilClientPath mithrilOpts
+                    }
+
+        result <-
+            importFromMithril (contramap Mithril (contra id)) mithrilConfig
+
+        case result of
+            ImportSuccess checkpoint _dbPath -> do
+                -- Mithril import succeeded
+                -- TODO: Actually import UTxOs from the downloaded immutable DB
+                -- For now, we set up an empty database at the Mithril checkpoint
+                setup (contra New) runner armageddonParams
+                txRunTransaction $ putBaseCheckpoint checkpoint
+                return checkpoint
+            ImportFailed _err -> do
+                -- Fall back to regular setup if Mithril fails
+                trace $ Mithril $ ImportError _err
+                regularSetup
+            ImportSkipped _reason -> do
+                -- Fall back to regular setup
+                regularSetup
 
 checkEmptyRollbacks
     :: RunCSMTTransaction
