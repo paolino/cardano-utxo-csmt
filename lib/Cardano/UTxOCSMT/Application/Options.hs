@@ -5,11 +5,20 @@ module Cardano.UTxOCSMT.Application.Options
     , nodeNameOption
     , portNumberOption
     , optionsParser
+
+      -- * Re-exports for Mithril
+    , MithrilOptions (..)
+    , MithrilNetwork (..)
     )
 where
 
 import Cardano.UTxOCSMT.Application.BlockFetch
     ( EventQueueLength (..)
+    )
+import Cardano.UTxOCSMT.Mithril.Client (MithrilNetwork (..))
+import Cardano.UTxOCSMT.Mithril.Options
+    ( MithrilOptions (..)
+    , mithrilOptionsParser
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (HeaderHash, Point)
 import Data.ByteArray.Encoding
@@ -66,6 +75,7 @@ data Options = Options
     , apiPort :: Maybe PortNumber
     , apiDocsPort :: Maybe PortNumber
     , metricsOn :: Bool
+    , mithrilOptions :: MithrilOptions
     }
 
 dbPathOption :: Parser FilePath
@@ -220,3 +230,4 @@ optionsParser =
         <*> apiPortOption
         <*> apiDocsPortOption
         <*> metricsSwitch
+        <*> mithrilOptionsParser
