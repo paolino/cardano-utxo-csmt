@@ -16,12 +16,10 @@ This can reduce initial sync time from days to minutes.
 
 ## Demo
 
-```asciinema
-{
-    "file": "assets/mithril-bootstrap.cast",
-    "title": "Mithril Bootstrap Demo",
-    "idleTimeLimit": 2,
-    "poster": "npt:0:3"
+```asciinema-player
+{ "file": "assets/mithril-bootstrap.cast"
+, "mkap_theme": "none"
+, "cols": 100
 }
 ```
 
