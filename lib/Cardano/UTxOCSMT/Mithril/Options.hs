@@ -25,6 +25,7 @@ import OptEnvConf
     , help
     , long
     , maybeReader
+    , metavar
     , option
     , optional
     , reader
@@ -79,6 +80,7 @@ mithrilNetworkOption =
             "Mithril network to use for bootstrapping. \
             \Options: mainnet, preprod, preview. \
             \Should match the Cardano network being synced."
+        , metavar "NETWORK"
         , reader $ maybeReader readMithrilNetwork
         , value MithrilMainnet
         , option
@@ -93,6 +95,7 @@ mithrilAggregatorOption =
             , help
                 "Override Mithril aggregator URL. \
                 \By default, uses the official aggregator for the selected network."
+            , metavar "URL"
             , reader str
             , option
             ]
@@ -105,6 +108,7 @@ mithrilClientPathOption =
         , help
             "Path to mithril-client binary. \
             \The mithril-client CLI handles snapshot download and verification."
+        , metavar "PATH"
         , reader str
         , value "mithril-client"
         , option
@@ -119,6 +123,7 @@ mithrilDownloadDirOption =
             , help
                 "Directory for Mithril snapshot downloads. \
                 \Uses a temporary directory if not specified."
+            , metavar "DIR"
             , reader str
             , option
             ]
