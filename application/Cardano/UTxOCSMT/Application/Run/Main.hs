@@ -358,19 +358,24 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
                     }
 
         result <-
-            importFromMithril (contramap Mithril (contra id)) mithrilConfig
+            importFromMithril
+                (contramap Mithril (contra id))
+                mithrilConfig
+                runner
 
         case result of
-            ImportSuccess checkpoint _dbPath -> do
-                -- Mithril import succeeded
-                -- TODO: Actually import UTxOs from the downloaded immutable DB
-                -- For now, we set up an empty database at the Mithril checkpoint
+            ImportSuccess checkpoint _count _dbPath -> do
+                -- Mithril import succeeded, UTxOs already imported
                 setup (contra New) runner armageddonParams
                 txRunTransaction $ putBaseCheckpoint checkpoint
                 return checkpoint
-            ImportFailed _err -> do
+            ImportFailed err -> do
                 -- Fall back to regular setup if Mithril fails
-                trace $ Mithril $ ImportError _err
+                trace $ Mithril $ ImportError err
+                regularSetup
+            ImportExtractionFailed err -> do
+                -- Fall back to regular setup if extraction fails
+                trace $ Mithril $ ImportExtractionError err
                 regularSetup
             ImportSkipped _reason -> do
                 -- Fall back to regular setup
