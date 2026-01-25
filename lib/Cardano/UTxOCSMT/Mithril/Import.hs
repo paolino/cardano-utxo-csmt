@@ -7,12 +7,9 @@ database. It orchestrates the full bootstrap process:
 
 1. Fetch latest snapshot metadata from Mithril aggregator
 2. Download and verify snapshot via mithril-client
-3. Extract UTxO set from Cardano immutable DB files
+3. Extract UTxO set from Cardano ledger state files
 4. Bulk import into CSMT database
 5. Set checkpoint for chain sync continuation
-
-Note: UTxO extraction from immutable DB is marked as TODO for follow-up.
-This exploration PR focuses on the infrastructure and integration points.
 -}
 module Cardano.UTxOCSMT.Mithril.Import
     ( -- * Import operations
@@ -25,28 +22,48 @@ module Cardano.UTxOCSMT.Mithril.Import
     )
 where
 
+import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
+    ( RunCSMTTransaction
+    )
 import Cardano.UTxOCSMT.Mithril.Client
     ( MithrilConfig (..)
     , MithrilError
     , MithrilTrace (..)
     , SnapshotMetadata (..)
-    , downloadSnapshot
+    , downloadSnapshotHttp
     , fetchLatestSnapshot
     , renderMithrilError
     , renderMithrilTrace
     )
+import Cardano.UTxOCSMT.Mithril.Extraction
+    ( ExtractionError
+    , ExtractionTrace
+    , extractUTxOsFromSnapshot
+    , renderExtractionError
+    , renderExtractionTrace
+    )
+import Cardano.UTxOCSMT.Mithril.Streaming
+    ( StreamTrace
+    , defaultStreamConfig
+    , renderStreamTrace
+    , streamToCSMT
+    )
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
-import Control.Tracer (Tracer, traceWith)
+import Control.Tracer (Tracer, contramap, traceWith)
+import Data.ByteString.Lazy (ByteString)
 import Data.Word (Word64)
+import Database.RocksDB (BatchOp, ColumnFamily)
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point (WithOrigin (..))
 
 -- | Result of Mithril import operation
 data ImportResult
-    = -- | Import succeeded, returns checkpoint and immutable DB path
-      ImportSuccess Point FilePath
-    | -- | Import failed with error
+    = -- | Import succeeded: checkpoint, UTxO count, immutable DB path
+      ImportSuccess Point Word64 FilePath
+    | -- | Import failed with Mithril error
       ImportFailed MithrilError
+    | -- | Import failed during extraction
+      ImportExtractionFailed ExtractionError
     | -- | Import was skipped (e.g., no snapshots available)
       ImportSkipped String
 
@@ -58,12 +75,18 @@ data ImportTrace
       ImportMithril MithrilTrace
     | -- | Extracting UTxO from immutable DB at path
       ImportExtractingUTxO FilePath
+    | -- | Extraction trace event
+      ImportExtraction ExtractionTrace
+    | -- | Streaming trace event
+      ImportStreaming StreamTrace
     | -- | Progress: current count, total estimated
       ImportProgress Word64 Word64
     | -- | Import complete: total UTxOs imported, checkpoint
       ImportComplete Word64 Point
     | -- | Error during import
       ImportError MithrilError
+    | -- | Extraction error
+      ImportExtractionError ExtractionError
 
 -- | Render trace for logging
 renderImportTrace :: ImportTrace -> String
@@ -72,7 +95,11 @@ renderImportTrace ImportStarting =
 renderImportTrace (ImportMithril mt) =
     renderMithrilTrace mt
 renderImportTrace (ImportExtractingUTxO path) =
-    "Extracting UTxO set from immutable DB: " <> path
+    "Extracting UTxO set from ledger state: " <> path
+renderImportTrace (ImportExtraction et) =
+    renderExtractionTrace et
+renderImportTrace (ImportStreaming st) =
+    renderStreamTrace st
 renderImportTrace (ImportProgress current total) =
     "Import progress: "
         <> show current
@@ -85,6 +112,8 @@ renderImportTrace (ImportComplete count _checkpoint) =
         <> " UTxOs imported"
 renderImportTrace (ImportError err) =
     "Mithril import error: " <> renderMithrilError err
+renderImportTrace (ImportExtractionError err) =
+    "Extraction error: " <> renderExtractionError err
 
 {- | Import UTxO set from Mithril snapshot into CSMT database
 
@@ -92,20 +121,26 @@ This function orchestrates the full Mithril bootstrap process:
 
 1. Fetches the latest snapshot metadata from the aggregator
 2. Downloads and verifies the snapshot using mithril-client
-3. Extracts the UTxO set from the downloaded Cardano immutable DB
-4. Bulk imports UTxOs into the CSMT database
+3. Extracts the UTxO set from the downloaded ledger state
+4. Streams UTxOs into the CSMT database
 5. Returns the checkpoint for chain sync to continue from
-
-Note: The UTxO extraction step is currently a placeholder.
-Full implementation requires parsing Cardano immutable DB format.
 -}
 importFromMithril
     :: Tracer IO ImportTrace
     -- ^ Tracer for progress logging
     -> MithrilConfig
     -- ^ Mithril client configuration
+    -> RunCSMTTransaction
+        ColumnFamily
+        BatchOp
+        Point
+        hash
+        ByteString
+        ByteString
+        IO
+    -- ^ CSMT transaction runner for database operations
     -> IO ImportResult
-importFromMithril tracer config = do
+importFromMithril tracer config runner = do
     traceWith tracer ImportStarting
 
     -- Step 1: Fetch latest snapshot metadata
@@ -132,7 +167,7 @@ importFromMithril tracer config = do
                 $ ImportMithril
                 $ MithrilDownloading digest (mithrilDownloadDir config)
 
-            downloadResult <- downloadSnapshot config digest
+            downloadResult <- downloadSnapshotHttp config snapshot
 
             case downloadResult of
                 Left err -> do
@@ -144,17 +179,28 @@ importFromMithril tracer config = do
                         $ MithrilDownloadComplete dbPath
 
                     -- Step 3: Extract UTxO and import
-                    -- TODO: Implement UTxO extraction from immutable DB
-                    -- This requires parsing the Cardano immutable DB format
-                    -- For now, we return the checkpoint for manual extraction
                     traceWith tracer $ ImportExtractingUTxO dbPath
 
-                    let checkpoint = makeCheckpoint snapshot
+                    extractResult <-
+                        extractUTxOsFromSnapshot
+                            (contramap ImportExtraction tracer)
+                            dbPath
+                            ( streamToCSMT
+                                (contramap ImportStreaming tracer)
+                                defaultStreamConfig
+                                runner
+                            )
 
-                    -- Placeholder for actual UTxO count
-                    traceWith tracer $ ImportComplete 0 checkpoint
+                    case extractResult of
+                        Left err -> do
+                            traceWith tracer $ ImportExtractionError err
+                            pure $ ImportExtractionFailed err
+                        Right count -> do
+                            let checkpoint = makeCheckpoint snapshot
 
-                    pure $ ImportSuccess checkpoint dbPath
+                            traceWith tracer $ ImportComplete count checkpoint
+
+                            pure $ ImportSuccess checkpoint count dbPath
 
 {- | Create a Point from snapshot metadata for chain sync checkpoint
 

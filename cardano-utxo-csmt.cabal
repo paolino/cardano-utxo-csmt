@@ -145,8 +145,10 @@ library library
     Cardano.UTxOCSMT.Application.UTxOs
     Cardano.UTxOCSMT.Bootstrap.App
     Cardano.UTxOCSMT.Mithril.Client
+    Cardano.UTxOCSMT.Mithril.Extraction
     Cardano.UTxOCSMT.Mithril.Import
     Cardano.UTxOCSMT.Mithril.Options
+    Cardano.UTxOCSMT.Mithril.Streaming
     Cardano.UTxOCSMT.Ouroboros.Application
     Cardano.UTxOCSMT.Ouroboros.Codecs
     Cardano.UTxOCSMT.Ouroboros.Connection
@@ -174,7 +176,9 @@ library library
     , comonad
     , contra-tracer
     , csmt
+    , directory
     , exceptions
+    , filepath
     , foldl
     , http-client
     , http-types
@@ -257,6 +261,9 @@ test-suite unit-tests
     , aeson
     , base
     , bytestring
+    , cardano-ledger-babbage
+    , cardano-ledger-conway
+    , cardano-ledger-core
     , cardano-slotting
     , cardano-utxo-csmt:http
     , cardano-utxo-csmt:library
@@ -269,10 +276,12 @@ test-suite unit-tests
     , http-types
     , lens
     , memory
+    , mempack
     , ouroboros-network-api
     , QuickCheck
     , rocksdb-haskell-jprupp
     , rocksdb-kv-transactions:kv-transactions
+    , streaming
     , temporary
     , text
     , transformers

@@ -25,6 +25,7 @@ module Cardano.UTxOCSMT.Mithril.Client
       -- * Operations
     , fetchLatestSnapshot
     , downloadSnapshot
+    , downloadSnapshotHttp
 
       -- * Errors
     , MithrilError (..)
@@ -126,18 +127,27 @@ data SnapshotMetadata = SnapshotMetadata
     -- ^ Uncompressed size in bytes
     , snapshotCertificateHash :: Text
     -- ^ Certificate hash for verification
+    , snapshotLocations :: [Text]
+    -- ^ Download URLs for the snapshot archive
+    , snapshotAncillaryLocations :: [Text]
+    -- ^ Download URLs for ancillary data (ledger state)
     }
     deriving stock (Show, Eq)
 
 instance FromJSON SnapshotMetadata where
     parseJSON = withObject "SnapshotMetadata" $ \o -> do
-        snapshotDigest <- SnapshotDigest <$> o .: "hash"
+        snapshotDigest <- SnapshotDigest <$> o .: "digest"
         beacon <- o .: "beacon"
         snapshotBeaconSlot <- beacon .: "immutable_file_number"
         snapshotBeaconEpoch <- beacon .: "epoch"
-        snapshotMerkleRoot <- o .: "merkle_root"
-        snapshotSize <- o .:? "total_db_size_uncompressed"
+        snapshotMerkleRoot <- o .: "certificate_hash"
+        snapshotSize <- o .:? "size"
         snapshotCertificateHash <- o .: "certificate_hash"
+        snapshotLocations <- o .: "locations"
+        snapshotAncillaryLocations <-
+            o .:? "ancillary_locations" >>= \case
+                Nothing -> pure []
+                Just locs -> pure locs
         pure SnapshotMetadata{..}
 
 -- | Errors that can occur during Mithril operations
@@ -154,6 +164,10 @@ data MithrilError
       MithrilClientFailed Int Text Text
     | -- | No snapshots available from aggregator
       MithrilNoSnapshots
+    | -- | No download locations in snapshot metadata
+      MithrilNoLocations
+    | -- | Extraction command failed
+      MithrilExtractionFailed Int Text
     deriving stock (Show)
 
 instance Exception MithrilError
@@ -177,6 +191,10 @@ renderMithrilError (MithrilClientFailed code stdout stderr) =
         <> T.unpack stdout
         <> " "
         <> T.unpack stderr
+renderMithrilError MithrilNoLocations =
+    "No download locations in snapshot metadata"
+renderMithrilError (MithrilExtractionFailed code msg) =
+    "Extraction failed (exit " <> show code <> "): " <> T.unpack msg
 
 -- | Trace events for Mithril operations
 data MithrilTrace
@@ -223,7 +241,7 @@ fetchLatestSnapshot
     :: MithrilConfig
     -> IO (Either MithrilError SnapshotMetadata)
 fetchLatestSnapshot MithrilConfig{mithrilAggregatorUrl, mithrilHttpManager} = do
-    let url = mithrilAggregatorUrl <> "/artifact/cardano-database"
+    let url = mithrilAggregatorUrl <> "/artifact/snapshots"
     result <- try $ do
         request <- parseRequest url
         response <- httpLbs request mithrilHttpManager
@@ -265,9 +283,11 @@ downloadSnapshot
         }
     (SnapshotDigest digest) = do
         -- Run mithril-client cardano-db download
+        -- Include ancillary files (ledger state) for UTxO extraction
         let args =
                 [ "cardano-db"
                 , "download"
+                , "--include-ancillary"
                 , T.unpack digest
                 ]
             envVars =
@@ -309,3 +329,70 @@ genesisVkForNetwork MithrilPreview =
     "5b3134302c3136382c3134352c3137382c3138362c3131342c3133362c313935\
     \2c3231312c3132342c3133332c3137332c3139382c3133392c3233302c313332\
     \2c3139362c3231342c3234312c36365d"
+
+{- | Download a snapshot via HTTP (without verification)
+
+This downloads the snapshot archive directly from the CDN URLs
+provided in the metadata. It does NOT verify the STM certificate
+chain - use 'downloadSnapshot' with mithril-client for verified
+downloads in production.
+
+Requires @tar@ and @zstd@ commands to be available in PATH.
+-}
+downloadSnapshotHttp
+    :: MithrilConfig
+    -> SnapshotMetadata
+    -> IO (Either MithrilError FilePath)
+downloadSnapshotHttp
+    MithrilConfig{mithrilDownloadDir, mithrilHttpManager}
+    SnapshotMetadata{snapshotAncillaryLocations} =
+        case snapshotAncillaryLocations of
+            [] -> pure $ Left MithrilNoLocations
+            (url : _) -> downloadAndExtract (T.unpack url)
+      where
+        -- Files extract directly to mithrilDownloadDir
+        extractedPath = mithrilDownloadDir
+
+        downloadAndExtract url = do
+            -- Download the archive
+            result <- try $ do
+                request <- parseRequest url
+                response <- httpLbs request mithrilHttpManager
+                pure (responseStatus response, responseBody response)
+            case result of
+                Left (e :: HttpException) ->
+                    pure $ Left $ MithrilHttpError e
+                Right (status, body)
+                    | statusCode status /= 200 ->
+                        pure
+                            $ Left
+                            $ MithrilApiError
+                                (statusCode status)
+                                (T.pack "Download failed")
+                    | otherwise -> do
+                        -- Write to temp file and extract
+                        let archivePath = mithrilDownloadDir <> "/snapshot.tar.zst"
+                        LBS.writeFile archivePath body
+                        extractArchive archivePath
+
+        extractArchive archivePath = do
+            -- Extract using tar and zstd: tar -I zstd -xf archive -C dir
+            (exitCode, _stdout, stderr) <-
+                readProcess
+                    $ proc
+                        "tar"
+                        [ "-I"
+                        , "zstd"
+                        , "-xf"
+                        , archivePath
+                        , "-C"
+                        , mithrilDownloadDir
+                        ]
+            case exitCode of
+                ExitSuccess -> pure $ Right extractedPath
+                ExitFailure code ->
+                    pure
+                        $ Left
+                        $ MithrilExtractionFailed
+                            code
+                            (T.pack $ show $ LBS.toStrict stderr)

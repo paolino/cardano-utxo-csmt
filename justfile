@@ -122,3 +122,23 @@ dump-and-load-utxo socket-path address:
 update-swagger:
     #!/usr/bin/env bash
     nix run .#cardano-utxo-swagger > docs/assets/swagger.json
+
+# Run Mithril E2E tests (requires mithril-client in PATH)
+mithril-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cabal test unit-tests \
+        --test-show-details=direct \
+        --test-option=--match \
+        --test-option="Mithril"
+
+# Serve documentation locally (finds free port)
+serve-docs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    port=8000
+    while nc -z localhost $port 2>/dev/null; do
+        port=$((port + 1))
+    done
+    echo "Serving docs on http://localhost:$port"
+    mkdocs serve -a "localhost:$port"
