@@ -249,6 +249,25 @@ executable cardano-utxo-chainsync
 
   default-language: Haskell2010
 
+executable extract-utxos
+  import:           warnings
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
+  main-is:          executables/extract-utxos/main.hs
+  other-modules:    Paths_cardano_utxo_csmt
+  build-depends:
+    , base
+    , bytestring
+    , cardano-utxo-csmt:library
+    , contra-tracer
+    , http-client
+    , http-client-tls
+    , opt-env-conf
+    , serialise
+    , streaming
+    , temporary
+
+  default-language: Haskell2010
+
 library test-lib
   import:           warnings
   visibility:       public
@@ -284,6 +303,7 @@ test-suite unit-tests
     , QuickCheck
     , rocksdb-haskell-jprupp
     , rocksdb-kv-transactions:kv-transactions
+    , serialise
     , streaming
     , temporary
     , text
@@ -298,6 +318,7 @@ test-suite unit-tests
     Cardano.UTxOCSMT.Application.Database.RocksDBSpec
     Cardano.UTxOCSMT.HTTP.ServerSpec
     Cardano.UTxOCSMT.Mithril.ClientSpec
+    Cardano.UTxOCSMT.Mithril.ImportSpec
     Data.List.SampleFibonacciSpec
 
 benchmark bench
