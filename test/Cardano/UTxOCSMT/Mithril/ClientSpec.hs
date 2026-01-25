@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 {- |
 Module      : Cardano.UTxOCSMT.Mithril.ClientSpec
 Description : E2E tests for Mithril client
@@ -10,6 +12,9 @@ module Cardano.UTxOCSMT.Mithril.ClientSpec
     )
 where
 
+import Cardano.Ledger.Babbage.TxOut (BabbageTxOut)
+import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.TxIn (TxIn (..))
 import Cardano.UTxOCSMT.Mithril.Client
     ( MithrilNetwork (..)
     , SnapshotMetadata (..)
@@ -23,7 +28,10 @@ import Cardano.UTxOCSMT.Mithril.Extraction
     , findLedgerStateFile
     )
 import Control.Tracer (nullTracer)
+import Data.ByteString.Lazy qualified as LBS
 import Data.List (isInfixOf)
+import Data.MemPack (unpack)
+import Data.MemPack.Error (SomeError)
 import Data.Word (Word64)
 import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
@@ -86,26 +94,57 @@ spec = describe "Mithril Client E2E" $ do
                                             `shouldSatisfy` ( \p ->
                                                                 "ledger" `isInfixOf` p
                                                             )
-                                        -- Extract UTxOs and count them
+                                        -- Extract UTxOs and verify TxIn decoding
                                         extractResult <-
                                             extractUTxOsFromSnapshot
                                                 nullTracer
                                                 dbPath
-                                                countUtxos
+                                                (verifyTxInDecoding 100)
                                         case extractResult of
                                             Left err ->
                                                 fail
                                                     $ "Extraction failed: "
                                                         ++ show err
-                                            Right count ->
+                                            Right (count, decoded) -> do
                                                 -- Preview should have UTxOs
-                                                count
-                                                    `shouldSatisfy` (> 0)
+                                                count `shouldSatisfy` (> 0)
+                                                -- All sampled TxIns should
+                                                -- decode successfully
+                                                decoded `shouldSatisfy` (>= 100)
+
+{- | Verify extracted UTxO bytes can be decoded as Conway-era TxIn/TxOut
+
+The tvar file stores UTxOs as MemPack-encoded (TxIn, TxOut) pairs.
+This test verifies both can be decoded using cardano-ledger types.
+-}
+verifyTxInDecoding
+    :: Int
+    -- ^ Number of samples to decode
+    -> S.Stream (S.Of (LBS.ByteString, LBS.ByteString)) IO ()
+    -> IO (Word64, Int)
+    -- ^ (total count, successfully decoded samples)
+verifyTxInDecoding samples = go 0 0
   where
-    countUtxos
-        :: S.Stream (S.Of a) IO ()
-        -> IO Word64
-    countUtxos = S.fold_ (\n _ -> n + 1) 0 id
+    go !count !decoded stream = do
+        result <- S.next stream
+        case result of
+            Left () -> pure (count, decoded)
+            Right ((keyBs, valBs), rest) -> do
+                let newCount = count + 1
+                    -- Try to decode as TxIn using MemPack
+                    txInResult :: Either SomeError TxIn
+                    txInResult = unpack (LBS.toStrict keyBs)
+                    -- Try to decode as TxOut using MemPack
+                    txOutResult :: Either SomeError (BabbageTxOut ConwayEra)
+                    txOutResult = unpack (LBS.toStrict valBs)
+                    -- Count as decoded only if both succeed
+                    newDecoded =
+                        if newCount <= fromIntegral samples
+                            then case (txInResult, txOutResult) of
+                                (Right _, Right _) -> decoded + 1
+                                _ -> decoded
+                            else decoded
+                go newCount newDecoded rest
 
 testFetchSnapshot :: MithrilNetwork -> IO ()
 testFetchSnapshot network = do

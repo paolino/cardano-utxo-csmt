@@ -8,12 +8,12 @@ certified snapshots instead of syncing from genesis.
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Fetch snapshot metadata | ✅ Working | All networks (mainnet, preprod, preview) |
-| HTTP download (no verification) | ✅ Working | Downloads ancillary data with ledger state |
+| HTTP download (no verification) | ✅ Default | Downloads ancillary data with ledger state |
 | Find ledger state files | ✅ Working | Supports both old (.lstate) and new UTxO-HD formats |
 | CLI options | ✅ Working | `--mithril-bootstrap`, `--mithril-network`, etc. |
-| UTxO extraction from ledger state | ✅ Working | Reads raw CBOR from tvar file |
-| Import UTxOs to CSMT | ✅ Working | Streams to database with progress reporting |
-| Verified download (mithril-client) | ⚠️ Optional | Requires mithril-client binary in PATH |
+| UTxO extraction from ledger state | ✅ Working | Streams MemPack-encoded (TxIn, TxOut) pairs from tvar file |
+| TxIn/TxOut decoding | ✅ Verified | Decodes as Conway-era `TxIn` and `BabbageTxOut` (chain sync compatible) |
+| STM certificate verification | 🔮 Planned | See [FFI plan](mithril-stm-ffi-plan.md) on `feature/mithril-stm-ffi-plan` branch |
 
 ## Overview
 
@@ -21,10 +21,9 @@ Mithril bootstrapping:
 
 1. Downloads the latest certified snapshot from Mithril aggregators
 2. Extracts the UTxO set from the InMemory backing store (`tables/tvar`)
-3. Streams UTxOs into the CSMT database with progress reporting
-4. Sets checkpoint for chain sync to continue from the snapshot point
+3. Decodes MemPack-encoded (TxIn, TxOut) pairs as Conway-era ledger types
 
-This reduces initial sync time from days to minutes.
+This provides a fast way to obtain UTxO set data without syncing from genesis.
 
 ## Demo
 
@@ -56,7 +55,6 @@ cardano-utxo-chainsync \
 | `--mithril-bootstrap` | Enable Mithril bootstrapping | `false` |
 | `--mithril-network NETWORK` | Network: `mainnet`, `preprod`, `preview` | `mainnet` |
 | `--mithril-aggregator URL` | Override aggregator URL | Network default |
-| `--mithril-client-path PATH` | Path to mithril-client binary | `mithril-client` |
 | `--mithril-download-dir DIR` | Directory for downloads | Temp directory |
 
 ## Networks
@@ -85,17 +83,16 @@ Response includes:
 
 ### 2. Download and Extract
 
-Two download methods are available:
+**HTTP Download (current implementation)**
 
-**HTTP Download (no verification)**
 - Downloads directly from CDN URLs
-- Faster, no external dependencies
+- Fast, no external dependencies
 - Suitable for development/testing
 
-**Verified Download (requires mithril-client)**
-- Uses `mithril-client` CLI
-- Verifies STM certificate chain
-- Recommended for production
+!!! warning "No Cryptographic Verification"
+    The current implementation does not verify the Mithril STM certificate chain.
+    This is acceptable for development but production deployments should wait for
+    the FFI-based verification (see [STM verification plan](mithril-stm-ffi-plan.md)).
 
 ### 3. Ledger State Format
 
@@ -131,26 +128,36 @@ tvar file format:
     └── ...
 ```
 
-Each key-value pair contains MemPack-encoded `TxIn` and `TxOut` wrapped in CBOR bytes.
+Each key-value pair contains MemPack-encoded `TxIn` and `TxOut` (stored as CBOR bytes in the map).
 The extraction streams these pairs without full ledger state decoding, making it
 memory-efficient for large UTxO sets (preview: ~560MB, mainnet: much larger).
 
-### 5. CSMT Import
+### 5. Stream Processing
 
-Extracted UTxOs are streamed into the CSMT database:
+The extraction yields a stream of `(ByteString, ByteString)` pairs:
 
-- Progress reported every 100,000 entries
-- Batched database commits for efficiency
-- Same CBOR encoding as chain sync module for consistency
+- Key: MemPack-encoded `TxIn` (decodable via `Data.MemPack.unpack`)
+- Value: MemPack-encoded `TxOut` (decodable via `Data.MemPack.unpack`)
 
-The `Streaming.hs` module handles the streaming with configurable batch sizes.
+The E2E test verifies that extracted bytes decode successfully as
+Conway-era `Cardano.Ledger.TxIn.TxIn` and `Cardano.Ledger.Babbage.TxOut.BabbageTxOut`.
+
+Progress is reported every 10,000 entries during extraction.
 
 ## Security Considerations
 
-- **Production**: Use `mithril-client` for verified downloads
+!!! warning "Current Limitation"
+    The current implementation uses unverified HTTP download. Snapshots are
+    fetched from Mithril CDN without cryptographic verification of the STM
+    certificate chain.
+
+- **Production**: Wait for FFI-based STM verification (planned)
 - **Development**: HTTP download is acceptable for testing
-- Snapshots are signed by Cardano stake pool operators
-- Certificate chain verification ensures snapshot integrity
+- Snapshots are signed by Cardano stake pool operators using STM
+- Future: Certificate chain verification via Rust FFI bindings
+
+See the [Mithril STM FFI plan](mithril-stm-ffi-plan.md) for the verification
+implementation roadmap.
 
 ## Troubleshooting
 

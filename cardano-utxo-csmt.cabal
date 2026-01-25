@@ -261,6 +261,9 @@ test-suite unit-tests
     , aeson
     , base
     , bytestring
+    , cardano-ledger-babbage
+    , cardano-ledger-conway
+    , cardano-ledger-core
     , cardano-slotting
     , cardano-utxo-csmt:http
     , cardano-utxo-csmt:library
@@ -273,6 +276,7 @@ test-suite unit-tests
     , http-types
     , lens
     , memory
+    , mempack
     , ouroboros-network-api
     , QuickCheck
     , rocksdb-haskell-jprupp
