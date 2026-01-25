@@ -39,6 +39,8 @@ import OptEnvConf
 data MithrilOptions = MithrilOptions
     { mithrilEnabled :: Bool
     -- ^ Whether to attempt Mithril bootstrap for empty databases
+    , mithrilBootstrapOnly :: Bool
+    -- ^ Exit after bootstrap, don't start chain sync
     , mithrilNetwork :: MithrilNetwork
     -- ^ Target Mithril network
     , mithrilAggregatorUrl :: Maybe String
@@ -66,6 +68,20 @@ mithrilEnabledSwitch =
             "Enable Mithril-based bootstrapping for empty databases. \
             \When enabled and the database is empty, attempts to download \
             \a certified Mithril snapshot instead of syncing from genesis."
+        , reader auto
+        , value False
+        , switch True
+        ]
+
+-- | Switch to exit after bootstrap (don't start chain sync)
+mithrilBootstrapOnlySwitch :: Parser Bool
+mithrilBootstrapOnlySwitch =
+    setting
+        [ long "mithril-bootstrap-only"
+        , help
+            "Exit after Mithril bootstrap completes. \
+            \Useful for testing or pre-populating databases without \
+            \starting chain synchronization."
         , reader auto
         , value False
         , switch True
@@ -133,6 +149,7 @@ mithrilOptionsParser :: Parser MithrilOptions
 mithrilOptionsParser =
     MithrilOptions
         <$> mithrilEnabledSwitch
+        <*> mithrilBootstrapOnlySwitch
         <*> mithrilNetworkOption
         <*> mithrilAggregatorOption
         <*> mithrilClientPathOption

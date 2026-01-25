@@ -55,6 +55,7 @@ cardano-utxo-chainsync \
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--mithril-bootstrap` | Enable Mithril bootstrapping | `false` |
+| `--mithril-bootstrap-only` | Exit after bootstrap (skip chain sync) | `false` |
 | `--mithril-network NETWORK` | Network: `mainnet`, `preprod`, `preview` | `mainnet` |
 | `--mithril-aggregator URL` | Override aggregator URL | Network default |
 | `--mithril-download-dir DIR` | Directory for downloads | Temp directory |
