@@ -117,27 +117,27 @@ data SnapshotMetadata = SnapshotMetadata
     { snapshotDigest :: SnapshotDigest
     -- ^ Unique digest/hash of the snapshot
     , snapshotBeaconSlot :: Word64
-    -- ^ Slot number of the snapshot
+    -- ^ Immutable file number of the snapshot
     , snapshotBeaconEpoch :: Word64
     -- ^ Epoch of the snapshot
-    , snapshotBeaconBlockHash :: Maybe Text
-    -- ^ Block hash at snapshot point (if available)
+    , snapshotMerkleRoot :: Text
+    -- ^ Merkle root of the snapshot
     , snapshotSize :: Maybe Word64
-    -- ^ Compressed size in bytes
-    , snapshotLocations :: [Text]
-    -- ^ Download locations
+    -- ^ Uncompressed size in bytes
+    , snapshotCertificateHash :: Text
+    -- ^ Certificate hash for verification
     }
     deriving stock (Show, Eq)
 
 instance FromJSON SnapshotMetadata where
     parseJSON = withObject "SnapshotMetadata" $ \o -> do
-        snapshotDigest <- o .: "digest"
+        snapshotDigest <- SnapshotDigest <$> o .: "hash"
         beacon <- o .: "beacon"
         snapshotBeaconSlot <- beacon .: "immutable_file_number"
         snapshotBeaconEpoch <- beacon .: "epoch"
-        snapshotBeaconBlockHash <- beacon .:? "block_hash"
-        snapshotSize <- o .:? "size"
-        snapshotLocations <- o .: "locations" >>= mapM (.: "uri")
+        snapshotMerkleRoot <- o .: "merkle_root"
+        snapshotSize <- o .:? "total_db_size_uncompressed"
+        snapshotCertificateHash <- o .: "certificate_hash"
         pure SnapshotMetadata{..}
 
 -- | Errors that can occur during Mithril operations

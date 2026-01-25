@@ -37,14 +37,9 @@ import Cardano.UTxOCSMT.Mithril.Client
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
 import Control.Tracer (Tracer, traceWith)
-import Data.ByteString.Short qualified as SBS
-import Data.Text qualified as T
 import Data.Word (Word64)
-import Ouroboros.Consensus.HardFork.Combinator (OneEraHash (..))
-import Ouroboros.Network.Block (SlotNo (..))
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point (WithOrigin (..))
-import Ouroboros.Network.Point qualified as Network.Point
 
 -- | Result of Mithril import operation
 data ImportResult
@@ -161,20 +156,14 @@ importFromMithril tracer config = do
 
                     pure $ ImportSuccess checkpoint dbPath
 
--- | Create a Point from snapshot metadata for chain sync checkpoint
+{- | Create a Point from snapshot metadata for chain sync checkpoint
+
+Note: The Mithril API doesn't provide block hash directly, only merkle root.
+The chain sync will need to find intersection from the slot number.
+For now, we return Origin and let chain sync handle intersection.
+-}
 makeCheckpoint :: SnapshotMetadata -> Point
-makeCheckpoint SnapshotMetadata{snapshotBeaconSlot, snapshotBeaconBlockHash} =
-    case snapshotBeaconBlockHash of
-        Nothing ->
-            -- If no block hash available, use Origin as fallback
-            -- Chain sync will need to find intersection
-            Network.Point Origin
-        Just hashText ->
-            -- Parse block hash and create point
-            let hashBytes = hexToBytes hashText
-                slot = SlotNo snapshotBeaconSlot
-            in  Network.Point $ At $ Network.Point.Block slot (OneEraHash hashBytes)
-  where
-    -- Simple hex decoding (placeholder - should use proper decoder)
-    hexToBytes :: T.Text -> SBS.ShortByteString
-    hexToBytes _ = SBS.empty -- TODO: Implement proper hex decoding
+makeCheckpoint SnapshotMetadata{} =
+    -- TODO: Once we have block hash available, construct proper Point
+    -- For now, return Origin - chain sync will find intersection
+    Network.Point Origin

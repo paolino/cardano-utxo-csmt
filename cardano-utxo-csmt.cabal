@@ -264,6 +264,8 @@ test-suite unit-tests
     , contra-tracer
     , csmt
     , hspec
+    , http-client
+    , http-client-tls
     , http-types
     , lens
     , memory
@@ -283,6 +285,7 @@ test-suite unit-tests
   other-modules:
     Cardano.UTxOCSMT.Application.Database.RocksDBSpec
     Cardano.UTxOCSMT.HTTP.ServerSpec
+    Cardano.UTxOCSMT.Mithril.ClientSpec
     Data.List.SampleFibonacciSpec
 
 benchmark bench
