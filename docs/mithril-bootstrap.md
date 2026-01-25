@@ -11,23 +11,20 @@ certified snapshots instead of syncing from genesis.
 | HTTP download (no verification) | ✅ Working | Downloads ancillary data with ledger state |
 | Find ledger state files | ✅ Working | Supports both old (.lstate) and new UTxO-HD formats |
 | CLI options | ✅ Working | `--mithril-bootstrap`, `--mithril-network`, etc. |
-| UTxO extraction from ledger state | ❌ TODO | Requires UTxO-HD API support (MapKind parameter) |
-| Import UTxOs to CSMT | ❌ TODO | Blocked by extraction |
-| Verified download (mithril-client) | ❌ TODO | Binary not available in nix shell |
+| UTxO extraction from ledger state | ✅ Working | Reads raw CBOR from tvar file |
+| Import UTxOs to CSMT | ✅ Working | Streams to database with progress reporting |
+| Verified download (mithril-client) | ⚠️ Optional | Requires mithril-client binary in PATH |
 
 ## Overview
 
-When fully implemented, Mithril bootstrapping will:
+Mithril bootstrapping:
 
 1. Downloads the latest certified snapshot from Mithril aggregators
-2. Extracts the ledger state containing the UTxO set
-3. Imports UTxOs into the CSMT database
-4. Continues chain sync from the snapshot point
+2. Extracts the UTxO set from the InMemory backing store (`tables/tvar`)
+3. Streams UTxOs into the CSMT database with progress reporting
+4. Sets checkpoint for chain sync to continue from the snapshot point
 
-This will reduce initial sync time from days to minutes.
-
-**Current state**: Steps 1-2 work (download and locate ledger state). Steps 3-4 are blocked
-pending UTxO-HD API support in `ouroboros-consensus-cardano`.
+This reduces initial sync time from days to minutes.
 
 ## Demo
 
@@ -120,17 +117,33 @@ ledger/
 
 Each directory is named by slot number and contains the serialized ledger state.
 
-### 4. UTxO Extraction (TODO)
+### 4. UTxO Extraction
 
-Extracting UTxOs from the ledger state requires decoding the `ExtLedgerState` type
-from `ouroboros-consensus-cardano`. Recent versions use the UTxO-HD API which adds
-a `MapKind` type parameter. This decoding is not yet implemented.
+The UTxO set is stored in the `tables/tvar` file within the ledger state directory.
+This file uses the InMemory backing store format:
 
-### 5. CSMT Import (TODO)
+```
+tvar file format:
+├── List[1] - wrapper
+└── Map (indefinite-length CBOR)
+    ├── (bytes: TxIn, bytes: TxOut)
+    ├── (bytes: TxIn, bytes: TxOut)
+    └── ...
+```
 
-Once UTxOs are extracted, they will be streamed into the CSMT database using the
-same CBOR encoding as the chain sync module. The `Streaming.hs` module provides
-the infrastructure for batched imports with progress reporting.
+Each key-value pair contains MemPack-encoded `TxIn` and `TxOut` wrapped in CBOR bytes.
+The extraction streams these pairs without full ledger state decoding, making it
+memory-efficient for large UTxO sets (preview: ~560MB, mainnet: much larger).
+
+### 5. CSMT Import
+
+Extracted UTxOs are streamed into the CSMT database:
+
+- Progress reported every 100,000 entries
+- Batched database commits for efficiency
+- Same CBOR encoding as chain sync module for consistency
+
+The `Streaming.hs` module handles the streaming with configurable batch sizes.
 
 ## Security Considerations
 
@@ -155,6 +168,16 @@ The ledger state is in the ancillary data, not the main snapshot.
 
 ### Large Download Size
 
-Preview network ancillary data is ~400MB.
+Preview network ancillary data is ~400MB (tvar file ~560MB after extraction).
 Mainnet is significantly larger.
 Ensure sufficient disk space and bandwidth.
+
+### Extraction Errors
+
+If extraction fails with "TablesNotFound":
+- Verify the ledger state directory contains `tables/tvar`
+- Ensure the download completed successfully
+
+If extraction fails with "TablesDecodeFailed":
+- The tvar file format may have changed
+- Check for updates to ouroboros-consensus
