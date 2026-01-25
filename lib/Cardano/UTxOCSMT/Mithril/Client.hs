@@ -265,9 +265,11 @@ downloadSnapshot
         }
     (SnapshotDigest digest) = do
         -- Run mithril-client cardano-db download
+        -- Include ancillary files (ledger state) for UTxO extraction
         let args =
                 [ "cardano-db"
                 , "download"
+                , "--include-ancillary"
                 , T.unpack digest
                 ]
             envVars =
