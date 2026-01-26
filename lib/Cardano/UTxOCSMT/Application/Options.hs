@@ -45,7 +45,6 @@ import OptEnvConf
     , setting
     , short
     , str
-    , strOption
     , switch
     , value
     )

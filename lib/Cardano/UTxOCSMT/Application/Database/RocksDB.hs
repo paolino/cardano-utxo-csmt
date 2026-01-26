@@ -15,6 +15,7 @@ module Cardano.UTxOCSMT.Application.Database.RocksDB
     , newRunRocksDBTransaction
     , newRunRocksDBCSMTTransaction
     , newRocksDBState
+    , createUpdateState
     )
 where
 
@@ -124,3 +125,14 @@ newRocksDBState tracer db prisms csmtContext partiality slotHash armageddonParam
     runner <- newRunRocksDBCSMTTransaction db prisms csmtContext
     (,runner)
         <$> newState tracer partiality slotHash armageddonParams runner
+
+-- | Create Update state from an existing runner
+createUpdateState
+    :: (MonadFail m, Ord key, Ord slot)
+    => Tracer m (UpdateTrace slot hash)
+    -> PartialHistory
+    -> (slot -> hash)
+    -> ArmageddonParams hash
+    -> RunCSMTTransaction ColumnFamily BatchOp slot hash key value m
+    -> m (Update m slot key value, [slot])
+createUpdateState = newState
