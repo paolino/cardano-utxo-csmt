@@ -10,7 +10,7 @@ certified snapshots instead of syncing from genesis.
 | Fetch snapshot metadata | ✅ Working | All networks (mainnet, preprod, preview) |
 | HTTP download (no verification) | ✅ Default | Downloads ancillary data with ledger state |
 | Find ledger state files | ✅ Working | Supports both old (.lstate) and new UTxO-HD formats |
-| CLI options | ✅ Working | `--mithril-bootstrap`, `--mithril-network`, etc. |
+| CLI options | ✅ Working | `--network`, `--mithril-bootstrap`, etc. |
 | UTxO extraction from ledger state | ✅ Working | Streams MemPack-encoded (TxIn, TxOut) pairs from tvar file |
 | TxIn/TxOut decoding | ✅ Verified | Decodes as Conway-era `TxIn` and `BabbageTxOut` |
 | CBOR re-encoding | ✅ Working | Converts MemPack to CBOR for chain sync compatibility |
@@ -63,21 +63,21 @@ Enable Mithril bootstrap with the `--mithril-bootstrap` flag:
 
 ```bash
 cardano-utxo-chainsync \
+    --network preview \
     --mithril-bootstrap \
-    --mithril-network preview \
-    --csmt-db-path /path/to/db \
-    --node-name preview-node.world.dev.cardano.org \
-    --port 30002 \
-    --network-magic 2
+    --csmt-db-path /path/to/db
 ```
+
+The `--network` option sets both the Cardano network (magic, default peer) and
+the Mithril network automatically.
 
 ## CLI Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
+| `--network NETWORK` | Network: `mainnet`, `preprod`, `preview` | `mainnet` |
 | `--mithril-bootstrap` | Enable Mithril bootstrapping | `false` |
 | `--mithril-bootstrap-only` | Exit after bootstrap (skip chain sync) | `false` |
-| `--mithril-network NETWORK` | Network: `mainnet`, `preprod`, `preview` | `mainnet` |
 | `--mithril-aggregator URL` | Override aggregator URL | Network default |
 | `--mithril-download-dir DIR` | Directory for downloads | Temp directory |
 

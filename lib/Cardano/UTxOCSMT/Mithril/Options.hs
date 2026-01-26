@@ -13,8 +13,8 @@ bootstrapping of the UTxO CSMT database. Options include:
 module Cardano.UTxOCSMT.Mithril.Options
     ( MithrilOptions (..)
     , mithrilOptionsParser
+    , mithrilOptionsParser'
     , mithrilEnabledSwitch
-    , mithrilNetworkOption
     )
 where
 
@@ -151,6 +151,20 @@ mithrilOptionsParser =
         <$> mithrilEnabledSwitch
         <*> mithrilBootstrapOnlySwitch
         <*> mithrilNetworkOption
+        <*> mithrilAggregatorOption
+        <*> mithrilClientPathOption
+        <*> mithrilDownloadDirOption
+
+{- | Parser for Mithril options without network selection.
+
+The network is set from the main --network option and injected after parsing.
+-}
+mithrilOptionsParser' :: Parser MithrilOptions
+mithrilOptionsParser' =
+    MithrilOptions
+        <$> mithrilEnabledSwitch
+        <*> mithrilBootstrapOnlySwitch
+        <*> pure MithrilMainnet -- Placeholder, will be overwritten
         <*> mithrilAggregatorOption
         <*> mithrilClientPathOption
         <*> mithrilDownloadDirOption

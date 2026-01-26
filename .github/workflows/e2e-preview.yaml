@@ -19,12 +19,9 @@ jobs:
       - name: Run Mithril bootstrap and chain sync
         run: |
           timeout 2400 ./result/bin/cardano-utxo-chainsync \
+            --network preview \
             --mithril-bootstrap \
-            --mithril-network preview \
             --csmt-db-path /tmp/csmt-e2e-db \
-            --node-name preview-node.world.dev.cardano.org \
-            --port 30002 \
-            --network-magic 2 \
             || exit_code=$?
           # Exit code 124 means timeout - that's expected and OK
           if [ "${exit_code:-0}" -eq 124 ]; then

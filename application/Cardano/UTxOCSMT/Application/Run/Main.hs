@@ -53,7 +53,10 @@ import Cardano.UTxOCSMT.Application.Metrics
 import Cardano.UTxOCSMT.Application.Options
     ( MithrilOptions (..)
     , Options (..)
+    , networkMagic
+    , nodeName
     , optionsParser
+    , portNumber
     )
 import Cardano.UTxOCSMT.Application.Run.Application
     ( ApplicationTrace
@@ -226,9 +229,6 @@ main = withUtf8 $ do
         , apiPort
         , metricsOn
         , startingPoint
-        , nodeName
-        , portNumber
-        , networkMagic
         , headersQueueSize
         , mithrilOptions
         } <-
@@ -284,9 +284,9 @@ main = withUtf8 $ do
             -- Emit the base checkpoint to metrics
             _ <-
                 application
-                    networkMagic
-                    nodeName
-                    portNumber
+                    (networkMagic options)
+                    (nodeName options)
+                    (portNumber options)
                     startingPoint'
                     headersQueueSize
                     metricsEvent
