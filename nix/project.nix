@@ -24,6 +24,7 @@ let
       pkgs.nixfmt-classic
       pkgs.shellcheck
       pkgs.mkdocs
+      pkgs.marp-cli
       mkdocs.from-nixpkgs
       mkdocs.asciinema-plugin
       mkdocs.markdown-callouts

@@ -49,6 +49,8 @@ CI:
     find . -type f -name '*.hs' -not -path '*/dist-newstyle/*' -exec hlint {} +
     just update-swagger
     git diff --exit-code docs/assets/swagger.json
+    just update-diagrams
+    git diff --exit-code docs/presentation/light-clients.md
 
 
 build-docker tag='latest':
@@ -142,3 +144,24 @@ serve-docs:
     done
     echo "Serving docs on http://localhost:$port"
     mkdocs serve -a "localhost:$port"
+
+# Build presentation slides with Marp
+slides:
+    #!/usr/bin/env bash
+    just update-diagrams
+    marp --html docs/presentation/light-clients.md -o docs/presentation/index.html
+
+# Generate mermaid.ink URLs from .mmd files and update slides
+update-diagrams:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd docs/presentation
+    for mmd in diagrams/*.mmd; do
+        name=$(basename "$mmd" .mmd)
+        # Generate URL-safe base64
+        encoded=$(base64 -w0 < "$mmd" | tr '+/' '-_')
+        url="https://mermaid.ink/svg/$encoded"
+        echo "$name: $url"
+        # Update the markdown - find img with matching diagram name in comment
+        sed -i "s|<!-- $name --><img src=\"[^\"]*\"|<!-- $name --><img src=\"$url\"|g" light-clients.md
+    done
