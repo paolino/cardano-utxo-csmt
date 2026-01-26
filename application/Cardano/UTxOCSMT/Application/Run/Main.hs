@@ -133,7 +133,7 @@ import Data.Tracer.TraceWith
     , tracer
     , pattern TraceWith
     )
-import Data.Word (Word16)
+import Data.Word (Word16, Word64)
 import Database.KV.Cursor (firstEntry)
 import Database.KV.Transaction (iterating, query)
 import Database.RocksDB
@@ -267,7 +267,7 @@ main = withUtf8 $ do
                     context
 
             -- Do Mithril bootstrap before creating Update state
-            startingPoint' <-
+            SetupResult{setupStartingPoint, setupMithrilSlot} <-
                 setupDB tracer startingPoint mithrilOptions runner
 
             -- Now create the Update state (logs "New update state")
@@ -289,8 +289,14 @@ main = withUtf8 $ do
 
             -- Check if we should exit after bootstrap
             when (Mithril.mithrilBootstrapOnly mithrilOptions) $ do
-                trace $ BootstrapOnlyExit startingPoint'
+                trace $ BootstrapOnlyExit setupStartingPoint
                 exitSuccess
+
+            -- Create checkpoint action and skip configuration
+            let RunCSMTTransaction{txRunTransaction} = runner
+                setCheckpoint point =
+                    txRunTransaction $ putBaseCheckpoint point
+                mSkipTargetSlot = SlotNo <$> setupMithrilSlot
 
             -- Emit the base checkpoint to metrics
             _ <-
@@ -298,8 +304,10 @@ main = withUtf8 $ do
                     (networkMagic options)
                     (nodeName options)
                     (portNumber options)
-                    startingPoint'
+                    setupStartingPoint
                     headersQueueSize
+                    setCheckpoint
+                    mSkipTargetSlot
                     metricsEvent
                     (contra Application)
                     state
@@ -314,6 +322,14 @@ stealMetricsEvent (NotEmpty point) =
     Just $ BaseCheckpointEvent point
 stealMetricsEvent _ = Nothing
 
+-- | Result of database setup
+data SetupResult = SetupResult
+    { setupStartingPoint :: Point
+    -- ^ Starting point for chain sync
+    , setupMithrilSlot :: Maybe Word64
+    -- ^ Mithril slot to skip until (if applicable)
+    }
+
 setupDB
     :: Tracer IO MainTraces
     -> Point
@@ -326,7 +342,7 @@ setupDB
         LazyByteString
         LazyByteString
         IO
-    -> IO Point
+    -> IO SetupResult
 setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransaction{txRunTransaction} = do
     new <- checkEmptyRollbacks runner
     if new
@@ -342,12 +358,17 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
                     error "setupDB: Database is not empty but no base checkpoint found"
                 Just point -> do
                     trace $ NotEmpty point
-                    return point
+                    return
+                        SetupResult{setupStartingPoint = point, setupMithrilSlot = Nothing}
   where
     regularSetup = do
         setup (contra New) runner armageddonParams
         txRunTransaction $ putBaseCheckpoint startingPoint
-        return startingPoint
+        return
+            SetupResult
+                { setupStartingPoint = startingPoint
+                , setupMithrilSlot = Nothing
+                }
 
     bootstrapFromMithril = do
         -- Create HTTP manager for Mithril API calls
@@ -386,11 +407,19 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
                 runner
 
         case result of
-            ImportSuccess checkpoint _count _dbPath -> do
+            ImportSuccess{importCheckpoint, importSlot} -> do
                 -- Mithril import succeeded, UTxOs already imported
+                -- Don't save checkpoint yet - it will be saved when
+                -- we reach the target slot during chain sync
                 setup (contra New) runner armageddonParams
-                txRunTransaction $ putBaseCheckpoint checkpoint
-                return checkpoint
+                -- Save Origin as initial checkpoint (will be updated
+                -- when we reach the Mithril slot)
+                txRunTransaction $ putBaseCheckpoint importCheckpoint
+                return
+                    SetupResult
+                        { setupStartingPoint = importCheckpoint
+                        , setupMithrilSlot = Just importSlot
+                        }
             ImportFailed err -> do
                 -- Fall back to regular setup if Mithril fails
                 trace $ Mithril $ ImportError err
