@@ -29,15 +29,11 @@ Each block updates the tree, producing a new Merkle root that commits to the ent
 ## Quick Start
 
 ```bash
-# Using Docker
-docker run -p 8080:8080 \
-  ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt \
-  --peer-name <node-host> \
-  --peer-port 3001 \
-  --network-magic 764824073
-
-# Check status
-curl http://localhost:8080/metrics
+# Using nix with Mithril bootstrap (preview network)
+nix run github:paolino/cardano-utxo-csmt#cardano-utxo-chainsync -- \
+  --network preview \
+  --mithril-bootstrap \
+  --csmt-db-path /tmp/csmt-db
 ```
 
 See [Getting Started](getting-started.md) for detailed setup instructions.

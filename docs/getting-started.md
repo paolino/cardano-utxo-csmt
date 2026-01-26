@@ -16,13 +16,11 @@ The fastest way to get started is using Docker:
 gh run download -n cardano-utxo-csmt-image
 docker load < output-docker-image
 
-# Run the service
+# Run the service (mainnet is default)
 docker run -p 8080:8080 \
   ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt \
-  --peer-name <node-host> \
-  --peer-port 3001 \
-  --network-magic 764824073 \
-  --http-port 8080
+  --csmt-db-path /data \
+  --api-port 8080
 ```
 
 ## Quick Start with Nix
@@ -31,31 +29,31 @@ docker run -p 8080:8080 \
 # Setup caching (recommended)
 nix shell nixpkgs#cachix -c cachix use paolino
 
-# Run directly
+# Run directly (mainnet is default)
 nix run github:paolino/cardano-utxo-csmt -- \
-  --peer-name <node-host> \
-  --peer-port 3001 \
-  --network-magic 764824073 \
-  --http-port 8080
+  --csmt-db-path /tmp/csmt-db \
+  --api-port 8080
 ```
 
 ## Configuration Options
 
-| Option | Environment Variable | Description |
-|--------|---------------------|-------------|
-| `--peer-name` | `PEER_NAME` | Cardano node hostname |
-| `--peer-port` | `PEER_PORT` | Cardano node port (default: 3001) |
-| `--network-magic` | `NETWORK_MAGIC` | Network magic number |
-| `--http-port` | `HTTP_PORT` | HTTP API port (default: 8080) |
-| `--db-path` | `DB_PATH` | RocksDB database path |
+| Option | Description |
+|--------|-------------|
+| `--network` | Network: `mainnet`, `preprod`, `preview` (default: mainnet) |
+| `--node-name` | Override peer node hostname |
+| `--port` | Override peer node port |
+| `--csmt-db-path` | RocksDB database path (required) |
+| `--api-port` | HTTP API port |
+| `--mithril-bootstrap` | Bootstrap from Mithril snapshot |
 
-### Network Magic Values
+For preview network with Mithril bootstrap:
 
-| Network | Magic |
-|---------|-------|
-| Mainnet | 764824073 |
-| Preprod | 1 |
-| Preview | 2 |
+```bash
+cardano-utxo-chainsync \
+  --network preview \
+  --mithril-bootstrap \
+  --csmt-db-path /tmp/csmt-db
+```
 
 ## Verifying the Service
 

@@ -43,7 +43,8 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     , renderUpdateTrace
     )
 import Cardano.UTxOCSMT.Application.Database.RocksDB
-    ( newRocksDBState
+    ( createUpdateState
+    , newRunRocksDBCSMTTransaction
     )
 import Cardano.UTxOCSMT.Application.Metrics
     ( MetricsEvent (BaseCheckpointEvent, MerkleRootEvent)
@@ -53,7 +54,10 @@ import Cardano.UTxOCSMT.Application.Metrics
 import Cardano.UTxOCSMT.Application.Options
     ( MithrilOptions (..)
     , Options (..)
+    , networkMagic
+    , nodeName
     , optionsParser
+    , portNumber
     )
 import Cardano.UTxOCSMT.Application.Run.Application
     ( ApplicationTrace
@@ -226,9 +230,6 @@ main = withUtf8 $ do
         , apiPort
         , metricsOn
         , startingPoint
-        , nodeName
-        , portNumber
-        , networkMagic
         , headersQueueSize
         , mithrilOptions
         } <-
@@ -258,15 +259,26 @@ main = withUtf8 $ do
             $ flip runDocsServer apiPort
         trace Boot
         withRocksDB dbPath $ \db -> do
-            ((state, slots), runner) <-
-                newRocksDBState
-                    (contra Update)
+            -- Create runner first (no logging)
+            runner <-
+                newRunRocksDBCSMTTransaction
                     db
                     prisms
                     context
+
+            -- Do Mithril bootstrap before creating Update state
+            startingPoint' <-
+                setupDB tracer startingPoint mithrilOptions runner
+
+            -- Now create the Update state (logs "New update state")
+            (state, slots) <-
+                createUpdateState
+                    (contra Update)
                     Partial
                     slotHash
                     armageddonParams
+                    runner
+
             startHTTPService (trace ServeApi) apiPort
                 $ \port ->
                     runAPIServer
@@ -274,7 +286,6 @@ main = withUtf8 $ do
                         (readTVarIO metricsVar)
                         (queryMerkleRoots runner)
                         (queryInclusionProof runner)
-            startingPoint' <- setupDB tracer startingPoint mithrilOptions runner
 
             -- Check if we should exit after bootstrap
             when (Mithril.mithrilBootstrapOnly mithrilOptions) $ do
@@ -284,9 +295,9 @@ main = withUtf8 $ do
             -- Emit the base checkpoint to metrics
             _ <-
                 application
-                    networkMagic
-                    nodeName
-                    portNumber
+                    (networkMagic options)
+                    (nodeName options)
+                    (portNumber options)
                     startingPoint'
                     headersQueueSize
                     metricsEvent

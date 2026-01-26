@@ -1,10 +1,13 @@
 module Cardano.UTxOCSMT.Application.Options
     ( Options (..)
     , Limit (..)
-    , networkMagicOption
-    , nodeNameOption
-    , portNumberOption
+    , CardanoNetwork (..)
     , optionsParser
+
+      -- * Derived option accessors
+    , networkMagic
+    , nodeName
+    , portNumber
 
       -- * Re-exports for Mithril
     , MithrilOptions (..)
@@ -18,7 +21,7 @@ import Cardano.UTxOCSMT.Application.BlockFetch
 import Cardano.UTxOCSMT.Mithril.Client (MithrilNetwork (..))
 import Cardano.UTxOCSMT.Mithril.Options
     ( MithrilOptions (..)
-    , mithrilOptionsParser
+    , mithrilOptionsParser'
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (HeaderHash, Point)
 import Data.ByteArray.Encoding
@@ -42,7 +45,6 @@ import OptEnvConf
     , setting
     , short
     , str
-    , strOption
     , switch
     , value
     )
@@ -64,10 +66,41 @@ import Text.Read (readMaybe)
 newtype Limit = Limit {limit :: Word32}
     deriving newtype (Show, Read, Eq, Ord, Enum)
 
+-- | Cardano network selection
+data CardanoNetwork
+    = Mainnet
+    | Preprod
+    | Preview
+    deriving stock (Show, Eq, Ord)
+
+-- | Get network magic for a Cardano network
+networkMagicFor :: CardanoNetwork -> NetworkMagic
+networkMagicFor Mainnet = NetworkMagic 764824073
+networkMagicFor Preprod = NetworkMagic 1
+networkMagicFor Preview = NetworkMagic 2
+
+-- | Get Mithril network for a Cardano network
+mithrilNetworkFor :: CardanoNetwork -> MithrilNetwork
+mithrilNetworkFor Mainnet = MithrilMainnet
+mithrilNetworkFor Preprod = MithrilPreprod
+mithrilNetworkFor Preview = MithrilPreview
+
+-- | Get default peer node for a Cardano network
+defaultNodeFor :: CardanoNetwork -> String
+defaultNodeFor Mainnet = "backbone.cardano.iog.io"
+defaultNodeFor Preprod = "preprod-node.world.dev.cardano.org"
+defaultNodeFor Preview = "preview-node.world.dev.cardano.org"
+
+-- | Get default port for a Cardano network
+defaultPortFor :: CardanoNetwork -> PortNumber
+defaultPortFor Mainnet = 3001
+defaultPortFor Preprod = 30000
+defaultPortFor Preview = 30002
+
 data Options = Options
-    { networkMagic :: NetworkMagic
-    , nodeName :: String
-    , portNumber :: PortNumber
+    { network :: CardanoNetwork
+    , nodeNameOverride :: Maybe String
+    , portNumberOverride :: Maybe PortNumber
     , startingPoint :: Point
     , headersQueueSize :: EventQueueLength
     , dbPath :: FilePath
@@ -77,6 +110,22 @@ data Options = Options
     , metricsOn :: Bool
     , mithrilOptions :: MithrilOptions
     }
+
+-- | Get effective network magic from options
+networkMagic :: Options -> NetworkMagic
+networkMagic = networkMagicFor . network
+
+-- | Get effective node name from options
+nodeName :: Options -> String
+nodeName opts = case nodeNameOverride opts of
+    Just name -> name
+    Nothing -> defaultNodeFor (network opts)
+
+-- | Get effective port number from options
+portNumber :: Options -> PortNumber
+portNumber opts = case portNumberOverride opts of
+    Just port -> port
+    Nothing -> defaultPortFor (network opts)
 
 dbPathOption :: Parser FilePath
 dbPathOption =
@@ -95,49 +144,61 @@ logPathOption =
         $ setting
             [ long "log-path"
             , short 'l'
-            , help "Path to the log file"
+            , help
+                "Path to the log file (logs to stdout if not specified)"
             , metavar "FILE"
-            , value "cardano-utxo-csmt.log"
             , reader str
             , option
             ]
 
-networkMagicOption :: Parser NetworkMagic
-networkMagicOption =
-    NetworkMagic
-        <$> setting
-            [ long "network-magic"
-            , short 'm'
-            , help "Network magic number"
-            , metavar "INT"
-            , value 764824073
-            , reader auto
+-- | Parse Cardano network from string
+readCardanoNetwork :: String -> Maybe CardanoNetwork
+readCardanoNetwork "mainnet" = Just Mainnet
+readCardanoNetwork "preprod" = Just Preprod
+readCardanoNetwork "preview" = Just Preview
+readCardanoNetwork _ = Nothing
+
+networkOption :: Parser CardanoNetwork
+networkOption =
+    setting
+        [ long "network"
+        , short 'n'
+        , help
+            "Cardano network (mainnet, preprod, preview). \
+            \Sets network magic, default peer node, and Mithril network."
+        , metavar "NETWORK"
+        , reader $ maybeReader readCardanoNetwork
+        , value Mainnet
+        , option
+        ]
+
+nodeNameOption :: Parser (Maybe String)
+nodeNameOption =
+    optional
+        $ setting
+            [ long "node-name"
+            , short 's'
+            , help
+                "Override peer node hostname \
+                \(uses network default if not specified)"
+            , metavar "HOSTNAME"
+            , reader str
             , option
             ]
 
-nodeNameOption :: Parser String
-nodeNameOption =
-    strOption
-        [ long "node-name"
-        , short 's'
-        , help "Peer node hostname"
-        , metavar "HOSTNAME"
-        , value "backbone.cardano.iog.io"
-        , reader str
-        , option
-        ]
-
-portNumberOption :: Parser PortNumber
+portNumberOption :: Parser (Maybe PortNumber)
 portNumberOption =
-    setting
-        [ long "port"
-        , short 'p'
-        , help "Peer node port number"
-        , metavar "INT"
-        , value 3001
-        , reader auto
-        , option
-        ]
+    optional
+        $ setting
+            [ long "port"
+            , short 'p'
+            , help
+                "Override peer node port \
+                \(uses network default if not specified)"
+            , metavar "INT"
+            , reader auto
+            , option
+            ]
 
 startingPointOption :: Parser Point
 startingPointOption =
@@ -219,8 +280,8 @@ apiDocsPortOption =
 
 optionsParser :: Parser Options
 optionsParser =
-    Options
-        <$> networkMagicOption
+    mkOptions
+        <$> networkOption
         <*> nodeNameOption
         <*> portNumberOption
         <*> startingPointOption
@@ -230,4 +291,19 @@ optionsParser =
         <*> apiPortOption
         <*> apiDocsPortOption
         <*> metricsSwitch
-        <*> mithrilOptionsParser
+        <*> mithrilOptionsParser'
+  where
+    mkOptions net nodeName' port' start queue db logP api apiDocs metrics mithril =
+        Options
+            { network = net
+            , nodeNameOverride = nodeName'
+            , portNumberOverride = port'
+            , startingPoint = start
+            , headersQueueSize = queue
+            , dbPath = db
+            , logPath = logP
+            , apiPort = api
+            , apiDocsPort = apiDocs
+            , metricsOn = metrics
+            , mithrilOptions = mithril{mithrilNetwork = mithrilNetworkFor net}
+            }

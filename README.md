@@ -16,15 +16,11 @@ An HTTP service that maintains a Compact Sparse Merkle Tree (CSMT) over Cardano'
 ## Quick Start
 
 ```bash
-# Using Docker
-docker run -p 8080:8080 \
-  ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt \
-  --peer-name <node-host> \
-  --peer-port 3001 \
-  --network-magic 764824073
-
-# Check status
-curl http://localhost:8080/metrics
+# Using nix with Mithril bootstrap (preview network)
+nix run github:paolino/cardano-utxo-csmt#cardano-utxo-chainsync -- \
+  --network preview \
+  --mithril-bootstrap \
+  --csmt-db-path /tmp/csmt-db
 ```
 
 ## Installation

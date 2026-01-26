@@ -10,7 +10,7 @@ certified snapshots instead of syncing from genesis.
 | Fetch snapshot metadata | ✅ Working | All networks (mainnet, preprod, preview) |
 | HTTP download (no verification) | ✅ Default | Downloads ancillary data with ledger state |
 | Find ledger state files | ✅ Working | Supports both old (.lstate) and new UTxO-HD formats |
-| CLI options | ✅ Working | `--mithril-bootstrap`, `--mithril-network`, etc. |
+| CLI options | ✅ Working | `--network`, `--mithril-bootstrap`, etc. |
 | UTxO extraction from ledger state | ✅ Working | Streams MemPack-encoded (TxIn, TxOut) pairs from tvar file |
 | TxIn/TxOut decoding | ✅ Verified | Decodes as Conway-era `TxIn` and `BabbageTxOut` |
 | CBOR re-encoding | ✅ Working | Converts MemPack to CBOR for chain sync compatibility |
@@ -27,6 +27,27 @@ Mithril bootstrapping:
 
 This provides a fast way to obtain UTxO set data without syncing from genesis.
 
+## What Is a Mithril Snapshot?
+
+A Mithril snapshot captures the **ledger state** at a slot deep in the immutable
+history of the Cardano blockchain.
+
+**Key distinction:**
+
+- The snapshot is **not** the immutable DB (blocks) itself
+- It is the **ledger state** (UTxO set, stake distribution, etc.) that results
+  from processing those blocks
+- The slot is past the security parameter (k=2160 blocks), making it final
+
+This is what makes Mithril useful: you get the final state without replaying
+all the blocks from genesis.
+
+**Trust model:**
+
+The ledger state is cryptographically signed by Cardano stake pool operators
+using Mithril's STM (Stake-based Threshold Multi-signatures). Verifying the
+certificate chain proves the snapshot was produced correctly by the network.
+
 ## Demo
 
 ```asciinema-player
@@ -42,21 +63,21 @@ Enable Mithril bootstrap with the `--mithril-bootstrap` flag:
 
 ```bash
 cardano-utxo-chainsync \
+    --network preview \
     --mithril-bootstrap \
-    --mithril-network preview \
-    --csmt-db-path /path/to/db \
-    --node-name preview-node.world.dev.cardano.org \
-    --port 30002 \
-    --network-magic 2
+    --csmt-db-path /path/to/db
 ```
+
+The `--network` option sets both the Cardano network (magic, default peer) and
+the Mithril network automatically.
 
 ## CLI Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
+| `--network NETWORK` | Network: `mainnet`, `preprod`, `preview` | `mainnet` |
 | `--mithril-bootstrap` | Enable Mithril bootstrapping | `false` |
 | `--mithril-bootstrap-only` | Exit after bootstrap (skip chain sync) | `false` |
-| `--mithril-network NETWORK` | Network: `mainnet`, `preprod`, `preview` | `mainnet` |
 | `--mithril-aggregator URL` | Override aggregator URL | Network default |
 | `--mithril-download-dir DIR` | Directory for downloads | Temp directory |
 
@@ -146,6 +167,38 @@ The E2E test verifies that extracted bytes decode successfully as
 Conway-era `Cardano.Ledger.TxIn.TxIn` and `Cardano.Ledger.Babbage.TxOut.BabbageTxOut`.
 
 Progress is reported every 10,000 entries during extraction.
+
+### 6. Chain Sync Continuation
+
+!!! warning "Known Limitation"
+    The current implementation replays from genesis after Mithril import.
+    This negates most of the bootstrap speed benefit. See issue #32 for the fix.
+
+After importing the UTxO set, chain sync needs to continue from where the
+snapshot left off. This requires a `Point(slot, block_hash)`.
+
+**The Problem:**
+
+- Mithril provides the **slot number** (from ledger state directory name)
+- Mithril does **not** provide the **block hash**
+- Without the hash, we cannot construct a valid `Point`
+
+**Current Behavior:**
+
+The base checkpoint is set to `Origin`, causing chain sync to replay from
+genesis. This works correctly (CSMT operations are idempotent) but is slow.
+
+**Planned Fix (Issue #32):**
+
+After Mithril import, perform a header-only chain sync scan:
+
+1. Connect to node, find intersection at Origin
+2. Scan headers until reaching the Mithril slot
+3. Extract block hash from that header
+4. Save `Point(slot, hash)` as checkpoint
+5. Disconnect and reconnect with proper checkpoint
+
+This adds a few seconds of header scanning but avoids replaying all blocks.
 
 ## Security Considerations
 
