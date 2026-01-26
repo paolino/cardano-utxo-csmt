@@ -348,7 +348,8 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
     if new
         then do
             -- Check if Mithril bootstrap is enabled
-            if mithrilEnabled mithrilOpts
+            -- --mithril-bootstrap-only implies --mithril-bootstrap
+            if mithrilEnabled mithrilOpts || Mithril.mithrilBootstrapOnly mithrilOpts
                 then bootstrapFromMithril
                 else regularSetup
         else do
