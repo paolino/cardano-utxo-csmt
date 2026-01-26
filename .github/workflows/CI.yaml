@@ -17,16 +17,16 @@ jobs:
         with:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Build executable
-        run: nix build .#cardano-utxo-csmt
+        run: nix build .#cardano-utxo-csmt --quiet
       - name: Build docker image
-        run: nix build .#docker-image -o output-docker-image
+        run: nix build .#docker-image -o output-docker-image --quiet
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: cardano-utxo-csmt-image
           path: output-docker-image
       - name: Build AppImage
-        run: nix bundle --bundler github:ralismark/nix-appimage .#cardano-utxo-csmt -o cardano-utxo-csmt.AppImage
+        run: nix bundle --bundler github:ralismark/nix-appimage .#cardano-utxo-csmt -o cardano-utxo-csmt.AppImage --quiet
       - name: Upload appImage artifact
         uses: actions/upload-artifact@v4
         with:
@@ -38,14 +38,14 @@ jobs:
           name: cardano-utxo-csmt
           path: output-linux-tarball
       - name: Build rpm artifact
-        run: nix bundle --bundler github:NixOS/bundlers#toRPM -o cardano-utxo-csmt.rpm
+        run: nix bundle --bundler github:NixOS/bundlers#toRPM -o cardano-utxo-csmt.rpm --quiet
       - name: Upload rpm artifact
         uses: actions/upload-artifact@v4
         with:
           name: cardano-utxo-csmt-rpm
           path: cardano-utxo-csmt.rpm
       - name: Build deb artifact
-        run: nix bundle --bundler github:NixOS/bundlers#toDEB -o cardano-utxo-csmt.deb
+        run: nix bundle --bundler github:NixOS/bundlers#toDEB -o cardano-utxo-csmt.deb --quiet
       - name: Upload deb artifact
         uses: actions/upload-artifact@v4
         with:
@@ -60,7 +60,7 @@ jobs:
         with:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Run Tests
-        run: nix run .#unit-tests
+        run: nix run .#unit-tests --quiet
   bench:
     name: Run Benchmarks
     runs-on: ubuntu-latest
@@ -70,7 +70,7 @@ jobs:
         with:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Run Benchmarks
-        run: nix run .#bench
+        run: nix run .#bench --quiet
   formatting:
     name: Check code formatting
     runs-on: ubuntu-latest
@@ -80,7 +80,7 @@ jobs:
         with:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Check Formatting
-        run: nix develop -c just format
+        run: nix develop --quiet -c just format
   swagger:
     # check that the swagger file is up to date
     name: Check Swagger documentation
@@ -92,7 +92,7 @@ jobs:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Check Swagger
         run: |
-          nix develop -c just update-swagger
+          nix develop --quiet -c just update-swagger
           if ! git diff --exit-code --quiet docs/assets/swagger.json; then
             echo "Swagger documentation is out of date. Please run 'just update-swagger' and commit the changes."
             exit 1
