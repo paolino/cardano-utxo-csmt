@@ -170,64 +170,35 @@ Progress is reported every 10,000 entries during extraction.
 
 ### 6. Chain Sync Continuation
 
-After importing the UTxO set, the application needs to continue syncing from where
-the snapshot left off. This is handled through the **base checkpoint**.
+!!! warning "Known Limitation"
+    The current implementation replays from genesis after Mithril import.
+    This negates most of the bootstrap speed benefit. See issue #32 for the fix.
 
-**Current Implementation:**
+After importing the UTxO set, chain sync needs to continue from where the
+snapshot left off. This requires a `Point(slot, block_hash)`.
 
-The Mithril snapshot metadata includes:
+**The Problem:**
 
-- `snapshotBeaconSlot`: The immutable file number (not slot!)
-- Ledger state directory name: The actual slot number (e.g., `ledger/102760259/`)
+- Mithril provides the **slot number** (from ledger state directory name)
+- Mithril does **not** provide the **block hash**
+- Without the hash, we cannot construct a valid `Point`
 
-However, to construct a proper Ouroboros `Point` for chain sync, we need both:
+**Current Behavior:**
 
-1. **Slot number** - available from ledger state directory
-2. **Block hash** - **not available** from Mithril API
+The base checkpoint is set to `Origin`, causing chain sync to replay from
+genesis. This works correctly (CSMT operations are idempotent) but is slow.
 
-Because the block hash is not available, the current implementation sets the base
-checkpoint to `Origin`. Chain sync then uses the standard intersection protocol
-to find where to resume:
+**Planned Fix (Issue #32):**
 
-```
-Chain sync intersection:
-1. Client sends known points: [Origin]
-2. Server finds intersection at Origin
-3. Chain sync replays from genesis
-4. Application processes blocks, updating CSMT
-5. Blocks before the snapshot slot produce no UTxO changes
-   (all UTxOs already imported)
-6. Blocks after the snapshot slot apply normally
-```
+After Mithril import, perform a header-only chain sync scan:
 
-**Why This Works:**
+1. Connect to node, find intersection at Origin
+2. Scan headers until reaching the Mithril slot
+3. Extract block hash from that header
+4. Save `Point(slot, hash)` as checkpoint
+5. Disconnect and reconnect with proper checkpoint
 
-The CSMT is a **content-addressed** data structure. When chain sync replays
-blocks that were already covered by the Mithril snapshot:
-
-- Insert operations for existing UTxOs are no-ops (key already exists)
-- Delete operations work correctly (key exists from Mithril import)
-- The Merkle root converges to the correct value
-
-**Performance Impact:**
-
-Replaying from Origin means processing block headers from genesis to tip.
-However:
-
-- Only headers are fetched initially (not full blocks)
-- Blocks with no UTxO changes (pre-snapshot) are fast
-- The bulk of UTxOs are already imported (no disk writes needed)
-
-**Future Improvement:**
-
-To avoid replaying from genesis, we could:
-
-1. Query a Cardano node for the block hash at the ledger state slot
-2. Store this in the database alongside the base checkpoint
-3. Use proper `Point (slot, hash)` for chain sync intersection
-
-This would require network access during bootstrap but would significantly
-reduce startup time after Mithril import.
+This adds a few seconds of header scanning but avoids replaying all blocks.
 
 ## Security Considerations
 
