@@ -168,6 +168,67 @@ Conway-era `Cardano.Ledger.TxIn.TxIn` and `Cardano.Ledger.Babbage.TxOut.BabbageT
 
 Progress is reported every 10,000 entries during extraction.
 
+### 6. Chain Sync Continuation
+
+After importing the UTxO set, the application needs to continue syncing from where
+the snapshot left off. This is handled through the **base checkpoint**.
+
+**Current Implementation:**
+
+The Mithril snapshot metadata includes:
+
+- `snapshotBeaconSlot`: The immutable file number (not slot!)
+- Ledger state directory name: The actual slot number (e.g., `ledger/102760259/`)
+
+However, to construct a proper Ouroboros `Point` for chain sync, we need both:
+
+1. **Slot number** - available from ledger state directory
+2. **Block hash** - **not available** from Mithril API
+
+Because the block hash is not available, the current implementation sets the base
+checkpoint to `Origin`. Chain sync then uses the standard intersection protocol
+to find where to resume:
+
+```
+Chain sync intersection:
+1. Client sends known points: [Origin]
+2. Server finds intersection at Origin
+3. Chain sync replays from genesis
+4. Application processes blocks, updating CSMT
+5. Blocks before the snapshot slot produce no UTxO changes
+   (all UTxOs already imported)
+6. Blocks after the snapshot slot apply normally
+```
+
+**Why This Works:**
+
+The CSMT is a **content-addressed** data structure. When chain sync replays
+blocks that were already covered by the Mithril snapshot:
+
+- Insert operations for existing UTxOs are no-ops (key already exists)
+- Delete operations work correctly (key exists from Mithril import)
+- The Merkle root converges to the correct value
+
+**Performance Impact:**
+
+Replaying from Origin means processing block headers from genesis to tip.
+However:
+
+- Only headers are fetched initially (not full blocks)
+- Blocks with no UTxO changes (pre-snapshot) are fast
+- The bulk of UTxOs are already imported (no disk writes needed)
+
+**Future Improvement:**
+
+To avoid replaying from genesis, we could:
+
+1. Query a Cardano node for the block hash at the ledger state slot
+2. Store this in the database alongside the base checkpoint
+3. Use proper `Point (slot, hash)` for chain sync intersection
+
+This would require network access during bootstrap but would significantly
+reduce startup time after Mithril import.
+
 ## Security Considerations
 
 !!! warning "Current Limitation"
