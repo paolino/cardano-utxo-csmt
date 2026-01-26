@@ -27,6 +27,27 @@ Mithril bootstrapping:
 
 This provides a fast way to obtain UTxO set data without syncing from genesis.
 
+## What Is a Mithril Snapshot?
+
+A Mithril snapshot captures the **ledger state** at a slot deep in the immutable
+history of the Cardano blockchain.
+
+**Key distinction:**
+
+- The snapshot is **not** the immutable DB (blocks) itself
+- It is the **ledger state** (UTxO set, stake distribution, etc.) that results
+  from processing those blocks
+- The slot is past the security parameter (k=2160 blocks), making it final
+
+This is what makes Mithril useful: you get the final state without replaying
+all the blocks from genesis.
+
+**Trust model:**
+
+The ledger state is cryptographically signed by Cardano stake pool operators
+using Mithril's STM (Stake-based Threshold Multi-signatures). Verifying the
+certificate chain proves the snapshot was produced correctly by the network.
+
 ## Demo
 
 ```asciinema-player
