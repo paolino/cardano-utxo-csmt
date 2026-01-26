@@ -20,20 +20,23 @@ plugins:
 
 markdown_extensions:
   - callouts
-  - pymdownx.snippets:             # ← ADD THIS LINE (or section)
-      base_path: !relative          # ← magic: now relative to each .md file's directory
-      check_paths: true             # optional: fail build if file missing (good for debug)
-  - pymdownx.highlight:           # usually already there for code highlighting
+  - attr_list
+  - md_in_html
+  - pymdownx.snippets:
+      base_path: !relative
+      check_paths: true
+  - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.superfences          # often paired with it, good to have
+  - pymdownx.superfences
 
 nav:
-  - Home: index.md
+  - Home: presentation/slides.md
   - Getting Started: getting-started.md
   - Mithril Bootstrap: mithril-bootstrap.md
   - Architecture: architecture.md
   - API Reference:
       - Swagger UI: swagger-ui.md
+  - About: index.md
