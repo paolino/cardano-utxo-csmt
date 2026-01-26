@@ -63,6 +63,7 @@ import Network.HTTP.Client
     , withResponse
     )
 import Network.HTTP.Types.Status (statusCode)
+import System.Directory (createDirectoryIfMissing)
 import System.Exit (ExitCode (..))
 import System.IO (Handle, IOMode (..), withBinaryFile)
 import System.Process.Typed
@@ -369,6 +370,8 @@ downloadSnapshotHttp
                     if statusCode status /= 200
                         then pure $ Left (statusCode status)
                         else do
+                            -- Ensure download directory exists
+                            createDirectoryIfMissing True mithrilDownloadDir
                             let archivePath =
                                     mithrilDownloadDir <> "/snapshot.tar.zst"
                             withBinaryFile archivePath WriteMode $ \handle ->
