@@ -58,6 +58,7 @@ import Network.HTTP.Client
     , responseStatus
     )
 import Network.HTTP.Types.Status (statusCode)
+import System.Directory (createDirectoryIfMissing)
 import System.Exit (ExitCode (..))
 import System.Process.Typed
     ( proc
@@ -370,6 +371,8 @@ downloadSnapshotHttp
                                 (statusCode status)
                                 (T.pack "Download failed")
                     | otherwise -> do
+                        -- Ensure download directory exists
+                        createDirectoryIfMissing True mithrilDownloadDir
                         -- Write to temp file and extract
                         let archivePath = mithrilDownloadDir <> "/snapshot.tar.zst"
                         LBS.writeFile archivePath body

@@ -42,6 +42,7 @@ import Data.Tracer.TraceWith
     , pattern TraceWith
     )
 import Data.Void (Void)
+import Ouroboros.Network.Block (SlotNo (..))
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic)
 import Ouroboros.Network.PeerSelection.RelayAccessPoint (PortNumber)
@@ -55,6 +56,8 @@ data ApplicationTrace
     = ApplicationIntersectionAt Point
     | ApplicationIntersectionFailed
     | ApplicationRollingBack Point
+    | -- | Block processed at slot with UTxO change count
+      ApplicationBlockProcessed SlotNo Int
 
 -- | Render an 'ApplicationTrace'
 renderApplicationTrace :: ApplicationTrace -> String
@@ -64,6 +67,12 @@ renderApplicationTrace ApplicationIntersectionFailed =
     "Intersection failed, resetting to origin"
 renderApplicationTrace (ApplicationRollingBack point) =
     "Rolling back to point: " ++ show point
+renderApplicationTrace (ApplicationBlockProcessed slot utxoCount) =
+    "Block processed: slot "
+        ++ show (unSlotNo slot)
+        ++ ", "
+        ++ show utxoCount
+        ++ " UTxO changes"
 
 origin :: Network.Point block
 origin = Network.Point{getPoint = Origin}
@@ -100,14 +109,22 @@ follower
     -> DBState
     -> Follower Fetched
 follower
-    tracer
+    TraceWith{trace, tracer}
     trUTxO
     newFinalityTarget
     db = ($ db) $ fix $ \go currentDB ->
         Follower
             { rollForward = \Fetched{fetchedPoint, fetchedBlock} -> do
                 let ops = changeToOperation <$> uTxOs fetchedBlock
-                replicateM_ (length ops) trUTxO
+                    opsCount = length ops
+                replicateM_ opsCount trUTxO
+                -- Log progress every 1000 slots
+                case Network.pointSlot fetchedPoint of
+                    At slot@(SlotNo s)
+                        | s `mod` 1000 == 0 ->
+                            trace
+                                $ ApplicationBlockProcessed slot opsCount
+                    _ -> pure ()
                 newDB <- case currentDB of
                     Syncing update -> do
                         newUpdate <- forwardTipApply update fetchedPoint ops
