@@ -42,6 +42,7 @@ import Data.Tracer.TraceWith
     , pattern TraceWith
     )
 import Data.Void (Void)
+import Ouroboros.Network.Block (SlotNo)
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic)
 import Ouroboros.Network.PeerSelection.RelayAccessPoint (PortNumber)
@@ -166,6 +167,10 @@ application
     -- ^ Starting point
     -> EventQueueLength
     -- ^ Headers queue size
+    -> (Point -> IO ())
+    -- ^ Action to set the base checkpoint
+    -> Maybe SlotNo
+    -- ^ Optional skip until slot for Mithril bootstrap
     -> Tracer IO MetricsEvent
     -- ^ Tracer for metrics events
     -> Tracer IO ApplicationTrace
@@ -183,6 +188,8 @@ application
     portNumber
     startingPoint
     headersQueueSize
+    setCheckpoint
+    mSkipTargetSlot
     TraceWith{trace = metricTrace, contra = metricContra}
     TraceWith{tracer}
     initialDBUpdate
@@ -197,6 +204,8 @@ application
                 mkBlockFetchApplication
                     headersQueueSize
                     (metricContra BlockFetchEvent)
+                    setCheckpoint
+                    mSkipTargetSlot
                     $ intersector tracer counting mFinality
                     $ Syncing initialDBUpdate
             let chainFollowingApplication =

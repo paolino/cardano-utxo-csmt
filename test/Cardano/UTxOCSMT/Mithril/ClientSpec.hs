@@ -105,7 +105,7 @@ spec = describe "Mithril Client E2E" $ do
                                                 fail
                                                     $ "Extraction failed: "
                                                         ++ show err
-                                            Right (count, decoded) -> do
+                                            Right ((count, decoded), _slot) -> do
                                                 -- Preview should have UTxOs
                                                 count `shouldSatisfy` (> 0)
                                                 -- All sampled TxIns should

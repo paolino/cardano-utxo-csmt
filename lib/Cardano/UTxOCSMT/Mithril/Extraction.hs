@@ -209,6 +209,10 @@ The tables/tvar file format is:
 
 The streaming approach allows processing large UTxO sets without
 loading everything into memory at once.
+
+Returns the consumer result along with the slot number from the ledger
+state directory, which is needed for chain sync to skip block fetching
+until reaching that slot.
 -}
 extractUTxOsFromSnapshot
     :: Tracer IO ExtractionTrace
@@ -218,7 +222,8 @@ extractUTxOsFromSnapshot
          -> IO a
        )
     -- ^ Consumer for the UTxO stream
-    -> IO (Either ExtractionError a)
+    -> IO (Either ExtractionError (a, Word64))
+    -- ^ Result with slot number for skip-until logic
 extractUTxOsFromSnapshot tracer dbPath consumer = do
     result <- try $ do
         -- Find the ledger state file
@@ -244,7 +249,7 @@ extractUTxOsFromSnapshot tracer dbPath consumer = do
                             Left err -> pure $ Left err
                             Right a -> do
                                 traceWith tracer $ ExtractionComplete slot
-                                pure $ Right a
+                                pure $ Right (a, slot)
     case result of
         Left (e :: IOException) -> pure $ Left $ ExtractionIOError e
         Right r -> pure r

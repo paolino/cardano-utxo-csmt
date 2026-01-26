@@ -35,10 +35,14 @@ import Cardano.UTxOCSMT.Ouroboros.Types
     )
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (..)
+    , StrictTVar
     , flushTBQueue
     , isEmptyTBQueue
     , newTBQueueIO
+    , newTVarIO
+    , readTVarIO
     , writeTBQueue
+    , writeTVar
     )
 import Control.Concurrent.MVar
     ( MVar
@@ -52,8 +56,9 @@ import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
+import Data.Maybe (isJust)
 import Ouroboros.Consensus.Cardano.Node ()
-import Ouroboros.Network.Block (blockPoint)
+import Ouroboros.Network.Block (SlotNo (..), blockPoint, blockSlot)
 import Ouroboros.Network.BlockFetch.ClientState (ChainRange (..))
 import Ouroboros.Network.Protocol.BlockFetch.Client
     ( BlockFetchClient (..)
@@ -82,68 +87,132 @@ mkBlockFetchApplication
     -- ^ maximum length of the headers queue
     -> Tracer IO EventQueueLength
     -- ^ metrics tracer
+    -> (Point -> IO ())
+    -- ^ Action to set the base checkpoint
+    -> Maybe SlotNo
+    -- ^ Optional skip until slot for Mithril bootstrap
     -> Intersector Fetched
     -- ^ callback to process each fetched block
     -> IO (BlockFetchApplication, Intersector Header)
-mkBlockFetchApplication (EventQueueLength maxQueueLen) tr blockIntersector = do
-    queue <- newQueue maxQueueLen
-    blockFollowerVar <- newEmptyMVar
-    pure
-        ( blockFetchClient tr blockFollowerVar queue
-        , mkHeaderIntersector blockFollowerVar queue blockIntersector
-        )
+mkBlockFetchApplication
+    (EventQueueLength maxQueueLen)
+    tr
+    setCheckpoint
+    mSkipTargetSlot
+    blockIntersector = do
+        queue <- newQueue maxQueueLen
+        blockFollowerVar <- newEmptyMVar
+        -- Track whether we've passed the skip threshold
+        skipActiveVar <- newTVarIO (isJust mSkipTargetSlot)
+        pure
+            ( blockFetchClient tr blockFollowerVar queue
+            , mkHeaderIntersector
+                blockFollowerVar
+                queue
+                setCheckpoint
+                mSkipTargetSlot
+                skipActiveVar
+                blockIntersector
+            )
 
 headerFollower
     :: MVar (Follower Fetched)
     -> Queue Point
+    -> (Point -> IO ())
+    -- ^ Action to set the base checkpoint
+    -> Maybe SlotNo
+    -- ^ Target slot to skip until (Nothing = no skip)
+    -> StrictTVar IO Bool
+    -- ^ True while skip is active
     -> Follower Header
-headerFollower blockFollowerVar queue@Queue{pushQueue, waitEmptyQueue} = fix $ \go ->
-    Follower
-        { rollForward = \header -> do
-            -- we do not wait if there is space in the queue
-            pushQueue $ blockPoint header
-            pure go
-        , rollBackward = \point -> do
-            waitEmptyQueue
-            -- we are safe as the only source of headers is rollForward above
-            -- and it's alternative to rollBackward
-            Follower{rollBackward} <- takeMVar blockFollowerVar
-            progressOrRewind <- rollBackward point
-            case progressOrRewind of
-                Progress blockFollower -> do
-                    putMVar blockFollowerVar blockFollower
-                    pure $ Progress go
-                Rewind points blockIntersector -> do
-                    pure
-                        $ Rewind points
-                        $ mkHeaderIntersector
-                            blockFollowerVar
-                            queue
-                            blockIntersector
-                Reset blockIntersector -> do
-                    pure
-                        $ Reset
-                        $ mkHeaderIntersector
-                            blockFollowerVar
-                            queue
-                            blockIntersector
-        }
+headerFollower
+    blockFollowerVar
+    queue@Queue{pushQueue, waitEmptyQueue}
+    setCheckpoint
+    mSkipTargetSlot
+    skipActiveVar = fix $ \go ->
+        Follower
+            { rollForward = \header -> do
+                let headerSlot = blockSlot header
+                    point = blockPoint header
+
+                -- Check if we should skip block fetching
+                skipActive <- readTVarIO skipActiveVar
+                case (skipActive, mSkipTargetSlot) of
+                    (True, Just skipTargetSlot)
+                        | headerSlot >= skipTargetSlot -> do
+                            -- Reached target slot: save checkpoint, disable skip
+                            atomically $ writeTVar skipActiveVar False
+                            setCheckpoint point
+                            -- Now start normal operation
+                            pushQueue point
+                        | otherwise ->
+                            -- Still skipping: don't push to queue
+                            pure ()
+                    _ ->
+                        -- Normal operation: push to queue
+                        pushQueue point
+
+                pure go
+            , rollBackward = \point -> do
+                waitEmptyQueue
+                -- we are safe as the only source of headers is rollForward above
+                -- and it's alternative to rollBackward
+                Follower{rollBackward} <- takeMVar blockFollowerVar
+                progressOrRewind <- rollBackward point
+                case progressOrRewind of
+                    Progress blockFollower -> do
+                        putMVar blockFollowerVar blockFollower
+                        pure $ Progress go
+                    Rewind points blockIntersector -> do
+                        pure
+                            $ Rewind points
+                            $ mkHeaderIntersector
+                                blockFollowerVar
+                                queue
+                                setCheckpoint
+                                mSkipTargetSlot
+                                skipActiveVar
+                                blockIntersector
+                    Reset blockIntersector -> do
+                        pure
+                            $ Reset
+                            $ mkHeaderIntersector
+                                blockFollowerVar
+                                queue
+                                setCheckpoint
+                                mSkipTargetSlot
+                                skipActiveVar
+                                blockIntersector
+            }
 
 mkHeaderIntersector
     :: MVar (Follower Fetched)
     -> Queue Point
+    -> (Point -> IO ())
+    -- ^ Action to set the base checkpoint
+    -> Maybe SlotNo
+    -- ^ Target slot to skip until (Nothing = no skip)
+    -> StrictTVar IO Bool
     -> Intersector Fetched
     -> Intersector Header
-mkHeaderIntersector blockFollowerVar q = fix $ \go blockIntersector ->
-    Intersector
-        { intersectFound = \point -> do
-            blockFollower <- intersectFound blockIntersector point
-            putMVar blockFollowerVar blockFollower
-            pure $ headerFollower blockFollowerVar q
-        , intersectNotFound = do
-            (blockIntersector', points) <- intersectNotFound blockIntersector
-            pure (go blockIntersector', points)
-        }
+mkHeaderIntersector blockFollowerVar q setCheckpoint mSkipTargetSlot skipActiveVar =
+    fix $ \go blockIntersector ->
+        Intersector
+            { intersectFound = \point -> do
+                blockFollower <- intersectFound blockIntersector point
+                putMVar blockFollowerVar blockFollower
+                pure
+                    $ headerFollower
+                        blockFollowerVar
+                        q
+                        setCheckpoint
+                        mSkipTargetSlot
+                        skipActiveVar
+            , intersectNotFound = do
+                (blockIntersector', points) <- intersectNotFound blockIntersector
+                pure (go blockIntersector', points)
+            }
 
 blockFetchReceiver
     :: MVar (Follower Fetched)

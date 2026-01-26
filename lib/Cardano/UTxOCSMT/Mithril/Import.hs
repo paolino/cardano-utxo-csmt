@@ -58,8 +58,16 @@ import Ouroboros.Network.Point (WithOrigin (..))
 
 -- | Result of Mithril import operation
 data ImportResult
-    = -- | Import succeeded: checkpoint, UTxO count, immutable DB path
-      ImportSuccess Point Word64 FilePath
+    = ImportSuccess
+        { importCheckpoint :: Point
+        -- ^ Checkpoint (Origin, will be updated during chain sync)
+        , importCount :: Word64
+        -- ^ Number of UTxOs imported
+        , importDbPath :: FilePath
+        -- ^ Path to the immutable DB
+        , importSlot :: Word64
+        -- ^ Slot from ledger state for skip-until logic
+        }
     | -- | Import failed with Mithril error
       ImportFailed MithrilError
     | -- | Import failed during extraction
@@ -195,12 +203,18 @@ importFromMithril tracer config runner = do
                         Left err -> do
                             traceWith tracer $ ImportExtractionError err
                             pure $ ImportExtractionFailed err
-                        Right count -> do
+                        Right (count, extractedSlot) -> do
                             let checkpoint = makeCheckpoint snapshot
 
                             traceWith tracer $ ImportComplete count checkpoint
 
-                            pure $ ImportSuccess checkpoint count dbPath
+                            pure
+                                ImportSuccess
+                                    { importCheckpoint = checkpoint
+                                    , importCount = count
+                                    , importDbPath = dbPath
+                                    , importSlot = extractedSlot
+                                    }
 
 {- | Create a Point from snapshot metadata for chain sync checkpoint
 
