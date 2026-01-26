@@ -95,9 +95,9 @@ logPathOption =
         $ setting
             [ long "log-path"
             , short 'l'
-            , help "Path to the log file"
+            , help
+                "Path to the log file (logs to stdout if not specified)"
             , metavar "FILE"
-            , value "cardano-utxo-csmt.log"
             , reader str
             , option
             ]
