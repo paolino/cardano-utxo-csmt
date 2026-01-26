@@ -38,6 +38,7 @@ module Cardano.UTxOCSMT.Mithril.Client
 where
 
 import Control.Exception (Exception, try)
+import Control.Monad (unless)
 import Data.Aeson
     ( FromJSON (..)
     , decode
@@ -45,20 +46,25 @@ import Data.Aeson
     , (.:)
     , (.:?)
     )
+import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as LBS
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
 import Network.HTTP.Client
-    ( HttpException
+    ( BodyReader
+    , HttpException
     , Manager
+    , brRead
     , httpLbs
     , parseRequest
     , responseBody
     , responseStatus
+    , withResponse
     )
 import Network.HTTP.Types.Status (statusCode)
 import System.Exit (ExitCode (..))
+import System.IO (Handle, IOMode (..), withBinaryFile)
 import System.Process.Typed
     ( proc
     , readProcess
@@ -354,26 +360,40 @@ downloadSnapshotHttp
         extractedPath = mithrilDownloadDir
 
         downloadAndExtract url = do
-            -- Download the archive
+            -- Download the archive using streaming to avoid loading
+            -- the entire response into memory
             result <- try $ do
                 request <- parseRequest url
-                response <- httpLbs request mithrilHttpManager
-                pure (responseStatus response, responseBody response)
+                withResponse request mithrilHttpManager $ \response -> do
+                    let status = responseStatus response
+                    if statusCode status /= 200
+                        then pure $ Left (statusCode status)
+                        else do
+                            let archivePath =
+                                    mithrilDownloadDir <> "/snapshot.tar.zst"
+                            withBinaryFile archivePath WriteMode $ \handle ->
+                                streamBodyToFile handle (responseBody response)
+                            pure $ Right ()
             case result of
                 Left (e :: HttpException) ->
                     pure $ Left $ MithrilHttpError e
-                Right (status, body)
-                    | statusCode status /= 200 ->
-                        pure
-                            $ Left
-                            $ MithrilApiError
-                                (statusCode status)
-                                (T.pack "Download failed")
-                    | otherwise -> do
-                        -- Write to temp file and extract
-                        let archivePath = mithrilDownloadDir <> "/snapshot.tar.zst"
-                        LBS.writeFile archivePath body
-                        extractArchive archivePath
+                Right (Left code) ->
+                    pure
+                        $ Left
+                        $ MithrilApiError code (T.pack "Download failed")
+                Right (Right ()) -> do
+                    let archivePath = mithrilDownloadDir <> "/snapshot.tar.zst"
+                    extractArchive archivePath
+
+        -- Stream response body to file handle chunk by chunk
+        streamBodyToFile :: Handle -> BodyReader -> IO ()
+        streamBodyToFile handle bodyReader = loop
+          where
+            loop = do
+                chunk <- brRead bodyReader
+                unless (BS.null chunk) $ do
+                    BS.hPut handle chunk
+                    loop
 
         extractArchive archivePath = do
             -- Extract using tar and zstd: tar -I zstd -xf archive -C dir
