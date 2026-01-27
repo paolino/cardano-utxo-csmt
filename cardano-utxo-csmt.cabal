@@ -83,6 +83,31 @@ library mithril-stm
     Mithril.STM.Types
     Mithril.STM.Verify
 
+-- | Test suite for mithril-stm library.
+--
+-- Tests use mock crypto implementations to verify:
+--
+-- * Lottery eligibility calculations
+-- * Merkle batch proof verification
+-- * Full verification flow
+test-suite mithril-stm-test
+  import:             warnings
+  default-language:   Haskell2010
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     mithril-stm-test
+  main-is:            Main.hs
+  other-modules:
+    Mithril.STM.LotterySpec
+    Mithril.STM.MerkleSpec
+    Mithril.STM.VerifySpec
+
+  build-depends:
+    , base        >=4.14 && <5
+    , bytestring
+    , cardano-utxo-csmt:mithril-stm
+    , hspec
+    , QuickCheck
+
 library http
   import:           warnings
   hs-source-dirs:   http
