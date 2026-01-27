@@ -13,7 +13,10 @@
   - [x] Verification flow
   - [ ] Serialization
   - [ ] hsblst backend
-- [ ] Testing
+- [x] Testing (mock crypto)
+  - [x] LotterySpec - phi function and hash mapping
+  - [x] MerkleSpec - tree navigation and batch verification
+  - [x] VerifySpec - full verification flow
 
 ## Summary
 
@@ -42,6 +45,30 @@ Explored the mithril-stm Rust crate structure and verification logic.
 - Identified `hsblst` for BLS12-381 (FFI to BLST)
 - Confirmed `crypton` (not `cryptonite`) for Blake2b - already in deps via csmt
 - Designed module structure for Haskell implementation
+
+### 2026-01-27: Test Suite Added
+
+Added `mithril-stm-test` test suite with 63 tests:
+
+**LotterySpec** (15 tests):
+- phi function properties (monotonic, concave, boundary values)
+- hashToUnitInterval mapping to [0, 1)
+- isLotteryWon stake-based lottery checks
+
+**MerkleSpec** (32 tests):
+- Tree navigation: parent, sibling, isLeftChild, nextPowerOfTwo
+- Leaf indexing: leafToNodeIndex calculations
+- hashLeaf/hashNode domain separation
+- verifyBatchPath validation and proof verification
+
+**VerifySpec** (16 tests):
+- transformMessage includes merkle root
+- Mock BLS success/failure paths
+- Error reporting: InsufficientSignatures, IndexOutOfBounds, DuplicateIndex
+- mainnetParameters verification
+
+All tests use mock crypto implementations (HashOps, BlsOps) to verify
+algorithm correctness without real cryptographic operations.
 
 ## Rust Crate Structure
 
