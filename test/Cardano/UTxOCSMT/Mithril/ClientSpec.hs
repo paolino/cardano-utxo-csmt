@@ -74,7 +74,8 @@ testDownloadAndVerify network = do
                 fail $ "Failed to fetch snapshot: " ++ show err
             Right snapshot -> do
                 -- Download via HTTP (with verification if key available)
-                downloadResult <- downloadSnapshotHttp config snapshot
+                downloadResult <-
+                    downloadSnapshotHttp nullTracer config snapshot
                 case downloadResult of
                     Left err ->
                         fail $ "Failed to download: " ++ show err
