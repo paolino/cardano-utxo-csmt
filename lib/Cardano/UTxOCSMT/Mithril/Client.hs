@@ -37,6 +37,12 @@ module Cardano.UTxOCSMT.Mithril.Client
     )
 where
 
+import Cardano.UTxOCSMT.Mithril.AncillaryVerifier
+    ( AncillaryVerificationError
+    , AncillaryVerificationKey
+    , parseVerificationKey
+    , verifyAncillaryManifest
+    )
 import Control.Exception (Exception, try)
 import Control.Monad (unless)
 import Data.Aeson
@@ -101,6 +107,8 @@ data MithrilConfig = MithrilConfig
     -- ^ Directory for downloading snapshots
     , mithrilHttpManager :: Manager
     -- ^ HTTP manager for API requests
+    , mithrilAncillaryVk :: Maybe AncillaryVerificationKey
+    -- ^ Optional Ed25519 verification key for ancillary files
     }
 
 -- | Create default configuration for a network
@@ -113,7 +121,27 @@ defaultMithrilConfig manager network downloadDir =
         , mithrilClientPath = "mithril-client"
         , mithrilDownloadDir = downloadDir
         , mithrilHttpManager = manager
+        , mithrilAncillaryVk = ancillaryVkForNetwork network
         }
+
+{- | Get ancillary verification key for network
+
+These are the official Mithril Ed25519 verification keys for
+ancillary file signatures. Returns 'Nothing' for networks where
+ancillary verification is not yet available.
+-}
+ancillaryVkForNetwork :: MithrilNetwork -> Maybe AncillaryVerificationKey
+ancillaryVkForNetwork MithrilPreview =
+    -- From mithril-client-cli/config/preview.json
+    either (const Nothing) Just $
+        parseVerificationKey
+            "5b3138392c3139322c3231362c3135302c3131342c3231362c323\
+            \3372c3231302c34352c31382c32312c3139362c3230382c323436\
+            \2c3134362c322c3235322c3234332c3235312c3139372c32382c3\
+            \135372c3230342c3134352c33302c31342c3232382c3136382c31\
+            \32392c38332c3133362c33365d"
+ancillaryVkForNetwork MithrilMainnet = Nothing -- Not yet available
+ancillaryVkForNetwork MithrilPreprod = Nothing -- Not yet available
 
 -- | Unique identifier for a snapshot (certificate hash)
 newtype SnapshotDigest = SnapshotDigest {unSnapshotDigest :: Text}
@@ -175,6 +203,8 @@ data MithrilError
       MithrilNoLocations
     | -- | Extraction command failed
       MithrilExtractionFailed Int Text
+    | -- | Ed25519 ancillary verification failed
+      MithrilVerificationFailed AncillaryVerificationError
     deriving stock (Show)
 
 instance Exception MithrilError
@@ -202,6 +232,8 @@ renderMithrilError MithrilNoLocations =
     "No download locations in snapshot metadata"
 renderMithrilError (MithrilExtractionFailed code msg) =
     "Extraction failed (exit " <> show code <> "): " <> T.unpack msg
+renderMithrilError (MithrilVerificationFailed err) =
+    "Ancillary verification failed: " <> show err
 
 -- | Trace events for Mithril operations
 data MithrilTrace
@@ -217,6 +249,12 @@ data MithrilTrace
       MithrilVerifying SnapshotDigest
     | -- | Verification successful
       MithrilVerificationComplete
+    | -- | Verifying ancillary Ed25519 signature
+      MithrilVerifyingAncillary FilePath
+    | -- | Ancillary verification successful
+      MithrilAncillaryVerified
+    | -- | Skipping ancillary verification (no key configured)
+      MithrilAncillarySkipped
     deriving stock (Show, Eq)
 
 -- | Render trace for logging
@@ -242,6 +280,12 @@ renderMithrilTrace (MithrilVerifying digest) =
     "Verifying Mithril snapshot: " <> T.unpack (unSnapshotDigest digest)
 renderMithrilTrace MithrilVerificationComplete =
     "Mithril snapshot verification complete"
+renderMithrilTrace (MithrilVerifyingAncillary path) =
+    "Verifying ancillary Ed25519 signature at: " <> path
+renderMithrilTrace MithrilAncillaryVerified =
+    "Ancillary Ed25519 verification successful"
+renderMithrilTrace MithrilAncillarySkipped =
+    "Skipping ancillary verification (no key configured for network)"
 
 -- | Fetch the latest available snapshot metadata from the aggregator
 fetchLatestSnapshot
@@ -351,7 +395,7 @@ downloadSnapshotHttp
     -> SnapshotMetadata
     -> IO (Either MithrilError FilePath)
 downloadSnapshotHttp
-    MithrilConfig{mithrilDownloadDir, mithrilHttpManager}
+    MithrilConfig{mithrilDownloadDir, mithrilHttpManager, mithrilAncillaryVk}
     SnapshotMetadata{snapshotAncillaryLocations} =
         case snapshotAncillaryLocations of
             [] -> pure $ Left MithrilNoLocations
@@ -386,7 +430,10 @@ downloadSnapshotHttp
                         $ MithrilApiError code (T.pack "Download failed")
                 Right (Right ()) -> do
                     let archivePath = mithrilDownloadDir <> "/snapshot.tar.zst"
-                    extractArchive archivePath
+                    extractResult <- extractArchive archivePath
+                    case extractResult of
+                        Left err -> pure $ Left err
+                        Right path -> verifyIfConfigured path
 
         -- Stream response body to file handle chunk by chunk
         streamBodyToFile :: Handle -> BodyReader -> IO ()
@@ -419,3 +466,16 @@ downloadSnapshotHttp
                         $ MithrilExtractionFailed
                             code
                             (T.pack $ show $ LBS.toStrict stderr)
+
+        -- Verify ancillary manifest if verification key is configured
+        verifyIfConfigured path = case mithrilAncillaryVk of
+            Nothing ->
+                -- No verification key configured, skip verification
+                pure $ Right path
+            Just vk -> do
+                verifyResult <- verifyAncillaryManifest vk path
+                case verifyResult of
+                    Left err ->
+                        pure $ Left $ MithrilVerificationFailed err
+                    Right () ->
+                        pure $ Right path
