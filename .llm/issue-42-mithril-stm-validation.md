@@ -6,7 +6,13 @@
 - [x] Review Rust implementation
 - [x] Identify required crypto primitives in Haskell ecosystem
 - [x] Design Haskell implementation
-- [ ] Implementation
+- [x] Implementation (core modules)
+  - [x] Types, Parameters, Crypto records
+  - [x] Lottery calculation
+  - [x] Merkle batch verification
+  - [x] Verification flow
+  - [ ] Serialization
+  - [ ] hsblst backend
 - [ ] Testing
 
 ## Summary
