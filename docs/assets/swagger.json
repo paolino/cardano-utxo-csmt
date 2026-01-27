@@ -65,6 +65,12 @@
                     "format": "double",
                     "type": "number"
                 },
+                "chainTipSlot": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                },
                 "currentEra": {
                     "type": "string"
                 },
@@ -98,7 +104,41 @@
                 "blockSpeed",
                 "currentEra",
                 "currentMerkleRoot",
-                "baseCheckpoint"
+                "baseCheckpoint",
+                "chainTipSlot"
+            ],
+            "type": "object"
+        },
+        "ReadyResponse": {
+            "description": "Sync readiness status for orchestration",
+            "properties": {
+                "processedSlot": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "ready": {
+                    "type": "boolean"
+                },
+                "slotsBehind": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "tipSlot": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "ready",
+                "tipSlot",
+                "processedSlot",
+                "slotsBehind"
             ],
             "type": "object"
         }
@@ -175,6 +215,21 @@
                     },
                     "400": {
                         "description": "Invalid `txIx` or `txId`"
+                    }
+                }
+            }
+        },
+        "/ready": {
+            "get": {
+                "produces": [
+                    "application/json;charset=utf-8"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "$ref": "#/definitions/ReadyResponse"
+                        }
                     }
                 }
             }
