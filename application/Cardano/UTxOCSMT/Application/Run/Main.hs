@@ -99,6 +99,7 @@ import Control.Concurrent.Class.MonadSTM.Strict
     , readTVarIO
     , writeTVar
     )
+import Control.Exception (SomeException, catch, displayException)
 import Control.Lens (Prism', lazy, prism', strict, view)
 import Control.Monad (when, (<=<))
 import Control.Tracer
@@ -195,6 +196,8 @@ data MainTraces
     | ServeDocs
     | Mithril ImportTrace
     | BootstrapOnlyExit Point
+    | HTTPServiceError String
+    | ApplicationStarting
 
 renderMainTraces :: MainTraces -> String
 renderMainTraces Boot = "Starting up Cardano UTxO CSMT client..."
@@ -217,13 +220,23 @@ renderMainTraces (Mithril mt) =
 renderMainTraces (BootstrapOnlyExit point) =
     "Bootstrap complete, exiting (--mithril-bootstrap-only). Checkpoint: "
         ++ show point
+renderMainTraces (HTTPServiceError err) =
+    "ERROR: HTTP service failed to start: " ++ err
+renderMainTraces ApplicationStarting =
+    "Starting Ouroboros node connection and chain sync application..."
 
 startHTTPService
-    :: IO () -> Maybe PortNumber -> (PortNumber -> IO ()) -> IO ()
-startHTTPService _ Nothing _ = return ()
-startHTTPService trace (Just port) runServer = do
+    :: (String -> IO ())
+    -> IO ()
+    -> Maybe PortNumber
+    -> (PortNumber -> IO ())
+    -> IO ()
+startHTTPService _ _ Nothing _ = return ()
+startHTTPService logError trace (Just port) runServer = do
     trace
-    link <=< async $ runServer port
+    link <=< async
+        $ runServer port `catch` \(e :: SomeException) -> do
+            logError $ "HTTP server crashed: " ++ displayException e
 
 main :: IO ()
 main = withUtf8 $ do
@@ -258,7 +271,10 @@ main = withUtf8 $ do
                 $ newThreadSafeTracer
                 $ contramap renderMainTraces
                 $ addTimestampsTracer basicTracer
-        startHTTPService (trace ServeDocs) (apiDocsPort options)
+        startHTTPService
+            (trace . HTTPServiceError)
+            (trace ServeDocs)
+            (apiDocsPort options)
             $ flip runDocsServer apiPort
         trace Boot
         withRocksDB dbPath $ \db -> do
@@ -286,7 +302,10 @@ main = withUtf8 $ do
                     mkReadyResponse (syncThreshold options)
                         <$> readTVarIO metricsVar
 
-            startHTTPService (trace ServeApi) apiPort
+            startHTTPService
+                (trace . HTTPServiceError)
+                (trace ServeApi)
+                apiPort
                 $ \port ->
                     runAPIServer
                         port
@@ -306,9 +325,12 @@ main = withUtf8 $ do
                     txRunTransaction $ putBaseCheckpoint point
                 mSkipTargetSlot = SlotNo <$> setupMithrilSlot
 
+            -- Log before starting the application
+            trace ApplicationStarting
+
             -- Emit the base checkpoint to metrics
-            _ <-
-                application
+            result <-
+                ( application
                     (networkMagic options)
                     (nodeName options)
                     (portNumber options)
@@ -321,7 +343,13 @@ main = withUtf8 $ do
                     state
                     slots
                     (mFinality runner)
-            error "main: application exited unexpectedly"
+                )
+                    `catch` \(e :: SomeException) -> do
+                        trace
+                            $ HTTPServiceError
+                            $ "Application crashed: " ++ displayException e
+                        error $ "main: application crashed: " ++ displayException e
+            error $ "main: application exited unexpectedly with: " ++ show result
 
 stealMetricsEvent :: MainTraces -> Maybe MetricsEvent
 stealMetricsEvent (Update (UpdateForwardTip _ _ _ (Just merkleRoot))) =
