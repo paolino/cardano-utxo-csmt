@@ -175,7 +175,11 @@ importFromMithril tracer config runner = do
                 $ ImportMithril
                 $ MithrilDownloading digest (mithrilDownloadDir config)
 
-            downloadResult <- downloadSnapshotHttp config snapshot
+            downloadResult <-
+                downloadSnapshotHttp
+                    (contramap ImportMithril tracer)
+                    config
+                    snapshot
 
             case downloadResult of
                 Left err -> do
