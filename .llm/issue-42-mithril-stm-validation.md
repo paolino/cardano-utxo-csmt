@@ -660,3 +660,87 @@ https://aggregator.release-mainnet.api.mithril.network/aggregator/certificate/<h
 11. ~~Integration testing with real Mithril certificates~~
 12. **OPTIONAL**: Full end-to-end verification (blocked by Merkle batch path)
 13. **OPTIONAL**: Compare with cardano-crypto-class as alternative
+
+## 2026-01-27: How Mithril Client Constructs Batch Paths
+
+Investigation into how the Mithril Rust client handles the Merkle batch path that's
+missing from the aggregator API response.
+
+### Key Finding: Batch Path is Computed During Aggregation
+
+The Mithril batch path is **not stored or transmitted** - it's **computed** by the
+`ConcatenationClerk` when aggregating signatures. The clerk has access to the full
+Merkle tree of registered signers and computes the batch path on-the-fly.
+
+### Rust Implementation Structure
+
+```
+mithril-stm/src/
+├── membership_commitment/
+│   └── merkle_tree/
+│       ├── tree.rs        -- Full tree + compute_merkle_tree_batch_path()
+│       ├── path.rs        -- MerkleBatchPath structure
+│       └── commitment.rs  -- MerkleTreeCommitment (root + nr_leaves)
+└── proof_system/
+    └── concatenation/
+        ├── clerk.rs       -- ConcatenationClerk (aggregation)
+        └── proof.rs       -- ConcatenationProof (signatures + batch_path)
+```
+
+### Batch Path Generation (Octopus Algorithm)
+
+From `tree.rs`, the `compute_merkle_tree_batch_path()` function:
+
+1. Takes a list of leaf indices (signer positions)
+2. Uses the "Octopus algorithm" to avoid redundancy
+3. Traverses up from each leaf, collecting sibling hashes
+4. Skips siblings that are already in the batch (optimization)
+5. Returns `MerkleBatchPath { values: [hashes], indices: [positions] }`
+
+### ConcatenationProof Structure
+
+From `proof.rs`:
+
+```rust
+struct ConcatenationProof<D> {
+    signatures: Vec<SingleSignatureWithRegisteredParty>,
+    batch_proof: MerkleBatchPath<D>,
+}
+```
+
+The `aggregate_signatures()` method:
+1. Looks up each signature's registration entry
+2. Validates against lottery (using aggregate verification key)
+3. Extracts merkle tree indices from valid signatures
+4. **Computes batch path** from those indices using the full tree
+5. Returns the complete proof
+
+### Verification Flow
+
+From `proof.rs`, `preliminary_verify()`:
+1. Validates each signature's indices
+2. Ensures uniqueness and k threshold
+3. **Reconstructs leaves** from registered parties (vk, stake)
+4. Verifies batch path against the commitment root
+
+### Implications for Our Haskell Implementation
+
+**Why the API doesn't include batch path:**
+- The batch path is an internal proof artifact
+- It's computed during aggregation, not stored
+- The aggregator has the full tree and computes it when needed
+
+**Options for full verification:**
+1. **Fetch full signer registry**: Get all registered parties, rebuild tree,
+   recompute batch path from signer indices. Requires additional API calls.
+2. **Trust the aggregator**: The aggregator already verified the batch path
+   internally. If we trust the certificate came from the aggregator, we can
+   skip re-verification of the batch path.
+3. **Request API change**: Ask Mithril team to include batch path in certificate
+   responses. This would add ~50-100KB per certificate.
+
+**Current approach (what we have):**
+- Parse and convert certificates successfully
+- Verify BLS signatures independently
+- Verify signature count meets quorum (k parameter)
+- Batch path verification is stubbed (empty path)
