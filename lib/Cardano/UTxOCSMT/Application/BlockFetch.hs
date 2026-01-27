@@ -19,6 +19,7 @@ module Cardano.UTxOCSMT.Application.BlockFetch
     , Fetched (..)
     , EventQueueLength (..)
     , BlockFetchApplication
+    , HeaderSkipProgress (..)
     )
 where
 
@@ -73,6 +74,15 @@ newtype EventQueueLength = EventQueueLength Int
 
 makeWrapped ''EventQueueLength
 
+-- | Progress during header skip phase (post-Mithril catch-up)
+data HeaderSkipProgress = HeaderSkipProgress
+    { skipCurrentSlot :: SlotNo
+    -- ^ Current slot being processed
+    , skipTargetSlot :: SlotNo
+    -- ^ Target slot to reach
+    }
+    deriving (Show)
+
 -- | A fetched block along with its point
 data Fetched = Fetched
     { fetchedPoint :: Point
@@ -87,6 +97,8 @@ mkBlockFetchApplication
     -- ^ maximum length of the headers queue
     -> Tracer IO EventQueueLength
     -- ^ metrics tracer
+    -> Tracer IO HeaderSkipProgress
+    -- ^ tracer for header skip progress during Mithril catch-up
     -> (Point -> IO ())
     -- ^ Action to set the base checkpoint
     -> Maybe SlotNo
@@ -97,6 +109,7 @@ mkBlockFetchApplication
 mkBlockFetchApplication
     (EventQueueLength maxQueueLen)
     tr
+    skipProgressTracer
     setCheckpoint
     mSkipTargetSlot
     blockIntersector = do
@@ -109,6 +122,7 @@ mkBlockFetchApplication
             , mkHeaderIntersector
                 blockFollowerVar
                 queue
+                skipProgressTracer
                 setCheckpoint
                 mSkipTargetSlot
                 skipActiveVar
@@ -118,6 +132,8 @@ mkBlockFetchApplication
 headerFollower
     :: MVar (Follower Fetched)
     -> Queue Point
+    -> Tracer IO HeaderSkipProgress
+    -- ^ Tracer for skip progress
     -> (Point -> IO ())
     -- ^ Action to set the base checkpoint
     -> Maybe SlotNo
@@ -128,6 +144,7 @@ headerFollower
 headerFollower
     blockFollowerVar
     queue@Queue{pushQueue, waitEmptyQueue}
+    skipProgressTracer
     setCheckpoint
     mSkipTargetSlot
     skipActiveVar = fix $ \go ->
@@ -147,8 +164,13 @@ headerFollower
                             -- Now start normal operation
                             pushQueue point
                         | otherwise ->
-                            -- Still skipping: don't push to queue
-                            pure ()
+                            -- Still skipping: emit progress event
+                            traceWith
+                                skipProgressTracer
+                                HeaderSkipProgress
+                                    { skipCurrentSlot = headerSlot
+                                    , skipTargetSlot = skipTargetSlot
+                                    }
                     _ ->
                         -- Normal operation: push to queue
                         pushQueue point
@@ -170,6 +192,7 @@ headerFollower
                             $ mkHeaderIntersector
                                 blockFollowerVar
                                 queue
+                                skipProgressTracer
                                 setCheckpoint
                                 mSkipTargetSlot
                                 skipActiveVar
@@ -180,6 +203,7 @@ headerFollower
                             $ mkHeaderIntersector
                                 blockFollowerVar
                                 queue
+                                skipProgressTracer
                                 setCheckpoint
                                 mSkipTargetSlot
                                 skipActiveVar
@@ -189,6 +213,8 @@ headerFollower
 mkHeaderIntersector
     :: MVar (Follower Fetched)
     -> Queue Point
+    -> Tracer IO HeaderSkipProgress
+    -- ^ Tracer for skip progress
     -> (Point -> IO ())
     -- ^ Action to set the base checkpoint
     -> Maybe SlotNo
@@ -196,23 +222,30 @@ mkHeaderIntersector
     -> StrictTVar IO Bool
     -> Intersector Fetched
     -> Intersector Header
-mkHeaderIntersector blockFollowerVar q setCheckpoint mSkipTargetSlot skipActiveVar =
-    fix $ \go blockIntersector ->
-        Intersector
-            { intersectFound = \point -> do
-                blockFollower <- intersectFound blockIntersector point
-                putMVar blockFollowerVar blockFollower
-                pure
-                    $ headerFollower
-                        blockFollowerVar
-                        q
-                        setCheckpoint
-                        mSkipTargetSlot
-                        skipActiveVar
-            , intersectNotFound = do
-                (blockIntersector', points) <- intersectNotFound blockIntersector
-                pure (go blockIntersector', points)
-            }
+mkHeaderIntersector
+    blockFollowerVar
+    q
+    skipProgressTracer
+    setCheckpoint
+    mSkipTargetSlot
+    skipActiveVar =
+        fix $ \go blockIntersector ->
+            Intersector
+                { intersectFound = \point -> do
+                    blockFollower <- intersectFound blockIntersector point
+                    putMVar blockFollowerVar blockFollower
+                    pure
+                        $ headerFollower
+                            blockFollowerVar
+                            q
+                            skipProgressTracer
+                            setCheckpoint
+                            mSkipTargetSlot
+                            skipActiveVar
+                , intersectNotFound = do
+                    (blockIntersector', points) <- intersectNotFound blockIntersector
+                    pure (go blockIntersector', points)
+                }
 
 blockFetchReceiver
     :: MVar (Follower Fetched)

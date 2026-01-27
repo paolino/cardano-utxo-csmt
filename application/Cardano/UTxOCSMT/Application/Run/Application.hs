@@ -9,6 +9,7 @@ import CSMT ()
 import Cardano.UTxOCSMT.Application.BlockFetch
     ( EventQueueLength
     , Fetched (..)
+    , HeaderSkipProgress (..)
     , mkBlockFetchApplication
     )
 import Cardano.UTxOCSMT.Application.ChainSync
@@ -31,10 +32,11 @@ import Cardano.UTxOCSMT.Ouroboros.Types
     , ProgressOrRewind (..)
     )
 import Control.Exception (throwIO)
-import Control.Monad (replicateM_)
-import Control.Tracer (Tracer)
+import Control.Monad (replicateM_, when)
+import Control.Tracer (Tracer (..), contramap, traceWith)
 import Data.ByteString.Lazy (ByteString)
 import Data.Function (fix)
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Tracer.TraceWith
     ( contra
     , trace
@@ -42,7 +44,8 @@ import Data.Tracer.TraceWith
     , pattern TraceWith
     )
 import Data.Void (Void)
-import Ouroboros.Network.Block (SlotNo)
+import Data.Word (Word64)
+import Ouroboros.Network.Block (SlotNo (..))
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic)
 import Ouroboros.Network.PeerSelection.RelayAccessPoint (PortNumber)
@@ -56,6 +59,10 @@ data ApplicationTrace
     = ApplicationIntersectionAt Point
     | ApplicationIntersectionFailed
     | ApplicationRollingBack Point
+    | -- | Block processed at slot with UTxO change count
+      ApplicationBlockProcessed SlotNo Int
+    | -- | Header sync progress during Mithril catch-up
+      ApplicationHeaderSkipProgress HeaderSkipProgress
 
 -- | Render an 'ApplicationTrace'
 renderApplicationTrace :: ApplicationTrace -> String
@@ -65,9 +72,35 @@ renderApplicationTrace ApplicationIntersectionFailed =
     "Intersection failed, resetting to origin"
 renderApplicationTrace (ApplicationRollingBack point) =
     "Rolling back to point: " ++ show point
+renderApplicationTrace (ApplicationBlockProcessed slot utxoCount) =
+    "Block processed: slot "
+        ++ show (unSlotNo slot)
+        ++ ", "
+        ++ show utxoCount
+        ++ " UTxO changes"
+renderApplicationTrace (ApplicationHeaderSkipProgress progress) =
+    "Syncing headers: slot "
+        ++ show (unSlotNo $ skipCurrentSlot progress)
+        ++ " / "
+        ++ show (unSlotNo $ skipTargetSlot progress)
 
 origin :: Network.Point block
 origin = Network.Point{getPoint = Origin}
+
+-- | Create a tracer that only emits progress events every N slots
+throttleBySlot
+    :: Word64
+    -- ^ Slot interval between logs
+    -> Tracer IO HeaderSkipProgress
+    -> IO (Tracer IO HeaderSkipProgress)
+throttleBySlot interval baseTracer = do
+    lastSlotRef <- newIORef 0
+    pure $ Tracer $ \progress -> do
+        let SlotNo currentSlot = skipCurrentSlot progress
+        lastSlot <- readIORef lastSlotRef
+        when (currentSlot >= lastSlot + interval) $ do
+            writeIORef lastSlotRef currentSlot
+            traceWith baseTracer progress
 
 type DBState = State IO Point ByteString ByteString
 
@@ -101,14 +134,22 @@ follower
     -> DBState
     -> Follower Fetched
 follower
-    tracer
+    TraceWith{trace, tracer}
     trUTxO
     newFinalityTarget
     db = ($ db) $ fix $ \go currentDB ->
         Follower
             { rollForward = \Fetched{fetchedPoint, fetchedBlock} -> do
                 let ops = changeToOperation <$> uTxOs fetchedBlock
-                replicateM_ (length ops) trUTxO
+                    opsCount = length ops
+                replicateM_ opsCount trUTxO
+                -- Log progress every 1000 slots
+                case Network.pointSlot fetchedPoint of
+                    At slot@(SlotNo s)
+                        | s `mod` 1000 == 0 ->
+                            trace
+                                $ ApplicationBlockProcessed slot opsCount
+                    _ -> pure ()
                 newDB <- case currentDB of
                     Syncing update -> do
                         newUpdate <- forwardTipApply update fetchedPoint ops
@@ -200,10 +241,15 @@ application
 
             let counting = metricTrace UTxOChangeEvent
 
+            skipProgressTracer <-
+                throttleBySlot 1000
+                    $ contramap ApplicationHeaderSkipProgress tracer
+
             (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
                     headersQueueSize
                     (metricContra BlockFetchEvent)
+                    skipProgressTracer
                     setCheckpoint
                     mSkipTargetSlot
                     $ intersector tracer counting mFinality
