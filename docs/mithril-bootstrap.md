@@ -8,7 +8,8 @@ certified snapshots instead of syncing from genesis.
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Fetch snapshot metadata | ✅ Working | All networks (mainnet, preprod, preview) |
-| HTTP download (no verification) | ✅ Default | Downloads ancillary data with ledger state |
+| HTTP download | ✅ Working | Downloads ancillary data with ledger state |
+| Ed25519 ancillary verification | ✅ Working | Verifies manifest signature for all networks |
 | Find ledger state files | ✅ Working | Supports both old (.lstate) and new UTxO-HD formats |
 | CLI options | ✅ Working | `--network`, `--mithril-bootstrap`, etc. |
 | UTxO extraction from ledger state | ✅ Working | Streams MemPack-encoded (TxIn, TxOut) pairs from tvar file |
@@ -80,14 +81,23 @@ the Mithril network automatically.
 | `--mithril-bootstrap-only` | Exit after bootstrap (skip chain sync) | `false` |
 | `--mithril-aggregator URL` | Override aggregator URL | Network default |
 | `--mithril-download-dir DIR` | Directory for downloads | Temp directory |
+| `--mithril-ancillary-verification-key KEY` | Override Ed25519 verification key (JSON-hex) | Network default |
+| `--mithril-skip-ancillary-verification` | Skip Ed25519 verification (not recommended) | `false` |
 
 ## Networks
 
-| Network | Aggregator URL |
-|---------|---------------|
-| Mainnet | `https://aggregator.release-mainnet.api.mithril.network/aggregator` |
-| Preprod | `https://aggregator.release-preprod.api.mithril.network/aggregator` |
-| Preview | `https://aggregator.pre-release-preview.api.mithril.network/aggregator` |
+| Network | Aggregator URL | Ancillary Verification |
+|---------|---------------|------------------------|
+| Mainnet | `https://aggregator.release-mainnet.api.mithril.network/aggregator` | ✅ Ed25519 |
+| Preprod | `https://aggregator.release-preprod.api.mithril.network/aggregator` | ✅ Ed25519 |
+| Preview | `https://aggregator.pre-release-preview.api.mithril.network/aggregator` | ✅ Ed25519 |
+
+Ancillary verification keys are sourced from the official Mithril infrastructure:
+[`mithril-infra/configuration/{network}/ancillary.vkey`](https://mithril.network/doc/manual/getting-started/network-configurations)
+
+!!! note "Shared Keys"
+    Preview and Preprod currently share the same verification key.
+    Mainnet has a distinct key.
 
 ## How It Works
 
@@ -105,18 +115,26 @@ Response includes:
 - `locations`: Download URLs for immutable files
 - `ancillary_locations`: Download URLs for ledger state
 
-### 2. Download and Extract
+### 2. Download and Verify
 
-**HTTP Download (current implementation)**
+**HTTP Download with Ed25519 Verification**
 
-- Downloads directly from CDN URLs
+- Downloads ancillary archive directly from CDN URLs
+- Verifies `ancillary_manifest.json` Ed25519 signature
+- Verifies SHA256 hash of each file against manifest
 - Fast, no external dependencies
-- Suitable for development/testing
 
-!!! warning "No Cryptographic Verification"
-    The current implementation does not verify the Mithril STM certificate chain.
-    This is acceptable for development but production deployments should wait for
-    the FFI-based verification (see [STM verification plan](mithril-stm-ffi-plan.md)).
+The ancillary archive contains a signed manifest (`ancillary_manifest.json`) that lists
+all files with their SHA256 hashes, plus an Ed25519 signature over the manifest data.
+Verification ensures:
+
+1. The manifest signature is valid (signed by IOG's ancillary key)
+2. Each extracted file matches its declared hash
+
+!!! note "STM Certificate Chain"
+    Ed25519 verification protects the ancillary files (ledger state).
+    Full STM certificate chain verification is still planned for the immutable files.
+    See [STM verification plan](mithril-stm-ffi-plan.md) for details.
 
 ### 3. Ledger State Format
 
@@ -202,18 +220,38 @@ This adds a few seconds of header scanning but avoids replaying all blocks.
 
 ## Security Considerations
 
-!!! warning "Current Limitation"
-    The current implementation uses unverified HTTP download. Snapshots are
-    fetched from Mithril CDN without cryptographic verification of the STM
-    certificate chain.
+### Ed25519 Ancillary Verification (Implemented)
 
-- **Production**: Wait for FFI-based STM verification (planned)
-- **Development**: HTTP download is acceptable for testing
-- Snapshots are signed by Cardano stake pool operators using STM
-- Future: Certificate chain verification via Rust FFI bindings
+Ancillary files (ledger state) are protected by Ed25519 signature verification:
 
-See the [Mithril STM FFI plan](mithril-stm-ffi-plan.md) for the verification
-implementation roadmap.
+- **Manifest signature**: The `ancillary_manifest.json` is signed by IOG's Ed25519 key
+- **File integrity**: Each file's SHA256 hash is verified against the manifest
+- **Network keys**: Official verification keys are embedded for all networks
+
+This verification runs automatically. To skip it (not recommended):
+
+```bash
+cardano-utxo-chainsync \
+    --mithril-bootstrap \
+    --mithril-skip-ancillary-verification \
+    ...
+```
+
+To use a custom verification key:
+
+```bash
+cardano-utxo-chainsync \
+    --mithril-bootstrap \
+    --mithril-ancillary-verification-key "5b32332c37312c..." \
+    ...
+```
+
+### STM Certificate Chain (Planned)
+
+Full STM certificate chain verification for immutable files is planned.
+This will verify that snapshots are correctly signed by Cardano stake pool operators.
+
+See the [Mithril STM FFI plan](mithril-stm-ffi-plan.md) for the implementation roadmap.
 
 ## Troubleshooting
 
