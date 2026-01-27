@@ -330,7 +330,7 @@ main = withUtf8 $ do
 
             -- Emit the base checkpoint to metrics
             result <-
-                ( application
+                application
                     (networkMagic options)
                     (nodeName options)
                     (portNumber options)
@@ -343,7 +343,6 @@ main = withUtf8 $ do
                     state
                     slots
                     (mFinality runner)
-                )
                     `catch` \(e :: SomeException) -> do
                         trace
                             $ HTTPServiceError
