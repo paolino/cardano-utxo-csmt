@@ -44,6 +44,7 @@ import Cardano.UTxOCSMT.Mithril.AncillaryVerifier
     )
 import Control.Exception (Exception, try)
 import Control.Monad (unless)
+import Control.Tracer (Tracer, traceWith)
 import Data.Aeson
     ( FromJSON (..)
     , decode
@@ -363,10 +364,12 @@ downloads in production.
 Requires @tar@ and @zstd@ commands to be available in PATH.
 -}
 downloadSnapshotHttp
-    :: MithrilConfig
+    :: Tracer IO MithrilTrace
+    -> MithrilConfig
     -> SnapshotMetadata
     -> IO (Either MithrilError FilePath)
 downloadSnapshotHttp
+    tracer
     MithrilConfig
         { mithrilDownloadDir
         , mithrilHttpManager
@@ -445,13 +448,16 @@ downloadSnapshotHttp
 
         -- Verify ancillary manifest if verification key is configured
         verifyIfConfigured path = case mithrilAncillaryVk of
-            Nothing ->
+            Nothing -> do
                 -- No verification key configured, skip verification
+                traceWith tracer MithrilAncillarySkipped
                 pure $ Right path
             Just vk -> do
+                traceWith tracer $ MithrilVerifyingAncillary path
                 verifyResult <- verifyAncillaryManifest vk path
                 case verifyResult of
                     Left err ->
                         pure $ Left $ MithrilVerificationFailed err
-                    Right () ->
+                    Right () -> do
+                        traceWith tracer MithrilAncillaryVerified
                         pure $ Right path
