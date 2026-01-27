@@ -52,7 +52,7 @@ import Control.Concurrent.MVar
     , takeMVar
     )
 import Control.Lens (makeWrapped)
-import Control.Monad (unless, when)
+import Control.Monad (unless)
 import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -163,16 +163,14 @@ headerFollower
                             setCheckpoint point
                             -- Now start normal operation
                             pushQueue point
-                        | otherwise -> do
-                            -- Still skipping: log progress every 1000 slots
-                            let SlotNo s = headerSlot
-                            when (s `mod` 1000 == 0)
-                                $ traceWith
-                                    skipProgressTracer
-                                    HeaderSkipProgress
-                                        { skipCurrentSlot = headerSlot
-                                        , skipTargetSlot = skipTargetSlot
-                                        }
+                        | otherwise ->
+                            -- Still skipping: emit progress event
+                            traceWith
+                                skipProgressTracer
+                                HeaderSkipProgress
+                                    { skipCurrentSlot = headerSlot
+                                    , skipTargetSlot = skipTargetSlot
+                                    }
                     _ ->
                         -- Normal operation: push to queue
                         pushQueue point

@@ -32,10 +32,11 @@ import Cardano.UTxOCSMT.Ouroboros.Types
     , ProgressOrRewind (..)
     )
 import Control.Exception (throwIO)
-import Control.Monad (replicateM_)
-import Control.Tracer (Tracer, contramap)
+import Control.Monad (replicateM_, when)
+import Control.Tracer (Tracer (..), contramap, traceWith)
 import Data.ByteString.Lazy (ByteString)
 import Data.Function (fix)
+import Data.IORef (newIORef, readIORef, writeIORef)
 import Data.Tracer.TraceWith
     ( contra
     , trace
@@ -43,6 +44,7 @@ import Data.Tracer.TraceWith
     , pattern TraceWith
     )
 import Data.Void (Void)
+import Data.Word (Word64)
 import Ouroboros.Network.Block (SlotNo (..))
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic)
@@ -84,6 +86,21 @@ renderApplicationTrace (ApplicationHeaderSkipProgress progress) =
 
 origin :: Network.Point block
 origin = Network.Point{getPoint = Origin}
+
+-- | Create a tracer that only emits progress events every N slots
+throttleBySlot
+    :: Word64
+    -- ^ Slot interval between logs
+    -> Tracer IO HeaderSkipProgress
+    -> IO (Tracer IO HeaderSkipProgress)
+throttleBySlot interval baseTracer = do
+    lastSlotRef <- newIORef 0
+    pure $ Tracer $ \progress -> do
+        let SlotNo currentSlot = skipCurrentSlot progress
+        lastSlot <- readIORef lastSlotRef
+        when (currentSlot >= lastSlot + interval) $ do
+            writeIORef lastSlotRef currentSlot
+            traceWith baseTracer progress
 
 type DBState = State IO Point ByteString ByteString
 
@@ -224,8 +241,9 @@ application
 
             let counting = metricTrace UTxOChangeEvent
 
-            let skipProgressTracer =
-                    contramap ApplicationHeaderSkipProgress tracer
+            skipProgressTracer <-
+                throttleBySlot 1000
+                    $ contramap ApplicationHeaderSkipProgress tracer
 
             (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
