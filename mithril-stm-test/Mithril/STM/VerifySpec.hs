@@ -198,24 +198,33 @@ testAggregateSignatureWithIndices indexLists _params =
 -- Mock Crypto Operations
 -- ============================================================================
 
--- | Mock hash operations (identity-like for testing)
+{- | Mock hash operations for testing.
+
+The blake2b512 returns all zeros, which makes the lottery always pass
+(since 0 / 2^512 = 0 < φ(w) for any positive stake).
+
+The blake2b256 uses a simple deterministic hash for Merkle operations.
+-}
 mockHashOps :: HashOps ByteString ByteString
 mockHashOps =
     HashOps
-        { blake2b256 = simpleHash
-        , blake2b512 = simpleHash
+        { blake2b256 = simpleHash256
+        , blake2b512 = lotteryWinHash
         , hash256ToBytes = id
         , hash512ToBytes = id
         , bytesToHash256 = Just
         , bytesToHash512 = Just
         }
   where
-    simpleHash bs =
+    -- Simple deterministic 32-byte hash for Merkle operations
+    simpleHash256 bs =
         let len = BS.length bs
             xorFold = BS.foldl' xor 0 bs
-        in  BS.pack
-                $ [xorFold, fromIntegral len]
-                    ++ replicate 30 xorFold
+        in  BS.pack $ [xorFold, fromIntegral len] ++ replicate 30 xorFold
+
+    -- Returns all zeros (64 bytes) - this will always win the lottery
+    -- since 0 / 2^512 = 0 which is less than any positive phi(w)
+    lotteryWinHash _ = BS.replicate 64 0
 
 -- | Mock BLS operations that always succeed
 mockBlsOps :: BlsOps ByteString ByteString

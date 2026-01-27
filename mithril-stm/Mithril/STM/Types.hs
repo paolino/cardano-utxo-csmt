@@ -57,8 +57,14 @@ module Mithril.STM.Types
       -- $merkle
     , MerkleCommitment (..)
     , MerkleBatchPath (..)
+
+      -- * Genesis Certificate Types
+      -- $genesis
+    , GenesisVerificationKey (..)
+    , CertificateLink (..)
     ) where
 
+import Data.ByteString (ByteString)
 import Data.Word (Word32, Word64)
 
 {- $aliases
@@ -336,3 +342,59 @@ data MerkleBatchPath hash = MerkleBatchPath
     -}
     }
     deriving stock (Show, Eq, Functor)
+
+{- $genesis
+Types for genesis certificate verification. The Mithril certificate chain
+traces back to a genesis certificate signed with IOG's Ed25519 genesis key.
+-}
+
+{- | Genesis verification key (Ed25519 public key).
+
+The genesis certificate is signed using Ed25519 rather than STM signatures.
+IOG publishes the genesis verification key at:
+
+@
+https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/genesis.vkey
+@
+
+The key is 32 bytes when decoded from hex.
+-}
+newtype GenesisVerificationKey = GenesisVerificationKey
+    { unGenesisVerificationKey :: ByteString
+    -- ^ Raw 32-byte Ed25519 public key
+    }
+    deriving stock (Show, Eq)
+
+{- | Link in the certificate chain.
+
+Each certificate links to its predecessor via 'clPreviousHash'.
+The genesis certificate has 'Nothing' for 'clPreviousHash'.
+
+__Chain structure__:
+
+@
+Certificate N  -->  Certificate N-1  -->  ...  -->  Genesis Certificate
+     |                    |                               |
+  AVK signed          AVK signed                    Signed by IOG
+  by STM             by STM                         genesis key
+@
+
+__Verification__:
+
+For non-genesis certificates, verify the STM signature.
+For the genesis certificate, verify the Ed25519 signature using
+the 'GenesisVerificationKey'.
+-}
+data CertificateLink = CertificateLink
+    { clHash :: !ByteString
+    -- ^ This certificate's hash (identifier)
+    , clPreviousHash :: !(Maybe ByteString)
+    -- ^ Previous certificate's hash, or 'Nothing' for genesis
+    , clSignedMessage :: !ByteString
+    -- ^ The message that was signed
+    , clGenesisSignature :: !(Maybe ByteString)
+    {- ^ Ed25519 signature (64 bytes), present only for genesis certificate.
+    For non-genesis certificates this is 'Nothing'.
+    -}
+    }
+    deriving stock (Show, Eq)

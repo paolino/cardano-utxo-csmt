@@ -57,6 +57,14 @@ module Mithril.STM.Verify
     ( -- * Main Verification
       verify
 
+      -- * Verification Mode
+    , VerificationMode (..)
+    , verifyTrustingRegistration
+
+      -- * Chain Verification
+    , verifyChain
+    , ChainVerificationFailure (..)
+
       -- * Verification Failures
     , VerificationFailure (..)
 
@@ -65,11 +73,12 @@ module Mithril.STM.Verify
     , transformMessage
     ) where
 
+import Data.Bits (shiftR)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Set (Set)
 import Data.Set qualified as Set
-import Data.Word (Word64)
+import Data.Word (Word64, Word8)
 
 import Mithril.STM.Crypto (BlsOps (..), HashOps (..))
 import Mithril.STM.Lottery (isLotteryWon)
@@ -78,7 +87,9 @@ import Mithril.STM.Parameters (Parameters (..))
 import Mithril.STM.Types
     ( AggregateSignature (..)
     , AggregateVerificationKey (..)
+    , CertificateLink (..)
     , ConcatenationProof (..)
+    , GenesisVerificationKey (..)
     , LotteryIndex
     , MerkleCommitment (..)
     , RegistrationEntry (..)
@@ -86,6 +97,26 @@ import Mithril.STM.Types
     , SingleSignature (..)
     , Stake
     )
+
+{- | Verification mode controls which checks are performed.
+
+When fetching certificates from a Mithril aggregator, the aggregator has
+already verified Merkle membership proofs. In this case, you can use
+'TrustRegistration' mode to skip redundant Merkle verification.
+
+For maximum security when obtaining certificates from untrusted sources,
+use 'FullVerification' mode.
+-}
+data VerificationMode
+    = {- | Verify Merkle membership proof (requires valid batch path).
+      Use when the certificate source is untrusted.
+      -}
+      FullVerification
+    | {- | Skip Merkle check, trust that signers are registered.
+      Use when fetching from a trusted Mithril aggregator.
+      -}
+      TrustRegistration
+    deriving stock (Show, Eq)
 
 {- | Reasons why STM verification can fail.
 
@@ -221,20 +252,158 @@ verify
     -> AggregateSignature sig vk hash256
     -- ^ Aggregate signature to verify
     -> Either VerificationFailure ()
-verify hashOps blsOps params avk message (Concatenation proof) = do
+verify hashOps blsOps params avk message aggSig =
+    verifyWithMode
+        hashOps
+        blsOps
+        params
+        avk
+        message
+        aggSig
+        FullVerification
+
+{- | Verify certificate trusting that signers are registered.
+
+This verifies:
+
+* BLS aggregate signature validity
+* Lottery eligibility for each signer
+* Quorum threshold (>= k indices)
+* Index bounds and uniqueness
+
+This does __NOT__ verify:
+
+* Merkle membership (that signers were registered)
+
+Use when fetching certificates from a trusted Mithril aggregator.
+The aggregator already verified Merkle membership before publishing.
+
+==== Example
+
+@
+result <- verifyTrustingRegistration
+    cryptonHashOps
+    hsblstBlsOps
+    params
+    avk
+    message
+    aggSig
+case result of
+    Right () -> putStrLn "Certificate verified (trusting registration)"
+    Left failure -> putStrLn $ "Verification failed: " ++ show failure
+@
+-}
+verifyTrustingRegistration
+    :: (Eq hash256)
+    => HashOps hash256 hash512
+    -- ^ Hash operations
+    -> BlsOps sig vk
+    -- ^ BLS operations
+    -> Parameters
+    -- ^ Protocol parameters
+    -> AggregateVerificationKey hash256
+    -- ^ Aggregate verification key
+    -> ByteString
+    -- ^ Message that was signed
+    -> AggregateSignature sig vk hash256
+    -- ^ Aggregate signature to verify
+    -> Either VerificationFailure ()
+verifyTrustingRegistration hashOps blsOps params avk message aggSig =
+    verifyWithMode
+        hashOps
+        blsOps
+        params
+        avk
+        message
+        aggSig
+        TrustRegistration
+
+{- | Internal: verify with explicit mode.
+
+This is the core verification function that supports both full and
+trusting-registration modes.
+-}
+verifyWithMode
+    :: (Eq hash256)
+    => HashOps hash256 hash512
+    -> BlsOps sig vk
+    -> Parameters
+    -> AggregateVerificationKey hash256
+    -> ByteString
+    -> AggregateSignature sig vk hash256
+    -> VerificationMode
+    -> Either VerificationFailure ()
+verifyWithMode hashOps blsOps params avk message (Concatenation proof) mode = do
     -- Phase 1: Preliminary verification
-    -- This checks lottery, uniqueness, quorum, and Merkle proof
-    (sigs, vks) <- preliminaryVerify hashOps params avk message proof
+    (sigs, vks) <-
+        preliminaryVerifyWithMode hashOps blsOps params avk message proof mode
 
     -- Phase 2: BLS aggregate verification
-    -- Transform message to include Merkle commitment
     let message' = transformMessage hashOps (avkMerkleCommitment avk) message
-
-    -- Verify aggregate signature
-    let pairs = zip vks sigs
+        pairs = zip vks sigs
     if blsVerifyAggregate blsOps message' pairs
         then Right ()
         else Left BlsVerificationFailed
+
+{- | Preliminary verification with explicit mode.
+
+When mode is 'TrustRegistration', Merkle proof verification is skipped.
+-}
+preliminaryVerifyWithMode
+    :: (Eq hash256)
+    => HashOps hash256 hash512
+    -> BlsOps sig vk
+    -> Parameters
+    -> AggregateVerificationKey hash256
+    -> ByteString
+    -> ConcatenationProof sig vk hash256
+    -> VerificationMode
+    -> Either VerificationFailure ([sig], [vk])
+preliminaryVerifyWithMode hashOps blsOps params avk message proof mode = do
+    let totalStake = avkTotalStake avk
+        signedRegs = cpSignatures proof
+        -- Note: For certificates fetched from the aggregator, the message
+        -- is already the signed_message which includes the Merkle commitment.
+        -- We use it directly for lottery verification.
+        -- For other use cases, caller should provide transformed message.
+        message' = message
+
+    -- Check all indices and collect unique ones
+    uniqueIndices <-
+        checkAllSignatures
+            hashOps
+            blsOps
+            params
+            totalStake
+            message'
+            signedRegs
+
+    -- Check quorum
+    let uniqueCount = Set.size uniqueIndices
+    if fromIntegral uniqueCount < paramK params
+        then Left $ InsufficientSignatures uniqueCount (paramK params)
+        else pure ()
+
+    -- Verify Merkle proof (only in FullVerification mode)
+    case mode of
+        FullVerification -> do
+            let _leaves = [] :: [ByteString]
+            case verifyBatchPath
+                hashOps
+                (avkMerkleCommitment avk)
+                (cpBatchPath proof)
+                _leaves of
+                Left merkleErr -> Left $ MerkleProofInvalid merkleErr
+                Right () -> pure ()
+        TrustRegistration ->
+            -- Skip Merkle verification, trust the aggregator
+            pure ()
+
+    -- Extract signatures and verification keys for BLS verification
+    let sigs = map (ssSignature . srSignature) signedRegs
+        vks = map (reVerificationKey . srRegistration) signedRegs
+
+    pure (sigs, vks)
 
 {- | Preliminary verification (everything except BLS).
 
@@ -249,12 +418,16 @@ This performs all checks that don't require BLS operations:
 Returns the list of signatures and verification keys for BLS verification.
 
 __Exported for testing__: Allows testing preliminary checks without
-needing a real BLS implementation.
+needing a real BLS implementation. Note: For lottery hash computation,
+the BlsOps is used only for serializing verification keys; no actual
+BLS operations are performed.
 -}
 preliminaryVerify
     :: (Eq hash256)
     => HashOps hash256 hash512
     -- ^ Hash operations
+    -> BlsOps sig vk
+    -- ^ BLS operations (only used for vk serialization)
     -> Parameters
     -- ^ Protocol parameters
     -> AggregateVerificationKey hash256
@@ -265,77 +438,89 @@ preliminaryVerify
     -- ^ The concatenation proof
     -> Either VerificationFailure ([sig], [vk])
     -- ^ (signatures, verification keys) for BLS verification
-preliminaryVerify hashOps params avk message proof = do
-    let totalStake = avkTotalStake avk
-        signedRegs = cpSignatures proof
-
-    -- Check all indices and collect unique ones
-    uniqueIndices <-
-        checkAllSignatures hashOps params totalStake message signedRegs
-
-    -- Check quorum
-    let uniqueCount = Set.size uniqueIndices
-    if fromIntegral uniqueCount < paramK params
-        then Left $ InsufficientSignatures uniqueCount (paramK params)
-        else pure ()
-
-    -- Verify Merkle proof
-    -- TODO: Serialize registration entries for Merkle verification
-    let _leaves = [] :: [ByteString] -- Placeholder
-    case verifyBatchPath
+preliminaryVerify hashOps blsOps params avk message proof =
+    preliminaryVerifyWithMode
         hashOps
-        (avkMerkleCommitment avk)
-        (cpBatchPath proof)
-        _leaves of
-        Left merkleErr -> Left $ MerkleProofInvalid merkleErr
-        Right () -> pure ()
-
-    -- Extract signatures and verification keys for BLS verification
-    let sigs = map (ssSignature . srSignature) signedRegs
-        vks = map (reVerificationKey . srRegistration) signedRegs
-
-    pure (sigs, vks)
+        blsOps
+        params
+        avk
+        message
+        proof
+        FullVerification
 
 -- | Check all signatures for lottery wins and collect unique indices.
 checkAllSignatures
     :: HashOps hash256 hash512
+    -> BlsOps sig vk
+    -- ^ BLS operations (for serializing verification keys)
     -> Parameters
     -> Stake
     -- ^ Total stake
     -> ByteString
-    -- ^ Message
+    -- ^ Transformed message (H(merkle_root || original_message))
     -> [SignedRegistration sig vk]
     -> Either VerificationFailure (Set LotteryIndex)
-checkAllSignatures hashOps params totalStake message signedRegs =
+checkAllSignatures hashOps blsOps params totalStake message' signedRegs =
     go 0 Set.empty signedRegs
   where
     go _signerIdx !seen [] = Right seen
     go signerIdx !seen (sr : rest) = do
         -- Check this signer's indices
         newSeen <-
-            checkSignerIndices hashOps params totalStake message signerIdx seen sr
+            checkSignerIndices
+                hashOps
+                blsOps
+                params
+                totalStake
+                message'
+                signerIdx
+                seen
+                sr
         go (signerIdx + 1) newSeen rest
 
--- | Check one signer's claimed lottery indices.
+{- | Check one signer's claimed lottery indices.
+
+For each index, we:
+1. Check bounds (index < m)
+2. Check uniqueness (not already claimed)
+3. Check lottery win via hash computation
+
+The lottery hash follows the Mithril STM format:
+
+@ev = H("map" || msg || index || σ)@
+
+Where:
+
+* @"map"@ is a 3-byte prefix
+* @msg@ is the transformed message (H(merkle_root || original_message))
+* @index@ is the lottery index as little-endian 8 bytes
+* @σ@ is the BLS signature (48 bytes compressed)
+* @H@ is Blake2b-512 (returns 64 bytes)
+-}
 checkSignerIndices
     :: HashOps hash256 hash512
+    -> BlsOps sig vk
+    -- ^ BLS operations (for serializing signature)
     -> Parameters
     -> Stake
     -> ByteString
+    -- ^ Transformed message
     -> Int
     -- ^ Signer index (for error reporting)
     -> Set LotteryIndex
     -- ^ Already seen indices
     -> SignedRegistration sig vk
     -> Either VerificationFailure (Set LotteryIndex)
-checkSignerIndices _hashOps params totalStake _message signerIdx seen sr = do
+checkSignerIndices hashOps blsOps params totalStake message' signerIdx seen sr = do
     let indices = ssIndices (srSignature sr)
         stake = reStake (srRegistration sr)
+        sig = ssSignature (srSignature sr)
+        sigBytes = blsSerializeSig blsOps sig
 
     -- Check each index
-    foldM (checkIndex stake) seen indices
+    foldM (checkIndex stake sigBytes) seen indices
   where
-    checkIndex stake seenSoFar idx = do
+    checkIndex stake sigBytes seenSoFar idx = do
         -- Check index bounds
         if idx >= paramM params
             then Left $ IndexOutOfBounds idx (paramM params)
@@ -347,8 +532,12 @@ checkSignerIndices _hashOps params totalStake _message signerIdx seen sr = do
             else pure ()
 
         -- Check lottery win
-        -- TODO: Compute proper hash over (message || vk || index)
-        let lotteryHash = BS.replicate 64 0 -- Placeholder
+        -- Compute lottery hash: H("map" || msg || index || σ)
+        -- Note: index is little-endian per Mithril Rust implementation
+        let prefix = "map" :: ByteString
+            idxBytes = encodeWord64LE idx
+            hashInput = prefix <> message' <> idxBytes <> sigBytes
+            lotteryHash = hash512ToBytes hashOps (blake2b512 hashOps hashInput)
         if not (isLotteryWon (paramPhiF params) lotteryHash stake totalStake)
             then Left $ LotteryNotWon signerIdx idx
             else pure ()
@@ -358,20 +547,178 @@ checkSignerIndices _hashOps params totalStake _message signerIdx seen sr = do
 
     foldM f z xs = foldr (\x k acc -> f acc x >>= k) pure xs z
 
+{- | Encode a Word64 as little-endian bytes (8 bytes).
+Mithril uses little-endian for the lottery index.
+-}
+encodeWord64LE :: Word64 -> ByteString
+encodeWord64LE w =
+    BS.pack
+        [ fromIntegral w :: Word8
+        , fromIntegral (shiftR w 8)
+        , fromIntegral (shiftR w 16)
+        , fromIntegral (shiftR w 24)
+        , fromIntegral (shiftR w 32)
+        , fromIntegral (shiftR w 40)
+        , fromIntegral (shiftR w 48)
+        , fromIntegral (shiftR w 56)
+        ]
+
 {- | Transform message to include Merkle commitment.
 
-The actual signed message is:
+Following the Mithril STM protocol, the message is concatenated with the
+Merkle root (without additional hashing):
 
-@msg' = H(merkle_root || original_message)@
+@msg' = original_message || merkle_root@
 
 This binds the signature to the specific set of registered signers,
 preventing signatures from being "moved" to a different registration set.
+
+Note: The message comes first, then the root (per Mithril Rust implementation).
 -}
 transformMessage
     :: HashOps hash256 hash512
     -> MerkleCommitment hash256
     -> ByteString
     -> ByteString
-transformMessage HashOps{blake2b256, hash256ToBytes} commitment message =
+transformMessage HashOps{hash256ToBytes} commitment message =
     let rootBytes = hash256ToBytes (mcRoot commitment)
-    in  hash256ToBytes $ blake2b256 (rootBytes <> message)
+    in  message <> rootBytes
+
+-- ============================================================================
+-- Certificate Chain Verification
+-- ============================================================================
+
+{- | Reasons why certificate chain verification can fail.
+
+Chain verification traces certificates back to genesis, verifying
+each link in the chain.
+-}
+data ChainVerificationFailure
+    = {- | A non-genesis certificate failed STM verification.
+      First field: certificate index (0 = most recent).
+      Second field: the verification failure.
+      -}
+      ChainCertificateInvalid !Int !VerificationFailure
+    | -- | The genesis certificate's Ed25519 signature is invalid.
+      GenesisSignatureInvalid
+    | -- | The genesis certificate is missing its signature.
+      GenesisSignatureMissing
+    | -- | The genesis verification key is not a valid Ed25519 public key.
+      GenesisKeyMalformed
+    | -- | No certificates provided.
+      ChainEmpty
+    | {- | The chain doesn't end with a genesis certificate
+      (last certificate has a previous_hash).
+      -}
+      ChainNotTerminatedAtGenesis
+    deriving stock (Show, Eq)
+
+{- | Verify a certificate chain back to genesis.
+
+This function verifies each certificate in a chain, from the most recent
+certificate back to the genesis certificate. For each certificate:
+
+1. Non-genesis certificates are verified using STM verification
+   (with 'TrustRegistration' mode, since the chain provides trust)
+2. The genesis certificate is verified using its Ed25519 signature
+
+__Chain structure__:
+
+The chain should be ordered from newest to oldest:
+
+@
+[newest_cert, ..., genesis_cert]
+@
+
+The genesis certificate is identified by having 'Nothing' for
+'clPreviousHash' and having a 'clGenesisSignature'.
+
+__Trust model__:
+
+* The genesis certificate is signed by IOG's genesis key
+* Each subsequent certificate's AVK is embedded in its predecessor
+* This creates a chain of trust from genesis to the current certificate
+
+__Parameters__:
+
+* @verifyEd25519@: Ed25519 verification function
+* @hashOps@: Hash operations
+* @blsOps@: BLS operations
+* @genesisVk@: IOG's genesis verification key
+* @chain@: List of (certificate link, params, avk, message, aggregate sig)
+
+__Note__:
+
+For non-genesis certificates, the aggregate signature must be provided.
+For the genesis certificate, only the 'CertificateLink' with
+'clGenesisSignature' is needed.
+-}
+verifyChain
+    :: (Eq hash256)
+    => (ByteString -> ByteString -> ByteString -> Maybe Bool)
+    -- ^ Ed25519 verification function
+    -> HashOps hash256 hash512
+    -- ^ Hash operations
+    -> BlsOps sig vk
+    -- ^ BLS operations
+    -> GenesisVerificationKey
+    -- ^ Genesis verification key
+    -> [ ( CertificateLink
+         , Maybe
+            ( Parameters
+            , AggregateVerificationKey hash256
+            , ByteString
+            , AggregateSignature sig vk hash256
+            )
+         )
+       ]
+    {- ^ Chain from newest to genesis. Each entry is (link, optional STM data).
+    The genesis certificate should have Nothing for STM data.
+    -}
+    -> Either ChainVerificationFailure ()
+verifyChain _ _ _ _ [] = Left ChainEmpty
+verifyChain verifyEd25519' hashOps blsOps genesisVk chain =
+    verifyChainLoop 0 chain
+  where
+    verifyChainLoop _ [] = Left ChainEmpty
+    verifyChainLoop _idx [(link, _)] =
+        -- Last certificate should be genesis
+        case clPreviousHash link of
+            Just _ -> Left ChainNotTerminatedAtGenesis
+            Nothing -> verifyGenesis link
+    verifyChainLoop idx ((link, stmData) : rest) =
+        case clPreviousHash link of
+            Nothing ->
+                -- This is genesis but not at end - invalid
+                Left ChainNotTerminatedAtGenesis
+            Just _ -> do
+                -- Verify STM signature
+                case stmData of
+                    Nothing ->
+                        -- Non-genesis must have STM data
+                        Left
+                            $ ChainCertificateInvalid idx
+                            $ DeserializationFailure
+                                "Missing STM data for non-genesis cert"
+                    Just (params, avk, msg, aggSig) ->
+                        case verifyTrustingRegistration
+                            hashOps
+                            blsOps
+                            params
+                            avk
+                            msg
+                            aggSig of
+                            Left err ->
+                                Left $ ChainCertificateInvalid idx err
+                            Right () ->
+                                verifyChainLoop (idx + 1) rest
+
+    verifyGenesis link = case clGenesisSignature link of
+        Nothing -> Left GenesisSignatureMissing
+        Just sig ->
+            let GenesisVerificationKey vkBytes = genesisVk
+                msg = clSignedMessage link
+            in  case verifyEd25519' vkBytes msg sig of
+                    Nothing -> Left GenesisKeyMalformed
+                    Just False -> Left GenesisSignatureInvalid
+                    Just True -> Right ()

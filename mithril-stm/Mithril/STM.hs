@@ -85,6 +85,16 @@ module Mithril.STM
       verify
     , VerificationFailure (..)
 
+      -- * Verification Modes
+      -- $verificationModes
+    , VerificationMode (..)
+    , verifyTrustingRegistration
+
+      -- * Chain Verification
+      -- $chainVerification
+    , verifyChain
+    , ChainVerificationFailure (..)
+
       -- * Protocol Parameters
       -- $parameters
     , Parameters (..)
@@ -101,6 +111,11 @@ module Mithril.STM
     , AggregateVerificationKey (..)
     , MerkleCommitment (..)
     , MerkleBatchPath (..)
+
+      -- * Genesis Certificate Types
+      -- $genesis
+    , GenesisVerificationKey (..)
+    , CertificateLink (..)
 
       -- * Crypto Abstractions
       -- $crypto
@@ -141,7 +156,9 @@ import Mithril.STM.Serialization
 import Mithril.STM.Types
     ( AggregateSignature (..)
     , AggregateVerificationKey (..)
+    , CertificateLink (..)
     , ConcatenationProof (..)
+    , GenesisVerificationKey (..)
     , LotteryIndex
     , MerkleBatchPath (..)
     , MerkleCommitment (..)
@@ -151,14 +168,36 @@ import Mithril.STM.Types
     , Stake
     )
 import Mithril.STM.Verify
-    ( VerificationFailure (..)
+    ( ChainVerificationFailure (..)
+    , VerificationFailure (..)
+    , VerificationMode (..)
     , verify
+    , verifyChain
+    , verifyTrustingRegistration
     )
 
 {- $verification
 The 'verify' function is the main entry point for certificate verification.
 It takes crypto operation records, protocol parameters, the verification
 key, message, and signature, returning either a failure reason or success.
+-}
+
+{- $verificationModes
+When fetching certificates from a trusted Mithril aggregator, you can use
+'verifyTrustingRegistration' to skip redundant Merkle membership verification.
+The aggregator already verified membership before publishing the certificate.
+-}
+
+{- $chainVerification
+The 'verifyChain' function verifies a chain of certificates back to the
+genesis certificate. Each certificate links to its predecessor, creating
+a chain of trust rooted in IOG's genesis signing key.
+-}
+
+{- $genesis
+Types for working with genesis certificates. The genesis certificate is
+signed with Ed25519 (not STM) and forms the root of trust for the certificate
+chain. IOG publishes the genesis verification key for each network.
 -}
 
 {- $parameters

@@ -38,9 +38,7 @@ import Test.Hspec
 import Mithril.STM
     ( AggregateSignature (..)
     , AggregateVerificationKey (..)
-    , BlsOps (..)
     , ConcatenationProof (..)
-    , HashOps (..)
     , MerkleBatchPath (..)
     , MerkleCommitment (..)
     , Parameters (..)
@@ -48,7 +46,7 @@ import Mithril.STM
     , SignedRegistration (..)
     , SingleSignature (..)
     , VerificationFailure (..)
-    , verify
+    , verifyTrustingRegistration
     )
 import Mithril.STM.Crypto.Crypton (cryptonHashOps)
 import Mithril.STM.Crypto.Hsblst
@@ -419,26 +417,41 @@ spec = describe "Mithril.STM.Integration" $ do
                         fromIntegral totalIndices
                             `shouldSatisfy` (>= paramK params)
 
--- Note: Full verification test is commented out because it requires
--- the Merkle batch path which is not included in the certificate
--- JSON response. The batch path would need to be reconstructed or
--- fetched separately.
---
--- it "verifies a real mainnet certificate" $ do
---     result <- fetchCertificate knownCertHash
---     case result of
---         Left err -> expectationFailure $ "Failed to fetch: " <> err
---         Right cert -> case convertCertificate cert of
---             Left err -> expectationFailure $ "Conversion: " <> err
---             Right (params, avk, msg, aggSig) -> do
---                 let verifyResult = verify
---                         cryptonHashOps
---                         hsblstBlsOps
---                         params
---                         avk
---                         msg
---                         aggSig
---                 verifyResult `shouldBe` Right ()
+        -- \| End-to-end verification using verifyTrustingRegistration.
+        --
+        --        Note: This test is currently pending because the lottery hash
+        --        computation needs further investigation to match Mithril's exact
+        --        implementation. The test demonstrates:
+        --        * Certificate fetching and parsing works
+        --        * Type conversion works
+        --        * All structural checks pass
+        --
+        --        TODO: Complete lottery hash computation matching. The Mithril format is:
+        --        H("map" || msg || index (LE) || signature)
+        --        but additional details about message format may be needed.
+        --
+        xit "verifies a real mainnet certificate (trusting registration)" $ do
+            result <- fetchCertificate knownCertHash
+            case result of
+                Left err -> expectationFailure $ "Failed to fetch: " <> err
+                Right cert -> case convertCertificate cert of
+                    Left err ->
+                        expectationFailure $ "Conversion failed: " <> err
+                    Right (params, avk, msg, aggSig) -> do
+                        let verifyResult =
+                                verifyTrustingRegistration
+                                    cryptonHashOps
+                                    hsblstBlsOps
+                                    params
+                                    avk
+                                    msg
+                                    aggSig
+                        case verifyResult of
+                            Right () -> pure ()
+                            Left failure ->
+                                expectationFailure
+                                    $ "Verification failed: "
+                                        <> show failure
 
 -- | A known certificate hash from mainnet for testing
 knownCertHash :: String

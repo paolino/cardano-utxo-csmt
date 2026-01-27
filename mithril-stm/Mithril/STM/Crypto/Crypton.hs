@@ -31,9 +31,14 @@ module Mithril.STM.Crypto.Crypton
       -- * Direct Hash Functions
     , hashBlake2b256
     , hashBlake2b512
+
+      -- * Ed25519 Verification
+    , verifyEd25519
     ) where
 
+import Crypto.Error (CryptoFailable (..))
 import Crypto.Hash (Blake2b_256, Blake2b_512, Digest, hash)
+import Crypto.PubKey.Ed25519 qualified as Ed25519
 import Data.ByteArray (convert)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
@@ -102,3 +107,59 @@ validateHash512 :: ByteString -> Maybe ByteString
 validateHash512 bs
     | BS.length bs == 64 = Just bs
     | otherwise = Nothing
+
+-- ============================================================================
+-- Ed25519 Verification (for Genesis Certificate)
+-- ============================================================================
+
+{- | Verify an Ed25519 signature.
+
+Used for verifying the genesis certificate, which is signed with IOG's
+Ed25519 genesis signing key rather than STM signatures.
+
+__Parameters__:
+
+* @publicKey@: 32-byte Ed25519 public key
+* @message@: The message that was signed
+* @signature@: 64-byte Ed25519 signature
+
+__Returns__:
+
+* @Just True@: Signature is valid
+* @Just False@: Signature is invalid
+* @Nothing@: Invalid key or signature format
+
+==== Example
+
+@
+let genesisVk = "..." -- 32 bytes from genesis.vkey
+    message = signedMessageFromCert
+    sig = "..." -- 64-byte signature from genesis cert
+
+case verifyEd25519 genesisVk message sig of
+    Just True -> putStrLn "Genesis certificate verified!"
+    Just False -> putStrLn "Invalid genesis signature"
+    Nothing -> putStrLn "Malformed key or signature"
+@
+-}
+verifyEd25519
+    :: ByteString
+    -- ^ Public key (32 bytes)
+    -> ByteString
+    -- ^ Message
+    -> ByteString
+    -- ^ Signature (64 bytes)
+    -> Maybe Bool
+verifyEd25519 pubKeyBytes message sigBytes = do
+    -- Parse the public key (32 bytes)
+    pubKey <- case Ed25519.publicKey pubKeyBytes of
+        CryptoPassed pk -> Just pk
+        CryptoFailed _ -> Nothing
+
+    -- Parse the signature (64 bytes)
+    sig <- case Ed25519.signature sigBytes of
+        CryptoPassed s -> Just s
+        CryptoFailed _ -> Nothing
+
+    -- Verify
+    pure $ Ed25519.verify pubKey message sig

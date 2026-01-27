@@ -82,7 +82,7 @@ module Mithril.STM.Lottery
     , hashToUnitInterval
     ) where
 
-import Data.Bits (shiftR)
+import Data.Bits (shiftL)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Ratio ((%))
@@ -233,11 +233,12 @@ hashToUnitInterval hash
     | otherwise = fromIntegral leading64 / (2 ^ (64 :: Int))
   where
     -- Take first 8 bytes and interpret as big-endian Word64
+    -- For big-endian: first byte is most significant
     leading64 :: Word64
     leading64 = BS.foldl' addByte 0 (BS.take 8 hash)
 
     addByte :: Word64 -> Word8 -> Word64
-    addByte acc byte = (acc `shiftR` 8) + fromIntegral byte * (2 ^ (56 :: Int))
+    addByte acc byte = (acc `shiftL` 8) + fromIntegral byte
 
 -- Note: The above is a simplified implementation. The Rust implementation
 -- uses either:
