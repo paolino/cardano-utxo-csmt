@@ -12,11 +12,14 @@
   - [x] Merkle batch verification
   - [x] Verification flow
   - [x] Serialization (using cereal)
-  - [ ] hsblst backend
+  - [x] hsblst backend (with limitations, see below)
+  - [x] crypton backend (Blake2b hashing)
 - [x] Testing (mock crypto)
   - [x] LotterySpec - phi function and hash mapping
   - [x] MerkleSpec - tree navigation and batch verification
   - [x] VerifySpec - full verification flow
+  - [x] SerializationSpec - roundtrip tests (15 tests)
+- [ ] Integration testing with real Mithril certificates
 
 ## Summary
 
@@ -46,9 +49,43 @@ Explored the mithril-stm Rust crate structure and verification logic.
 - Confirmed `crypton` (not `cryptonite`) for Blake2b - already in deps via csmt
 - Designed module structure for Haskell implementation
 
+### 2026-01-27: Serialization Module Added
+
+Implemented `Mithril.STM.Serialization` using the `cereal` library:
+- Big-endian serialization matching Rust mithril-stm format
+- CryptoSizes record for configuring crypto value sizes
+- Put/Get functions for all STM types
+- 15 roundtrip tests added to SerializationSpec
+
+### 2026-01-27: Crypto Backends Added
+
+**crypton (Blake2b hashing)**:
+- Implemented `Mithril.STM.Crypto.Crypton` module
+- Provides `cryptonHashOps :: HashOps ByteString ByteString`
+- Uses crypton's optimized Blake2b implementation
+- ByteString output for easy serialization
+
+**hsblst (BLS12-381)**:
+- Implemented `Mithril.STM.Crypto.Hsblst` module
+- Provides `hsblstBlsOps :: BlsOps BlsSignature BlsVerificationKey`
+
+The hsblst library uses the curve parameter to indicate which curve the
+__public keys__ use. Signatures automatically use the complementary curve
+for pairings to work correctly.
+
+With `G2` scheme (what we use):
+- `Signature G2 Hash` = signature is a G1 point (48 bytes compressed)
+- `PublicKey G2` = public key is a G2 point (96 bytes compressed)
+
+This matches Mithril's "min-sig" format exactly:
+- Signatures: G1 points (48 bytes)
+- Public keys: G2 points (96 bytes)
+
+The implementation is complete and should work with real Mithril certificates.
+
 ### 2026-01-27: Test Suite Added
 
-Added `mithril-stm-test` test suite with 63 tests:
+Added `mithril-stm-test` test suite with 78 tests (63 original + 15 serialization):
 
 **LotterySpec** (15 tests):
 - phi function properties (monotonic, concave, boundary values)
@@ -594,10 +631,13 @@ https://aggregator.release-mainnet.api.mithril.network/aggregator/certificate/<h
 
 1. ~~Check existing Haskell crypto libraries in cardano ecosystem~~
 2. ~~Design module structure~~
-3. Create PR with skeleton modules
-4. Implement core types (Types.hs, Parameters.hs)
-5. Implement lottery calculation with tests
-6. Implement Merkle verification
-7. Implement BLS aggregate verification
-8. Add serialization
-9. Integration testing
+3. ~~Create PR with skeleton modules~~
+4. ~~Implement core types (Types.hs, Parameters.hs)~~
+5. ~~Implement lottery calculation with tests~~
+6. ~~Implement Merkle verification~~
+7. ~~Implement main verification flow~~
+8. ~~Add serialization (using cereal)~~
+9. ~~Implement hsblst backend~~
+10. ~~Implement crypton backend for Blake2b~~
+11. **TODO**: Integration testing with real Mithril certificates
+12. **OPTIONAL**: Compare with cardano-crypto-class as alternative
