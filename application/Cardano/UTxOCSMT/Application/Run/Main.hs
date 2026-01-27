@@ -79,6 +79,7 @@ import Cardano.UTxOCSMT.HTTP.Base16
     , unsafeDecodeBase16Text
     )
 import Cardano.UTxOCSMT.HTTP.Server (runAPIServer, runDocsServer)
+import Cardano.UTxOCSMT.Mithril.AncillaryVerifier (parseVerificationKey)
 import Cardano.UTxOCSMT.Mithril.Client (defaultMithrilConfig)
 import Cardano.UTxOCSMT.Mithril.Client qualified as MithrilClient
 import Cardano.UTxOCSMT.Mithril.Import
@@ -457,6 +458,14 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
                     manager
                     (Mithril.mithrilNetwork mithrilOpts)
                     downloadDir
+            -- Determine ancillary verification key
+            ancillaryVk
+                | Mithril.mithrilSkipAncillaryVerification mithrilOpts =
+                    Nothing
+                | Just keyHex <- Mithril.mithrilAncillaryVkOverride mithrilOpts =
+                    either (const Nothing) Just (parseVerificationKey keyHex)
+                | otherwise =
+                    MithrilClient.mithrilAncillaryVk baseConfig
             mithrilConfig =
                 baseConfig
                     { MithrilClient.mithrilAggregatorUrl =
@@ -465,6 +474,7 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
                             (Mithril.mithrilAggregatorUrl mithrilOpts)
                     , MithrilClient.mithrilClientPath =
                         Mithril.mithrilClientPath mithrilOpts
+                    , MithrilClient.mithrilAncillaryVk = ancillaryVk
                     }
 
         result <-

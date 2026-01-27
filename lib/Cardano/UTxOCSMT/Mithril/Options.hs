@@ -9,6 +9,7 @@ bootstrapping of the UTxO CSMT database. Options include:
 * Network selection (mainnet, preprod, preview)
 * Custom aggregator URL override
 * Path to mithril-client binary
+* Ancillary verification key override
 -}
 module Cardano.UTxOCSMT.Mithril.Options
     ( MithrilOptions (..)
@@ -19,6 +20,8 @@ module Cardano.UTxOCSMT.Mithril.Options
 where
 
 import Cardano.UTxOCSMT.Mithril.Client (MithrilNetwork (..))
+import Data.Text (Text)
+import Data.Text qualified as T
 import OptEnvConf
     ( Parser
     , auto
@@ -49,6 +52,10 @@ data MithrilOptions = MithrilOptions
     -- ^ Path to mithril-client binary
     , mithrilDownloadDir :: Maybe FilePath
     -- ^ Directory for snapshot downloads (uses temp dir if Nothing)
+    , mithrilAncillaryVkOverride :: Maybe Text
+    -- ^ Override ancillary verification key (uses network default if Nothing)
+    , mithrilSkipAncillaryVerification :: Bool
+    -- ^ Skip Ed25519 ancillary verification (not recommended)
     }
     deriving stock (Show, Eq)
 
@@ -144,6 +151,35 @@ mithrilDownloadDirOption =
             , option
             ]
 
+-- | Option to override ancillary verification key
+mithrilAncillaryVkOption :: Parser (Maybe Text)
+mithrilAncillaryVkOption =
+    optional
+        $ setting
+            [ long "mithril-ancillary-verification-key"
+            , help
+                "Override Ed25519 ancillary verification key (JSON-hex format). \
+                \By default, uses the official Mithril key for the selected network. \
+                \The key is used to verify the signature on ancillary_manifest.json."
+            , metavar "KEY"
+            , reader (T.pack <$> str)
+            , option
+            ]
+
+-- | Switch to skip ancillary verification
+mithrilSkipAncillaryVerificationSwitch :: Parser Bool
+mithrilSkipAncillaryVerificationSwitch =
+    setting
+        [ long "mithril-skip-ancillary-verification"
+        , help
+            "Skip Ed25519 verification of ancillary manifest. \
+            \NOT RECOMMENDED: disables cryptographic verification of \
+            \downloaded ledger state files."
+        , reader auto
+        , value False
+        , switch True
+        ]
+
 -- | Combined parser for all Mithril options
 mithrilOptionsParser :: Parser MithrilOptions
 mithrilOptionsParser =
@@ -154,6 +190,8 @@ mithrilOptionsParser =
         <*> mithrilAggregatorOption
         <*> mithrilClientPathOption
         <*> mithrilDownloadDirOption
+        <*> mithrilAncillaryVkOption
+        <*> mithrilSkipAncillaryVerificationSwitch
 
 {- | Parser for Mithril options without network selection.
 
@@ -168,3 +206,5 @@ mithrilOptionsParser' =
         <*> mithrilAggregatorOption
         <*> mithrilClientPathOption
         <*> mithrilDownloadDirOption
+        <*> mithrilAncillaryVkOption
+        <*> mithrilSkipAncillaryVerificationSwitch
