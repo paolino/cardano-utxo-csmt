@@ -207,7 +207,8 @@ case result of
 * Space: O(N × I) for tracking seen indices
 -}
 verify
-    :: HashOps hash256 hash512
+    :: (Eq hash256)
+    => HashOps hash256 hash512
     -- ^ Hash operations
     -> BlsOps sig vk
     -- ^ BLS operations
@@ -251,7 +252,8 @@ __Exported for testing__: Allows testing preliminary checks without
 needing a real BLS implementation.
 -}
 preliminaryVerify
-    :: HashOps hash256 hash512
+    :: (Eq hash256)
+    => HashOps hash256 hash512
     -- ^ Hash operations
     -> Parameters
     -- ^ Protocol parameters
