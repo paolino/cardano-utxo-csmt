@@ -1,39 +1,32 @@
 # Getting Started
 
-This guide will help you get the Cardano UTxO CSMT service running.
+This guide will help you get the Cardano UTxO CSMT service running on preprod.
 
 ## Prerequisites
 
 - A running Cardano node with node-to-node protocol access
 - Network connectivity to the node's port (default: 3001)
 
-## Quick Start with Docker
-
-The fastest way to get started is using Docker:
-
-```bash
-# Download the latest image
-gh run download -n cardano-utxo-csmt-image
-docker load < output-docker-image
-
-# Run the service (mainnet is default)
-docker run -p 8080:8080 \
-  ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt \
-  --csmt-db-path /data \
-  --api-port 8080
-```
-
-## Quick Start with Nix
+## Quick Start with Nix (Preprod)
 
 ```bash
 # Setup caching (recommended)
 nix shell nixpkgs#cachix -c cachix use paolino
 
-# Run directly (mainnet is default)
+# Run on preprod with Mithril bootstrap
 nix run github:paolino/cardano-utxo-csmt -- \
+  --network preprod \
+  --mithril-bootstrap \
   --csmt-db-path /tmp/csmt-db \
   --api-port 8080
 ```
+
+This will:
+
+1. Download the latest Mithril snapshot for preprod
+2. Verify the Ed25519 signature on the ancillary manifest
+3. Extract and import the UTxO set into the CSMT database
+4. Start chain sync from the snapshot slot
 
 ## Configuration Options
 
@@ -45,21 +38,16 @@ nix run github:paolino/cardano-utxo-csmt -- \
 | `--csmt-db-path` | RocksDB database path (required) |
 | `--api-port` | HTTP API port |
 | `--mithril-bootstrap` | Bootstrap from Mithril snapshot |
-
-For preview network with Mithril bootstrap:
-
-```bash
-cardano-utxo-chainsync \
-  --network preview \
-  --mithril-bootstrap \
-  --csmt-db-path /tmp/csmt-db
-```
+| `--mithril-skip-ancillary-verification` | Skip Ed25519 verification (not recommended) |
 
 ## Verifying the Service
 
-Once running, you can check the service status:
+Once running, check the service status:
 
 ```bash
+# Check readiness
+curl http://localhost:8080/ready
+
 # Check metrics
 curl http://localhost:8080/metrics
 
@@ -69,5 +57,6 @@ open http://localhost:8080/api-docs/swagger-ui
 
 ## Next Steps
 
+- [Mithril Bootstrap](mithril-bootstrap.md) - Details on Mithril bootstrapping
 - [API Documentation](swagger-ui.md) - Explore the REST API
 - [Architecture](architecture.md) - Understand how it works
