@@ -52,6 +52,37 @@ common warnings
     TypeOperators
     ViewPatterns
 
+-- | Abstract Mithril STM signature verification.
+--
+-- This sublibrary provides native Haskell verification of Mithril
+-- Stake-based Threshold Multisignature (STM) certificates.
+--
+-- Key features:
+--
+-- * Abstract over crypto primitives via function records (not typeclasses)
+-- * No external dependencies beyond base, bytestring, containers
+-- * Easy to test with mock implementations
+-- * Can be used with hsblst, cardano-crypto-class, or other BLS backends
+--
+-- See "Mithril.STM" for documentation and usage examples.
+library mithril-stm
+  import:           warnings
+  hs-source-dirs:   mithril-stm
+  default-language: Haskell2010
+  build-depends:
+    , base        >=4.14 && <5
+    , bytestring
+    , containers
+
+  exposed-modules:
+    Mithril.STM
+    Mithril.STM.Crypto
+    Mithril.STM.Lottery
+    Mithril.STM.Merkle
+    Mithril.STM.Parameters
+    Mithril.STM.Types
+    Mithril.STM.Verify
+
 library http
   import:           warnings
   hs-source-dirs:   http
