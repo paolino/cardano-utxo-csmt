@@ -55,6 +55,15 @@ nix run github:paolino/cardano-utxo-csmt -- \
   --api-port 8080
 ```
 
+#### Demo
+
+```asciinema-player
+{ "file": "assets/mithril-bootstrap.cast"
+, "mkap_theme": "none"
+, "cols": 100
+}
+```
+
 This will:
 
 1. Download the latest Mithril snapshot for preprod
