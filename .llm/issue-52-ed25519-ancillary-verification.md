@@ -66,8 +66,8 @@ Explored `lib/Cardano/UTxOCSMT/Mithril/Client.hs`:
 - [x] Implement JSON-hex decoding in Haskell
 - [x] Implement Ed25519 verification
 - [x] Add `verifyAncillaryManifest` function
-- [ ] Integrate into `downloadSnapshotHttp` (IN PROGRESS)
-- [ ] Add tests
+- [x] Integrate into `downloadSnapshotHttp`
+- [x] Add unit tests for AncillaryVerifier
 
 ## Progress Log
 
@@ -105,14 +105,25 @@ Explored `lib/Cardano/UTxOCSMT/Mithril/Client.hs`:
   - Preview: `5b3138392c3139322c3231362c...` (from `mithril-client-cli/config/preview.json`)
   - Mainnet/Preprod: not yet configured (ancillary feature may be newer)
 
-### Remaining Work
-1. Update `defaultMithrilConfig` to include ancillary key
-2. Add `ancillaryVkForNetwork` function (like `genesisVkForNetwork`)
-3. Add `MithrilVerificationFailed` error variant
-4. Call `verifyAncillaryManifest` after extraction in `downloadSnapshotHttp`
-5. Update `renderMithrilError` for new error variant
-6. Add unit tests for AncillaryVerifier module
-7. Add integration test with real manifest (if available)
+### Session 4 (2026-01-27)
+- **Completed Client.hs integration**:
+  - Added `MithrilVerificationFailed` error variant
+  - Added trace events: `MithrilVerifyingAncillary`, `MithrilAncillaryVerified`, `MithrilAncillarySkipped`
+  - Updated `downloadSnapshotHttp` to verify manifest after extraction
+  - Verification runs automatically when `mithrilAncillaryVk` is configured
+- **Added unit tests** for AncillaryVerifier module (13 tests):
+  - parseJsonHex: JSON-hex decoding
+  - parseVerificationKey: Ed25519 key parsing
+  - computeManifestHash: SHA256 hash computation
+  - verifyAncillaryManifest: error handling
+- Fixed type ambiguity in `computeManifestHash` with `@SHA256` type application
+- Cleaned up unused imports
+
+### Status: COMPLETE
+All implementation and tests are complete. The Ed25519 verification is
+integrated into `downloadSnapshotHttp` and will verify ancillary manifests
+automatically for networks with configured verification keys (currently
+Preview only).
 
 ### Network Ancillary Verification Keys
 From `mithril-client-cli/config/`:
