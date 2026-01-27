@@ -72,6 +72,38 @@ cardano-utxo-chainsync \
 The `--network` option sets both the Cardano network (magic, default peer) and
 the Mithril network automatically.
 
+## Environment Variables
+
+Set up environment variables for your network before running:
+
+=== "Preprod"
+
+    ```bash
+    export AGGREGATOR_ENDPOINT=https://aggregator.release-preprod.api.mithril.network/aggregator
+    export GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/genesis.vkey)
+    export ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/ancillary.vkey)
+    ```
+
+=== "Preview"
+
+    ```bash
+    export AGGREGATOR_ENDPOINT=https://aggregator.pre-release-preview.api.mithril.network/aggregator
+    export GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/genesis.vkey)
+    export ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/ancillary.vkey)
+    ```
+
+=== "Mainnet"
+
+    ```bash
+    export AGGREGATOR_ENDPOINT=https://aggregator.release-mainnet.api.mithril.network/aggregator
+    export GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/genesis.vkey)
+    export ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/ancillary.vkey)
+    ```
+
+Source: [Mithril Network Configurations](https://mithril.network/doc/manual/getting-started/network-configurations)
+
+> **Note:** Preview and Preprod currently share the same ancillary verification key. Mainnet has a distinct key.
+
 ## CLI Options
 
 | Option | Description | Default |
@@ -79,10 +111,19 @@ the Mithril network automatically.
 | `--network NETWORK` | Network: `mainnet`, `preprod`, `preview` | `mainnet` |
 | `--mithril-bootstrap` | Enable Mithril bootstrapping | `false` |
 | `--mithril-bootstrap-only` | Exit after bootstrap (skip chain sync) | `false` |
-| `--mithril-aggregator URL` | Override aggregator URL | Network default |
+| `--aggregator-endpoint URL` | Override aggregator URL | From env var |
+| `--genesis-verification-key KEY` | Genesis verification key (JSON-hex) | From env var |
+| `--ancillary-verification-key KEY` | Ancillary verification key (JSON-hex) | From env var |
 | `--mithril-download-dir DIR` | Directory for downloads | Temp directory |
-| `--mithril-ancillary-verification-key KEY` | Override Ed25519 verification key (JSON-hex) | Network default |
 | `--mithril-skip-ancillary-verification` | Skip Ed25519 verification (not recommended) | `false` |
+
+**Environment Variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `AGGREGATOR_ENDPOINT` | Mithril aggregator URL |
+| `GENESIS_VERIFICATION_KEY` | Genesis verification key for mithril-client CLI (JSON-hex) |
+| `ANCILLARY_VERIFICATION_KEY` | Ed25519 verification key for ancillary files (JSON-hex) |
 
 ## Networks
 
@@ -91,13 +132,6 @@ the Mithril network automatically.
 | Mainnet | `https://aggregator.release-mainnet.api.mithril.network/aggregator` | ✅ Ed25519 |
 | Preprod | `https://aggregator.release-preprod.api.mithril.network/aggregator` | ✅ Ed25519 |
 | Preview | `https://aggregator.pre-release-preview.api.mithril.network/aggregator` | ✅ Ed25519 |
-
-Ancillary verification keys are sourced from the official Mithril infrastructure:
-[`mithril-infra/configuration/{network}/ancillary.vkey`](https://mithril.network/doc/manual/getting-started/network-configurations)
-
-!!! note "Shared Keys"
-    Preview and Preprod currently share the same verification key.
-    Mainnet has a distinct key.
 
 ## How It Works
 
@@ -131,10 +165,9 @@ Verification ensures:
 1. The manifest signature is valid (signed by IOG's ancillary key)
 2. Each extracted file matches its declared hash
 
-!!! note "STM Certificate Chain"
-    Ed25519 verification protects the ancillary files (ledger state).
-    Full STM certificate chain verification is still planned for the immutable files.
-    See [STM verification plan](mithril-stm-ffi-plan.md) for details.
+> **Note:** Ed25519 verification protects the ancillary files (ledger state).
+> Full STM certificate chain verification is still planned for the immutable files.
+> See [STM verification plan](mithril-stm-ffi-plan.md) for details.
 
 ### 3. Ledger State Format
 
@@ -188,9 +221,8 @@ Progress is reported every 10,000 entries during extraction.
 
 ### 6. Chain Sync Continuation
 
-!!! warning "Known Limitation"
-    The current implementation replays from genesis after Mithril import.
-    This negates most of the bootstrap speed benefit. See issue #32 for the fix.
+> **Warning:** The current implementation replays from genesis after Mithril import.
+> This negates most of the bootstrap speed benefit. See issue #32 for the fix.
 
 After importing the UTxO set, chain sync needs to continue from where the
 snapshot left off. This requires a `Point(slot, block_hash)`.
@@ -226,9 +258,9 @@ Ancillary files (ledger state) are protected by Ed25519 signature verification:
 
 - **Manifest signature**: The `ancillary_manifest.json` is signed by IOG's Ed25519 key
 - **File integrity**: Each file's SHA256 hash is verified against the manifest
-- **Network keys**: Official verification keys are embedded for all networks
+- **Environment variables**: Verification keys are read from `ANCILLARY_VERIFICATION_KEY`
 
-This verification runs automatically. To skip it (not recommended):
+This verification runs automatically when `ANCILLARY_VERIFICATION_KEY` is set. To skip it (not recommended):
 
 ```bash
 cardano-utxo-chainsync \
@@ -237,12 +269,12 @@ cardano-utxo-chainsync \
     ...
 ```
 
-To use a custom verification key:
+To use a custom verification key via CLI:
 
 ```bash
 cardano-utxo-chainsync \
     --mithril-bootstrap \
-    --mithril-ancillary-verification-key "5b32332c37312c..." \
+    --ancillary-verification-key "5b32332c37312c..." \
     ...
 ```
 
