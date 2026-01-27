@@ -10,10 +10,12 @@ import Test.Hspec
 
 import Mithril.STM.LotterySpec qualified as LotterySpec
 import Mithril.STM.MerkleSpec qualified as MerkleSpec
+import Mithril.STM.SerializationSpec qualified as SerializationSpec
 import Mithril.STM.VerifySpec qualified as VerifySpec
 
 main :: IO ()
 main = hspec $ do
     describe "Mithril.STM.Lottery" LotterySpec.spec
     describe "Mithril.STM.Merkle" MerkleSpec.spec
+    describe "Mithril.STM.Serialization" SerializationSpec.spec
     describe "Mithril.STM.Verify" VerifySpec.spec

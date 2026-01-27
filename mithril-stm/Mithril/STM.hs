@@ -106,6 +106,19 @@ module Mithril.STM
       -- $crypto
     , HashOps (..)
     , BlsOps (..)
+
+      -- * Serialization
+      -- $serialization
+    , CryptoSizes (..)
+    , blsSizes
+    , putParameters
+    , getParameters
+    , putAggregateSignature
+    , getAggregateSignature
+    , putAggregateVerificationKey
+    , getAggregateVerificationKey
+    , serialize
+    , deserialize
     ) where
 
 import Mithril.STM.Crypto
@@ -113,6 +126,18 @@ import Mithril.STM.Crypto
     , HashOps (..)
     )
 import Mithril.STM.Parameters (Parameters (..))
+import Mithril.STM.Serialization
+    ( CryptoSizes (..)
+    , blsSizes
+    , deserialize
+    , getAggregateSignature
+    , getAggregateVerificationKey
+    , getParameters
+    , putAggregateSignature
+    , putAggregateVerificationKey
+    , putParameters
+    , serialize
+    )
 import Mithril.STM.Types
     ( AggregateSignature (..)
     , AggregateVerificationKey (..)
@@ -150,4 +175,9 @@ and hash types, allowing different crypto backends.
 {- $crypto
 Function records providing cryptographic operations. These are passed
 explicitly to verification functions rather than using typeclasses.
+-}
+
+{- $serialization
+Serialization functions for encoding/decoding STM types to binary format.
+The format is compatible with the Rust @mithril-stm@ crate.
 -}
