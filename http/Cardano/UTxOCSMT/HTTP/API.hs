@@ -8,6 +8,7 @@ the HTTP service endpoints:
 * @GET /metrics@ - Current synchronization metrics
 * @GET /merkle-roots@ - Historical merkle roots by slot
 * @GET /proof/:txId/:txIx@ - Inclusion proof for a specific UTxO
+* @GET /ready@ - Sync readiness status for orchestration
 
 Response types include JSON serialization and Swagger schema definitions.
 -}
@@ -18,6 +19,7 @@ module Cardano.UTxOCSMT.HTTP.API
     , docs
     , MerkleRootEntry (..)
     , InclusionProofResponse (..)
+    , ReadyResponse (..)
     )
 where
 
@@ -39,7 +41,7 @@ import Data.Swagger
 import Data.Swagger qualified as Swagger
 import Data.Text (Text)
 import Data.Text.Encoding qualified as Text
-import Data.Word (Word16)
+import Data.Word (Word16, Word64)
 import GHC.IsList (IsList (..))
 import Ouroboros.Network.Block (SlotNo (..))
 import Servant (Capture, Get, JSON, type (:<|>), type (:>))
@@ -62,6 +64,8 @@ type API =
             :> Capture "txId" Text
             :> Capture "txIx" Word16
             :> Get '[JSON] InclusionProofResponse
+        :<|> "ready"
+            :> Get '[JSON] ReadyResponse
 
 -- | Proxy for the API
 api :: Proxy API
@@ -170,3 +174,52 @@ instance ToSchema InclusionProofResponse where
             & required .~ ["txId", "txIx", "txOut", "proof"]
             & description
                 ?~ "Current inclusion proof and output for the given transaction input."
+
+-- | Response for the /ready endpoint indicating sync status
+data ReadyResponse = ReadyResponse
+    { ready :: Bool
+    -- ^ Whether the node is synced and ready to serve requests
+    , tipSlot :: Maybe Word64
+    -- ^ The current chain tip slot from ChainSync protocol
+    , processedSlot :: Maybe Word64
+    -- ^ The last processed block slot
+    , slotsBehind :: Maybe Word64
+    -- ^ Number of slots behind the chain tip
+    }
+    deriving (Show, Eq)
+
+instance ToJSON ReadyResponse where
+    toJSON ReadyResponse{ready, tipSlot, processedSlot, slotsBehind} =
+        object
+            [ "ready" .= ready
+            , "tipSlot" .= tipSlot
+            , "processedSlot" .= processedSlot
+            , "slotsBehind" .= slotsBehind
+            ]
+
+instance FromJSON ReadyResponse where
+    parseJSON = withObject "ReadyResponse" $ \v ->
+        ReadyResponse
+            <$> v .: "ready"
+            <*> v .: "tipSlot"
+            <*> v .: "processedSlot"
+            <*> v .: "slotsBehind"
+
+instance ToSchema ReadyResponse where
+    declareNamedSchema _ = do
+        boolSchema <- declareSchemaRef (Proxy @Bool)
+        maybeWord64Schema <- declareSchemaRef (Proxy @(Maybe Word64))
+        return
+            $ Swagger.NamedSchema (Just "ReadyResponse")
+            $ mempty
+            & Swagger.type_ ?~ Swagger.SwaggerObject
+            & properties
+                .~ fromList
+                    [ ("ready", boolSchema)
+                    , ("tipSlot", maybeWord64Schema)
+                    , ("processedSlot", maybeWord64Schema)
+                    , ("slotsBehind", maybeWord64Schema)
+                    ]
+            & required .~ ["ready", "tipSlot", "processedSlot", "slotsBehind"]
+            & description
+                ?~ "Sync readiness status for orchestration"

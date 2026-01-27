@@ -13,6 +13,7 @@ This module provides a metrics collection system that tracks:
 * Block processing speed
 * Current blockchain era
 * Current Merkle root
+* Chain tip slot (for sync status detection)
 
 Metrics are collected via a 'Tracer' and can be output at configurable intervals.
 -}
@@ -71,6 +72,7 @@ import Data.Swagger
 import Data.Swagger qualified as Swagger
 import Data.Text qualified as Text
 import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
+import Data.Word (Word64)
 import GHC.IsList (IsList (..))
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHeader (..))
 import Ouroboros.Consensus.HardFork.Combinator qualified as HF
@@ -78,7 +80,7 @@ import Ouroboros.Network.Block (SlotNo (..), blockPoint)
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point (Block (..), WithOrigin (..))
 
------ libray functions to help with metrics collection -----
+----- library functions to help with metrics collection -----
 
 -- Track the speed of events over a sliding window.
 speedoMeter :: Int -> Fold UTCTime Double
@@ -140,6 +142,8 @@ data MetricsEvent
       MerkleRootEvent Hash
     | -- | the base checkpoint for the UTxO set
       BaseCheckpointEvent Point
+    | -- | the current chain tip slot from ChainSync
+      ChainTipEvent SlotNo
 
 makePrisms ''MetricsEvent
 
@@ -210,6 +214,10 @@ getCurrentMerkleRoot = handles (timedEventL . _MerkleRootEvent) Fold.last
 getBaseCheckpoint :: Fold TimedMetrics (Maybe Point)
 getBaseCheckpoint = handles (timedEventL . _BaseCheckpointEvent) Fold.last
 
+-- track the chain tip slot
+chainTipSlotFold :: Fold TimedMetrics (Maybe SlotNo)
+chainTipSlotFold = handles (timedEventL . _ChainTipEvent) Fold.last
+
 -- | Tracked metrics
 data Metrics = Metrics
     { averageQueueLength :: Double
@@ -221,6 +229,8 @@ data Metrics = Metrics
     , currentEra :: Maybe String
     , currentMerkleRoot :: Maybe Hash
     , baseCheckpoint :: Maybe Point
+    , chainTipSlot :: Maybe SlotNo
+    -- ^ The current chain tip slot from ChainSync protocol
     }
 
 instance ToJSON Metrics where
@@ -235,6 +245,7 @@ instance ToJSON Metrics where
             , currentEra
             , currentMerkleRoot
             , baseCheckpoint
+            , chainTipSlot
             } =
             object
                 [ "averageQueueLength" .= averageQueueLength
@@ -247,6 +258,7 @@ instance ToJSON Metrics where
                 , "currentEra" .= currentEra
                 , "currentMerkleRoot" .= fmap (Text.pack . show) currentMerkleRoot
                 , "baseCheckpoint" .= fmap (Text.pack . renderPoint) baseCheckpoint
+                , "chainTipSlot" .= fmap unSlotNo chainTipSlot
                 ]
 
 renderBlockPoint :: (a, Header) -> [Char]
@@ -267,6 +279,7 @@ instance ToSchema Metrics where
         maybeIntSchema <- declareSchemaRef (Proxy @(Maybe Int))
         intSchema <- declareSchemaRef (Proxy @Int)
         maybeStringSchema <- declareSchemaRef (Proxy @(Maybe String))
+        maybeWord64Schema <- declareSchemaRef (Proxy @(Maybe Word64))
         return
             $ Swagger.NamedSchema (Just "Metrics")
             $ mempty
@@ -282,6 +295,7 @@ instance ToSchema Metrics where
                     , ("currentEra", maybeStringSchema)
                     , ("currentMerkleRoot", maybeStringSchema)
                     , ("baseCheckpoint", maybeStringSchema)
+                    , ("chainTipSlot", maybeWord64Schema)
                     ]
             & required
                 .~ [ "averageQueueLength"
@@ -293,6 +307,7 @@ instance ToSchema Metrics where
                    , "currentEra"
                    , "currentMerkleRoot"
                    , "baseCheckpoint"
+                   , "chainTipSlot"
                    ]
             & description
                 ?~ "Metrics about CSMT operations and blockchain synchronization"
@@ -324,6 +339,7 @@ metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
         <*> currentEraFold
         <*> getCurrentMerkleRoot
         <*> getBaseCheckpoint
+        <*> chainTipSlotFold
 
 -- | Create a metrics tracer that collects metrics and outputs them
 metricsTracer :: MetricsParams -> IO (Tracer IO MetricsEvent)

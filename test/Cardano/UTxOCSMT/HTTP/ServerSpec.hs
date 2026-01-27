@@ -45,6 +45,7 @@ import Cardano.UTxOCSMT.Application.Metrics (Metrics (..))
 import Cardano.UTxOCSMT.HTTP.API
     ( InclusionProofResponse (..)
     , MerkleRootEntry (..)
+    , ReadyResponse (..)
     )
 import Cardano.UTxOCSMT.HTTP.Base16
     ( encodeBase16Text
@@ -72,7 +73,7 @@ import Database.RocksDB
     , DB
     , withDBCF
     )
-import Network.HTTP.Types (methodGet, status200, status404)
+import Network.HTTP.Types (methodGet, status200, status404, status503)
 import Network.Wai (requestMethod)
 import Network.Wai.Test
     ( SResponse (..)
@@ -251,15 +252,37 @@ sampleMetrics =
         , currentEra = Nothing
         , currentMerkleRoot = Nothing
         , baseCheckpoint = Nothing
+        , chainTipSlot = Nothing
+        }
+
+-- | Sample ReadyResponse for synced state
+syncedResponse :: ReadyResponse
+syncedResponse =
+    ReadyResponse
+        { ready = True
+        , tipSlot = Just 1000
+        , processedSlot = Just 1000
+        , slotsBehind = Just 0
+        }
+
+-- | Sample ReadyResponse for not synced state
+notSyncedResponse :: ReadyResponse
+notSyncedResponse =
+    ReadyResponse
+        { ready = False
+        , tipSlot = Just 1000
+        , processedSlot = Just 500
+        , slotsBehind = Just 500
         }
 
 session
     :: IO (Maybe Metrics)
     -> IO [MerkleRootEntry]
     -> (Text -> Word16 -> IO (Maybe InclusionProofResponse))
+    -> IO ReadyResponse
     -> Session a
     -> IO a
-session a b c = flip runSession $ apiApp a b c
+session a b c d = flip runSession $ apiApp a b c d
 
 spec :: Spec
 spec = do
@@ -270,6 +293,7 @@ spec = do
                     (pure Nothing)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    (pure syncedResponse)
                     $ do
                         resp <-
                             request
@@ -283,6 +307,7 @@ spec = do
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    (pure syncedResponse)
                     $ do
                         resp <-
                             request
@@ -299,6 +324,7 @@ spec = do
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    (pure syncedResponse)
                     $ do
                         resp <-
                             request
@@ -327,6 +353,7 @@ spec = do
                         (pure $ Just sampleMetrics)
                         (queryTestMerkleRoots runner)
                         (\_ _ -> pure Nothing)
+                        (pure syncedResponse)
                         $ do
                             resp <-
                                 request
@@ -344,12 +371,27 @@ spec = do
                                                    , SlotNo{unSlotNo = 100}
                                                    ]
 
+            it "returns 503 when not synced" $ do
+                withTestDB $ \runner _update -> session
+                    (pure $ Just sampleMetrics)
+                    (queryTestMerkleRoots runner)
+                    (\_ _ -> pure Nothing)
+                    (pure notSyncedResponse)
+                    $ do
+                        resp <-
+                            request
+                                $ setPath
+                                    defaultRequest{requestMethod = methodGet}
+                                    "/merkle-roots"
+                        liftIO $ simpleStatus resp `shouldBe` status503
+
         describe "GET /proof/{txId}/{txIx}" $ do
             it "returns 404 for non-existent UTxO" $ do
                 withTestDB $ \runner _update -> session
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    (pure syncedResponse)
                     $ do
                         resp <-
                             request
@@ -378,6 +420,7 @@ spec = do
                         (pure $ Just sampleMetrics)
                         (queryTestMerkleRoots runner)
                         proofQuery
+                        (pure syncedResponse)
                         $ do
                             resp <-
                                 request
@@ -414,6 +457,7 @@ spec = do
                         (pure $ Just sampleMetrics)
                         (queryTestMerkleRoots runner)
                         proofQuery
+                        (pure syncedResponse)
                         $ do
                             resp <-
                                 request
@@ -430,3 +474,60 @@ spec = do
                                     proofMerkleRoot proof `shouldSatisfy` \case
                                         Just mr -> not (T.null mr)
                                         Nothing -> False
+
+            it "returns 503 when not synced" $ do
+                withTestDB $ \runner _update -> session
+                    (pure $ Just sampleMetrics)
+                    (queryTestMerkleRoots runner)
+                    (\_ _ -> pure Nothing)
+                    (pure notSyncedResponse)
+                    $ do
+                        resp <-
+                            request
+                                $ setPath
+                                    defaultRequest{requestMethod = methodGet}
+                                    "/proof/deadbeef/0"
+                        liftIO $ simpleStatus resp `shouldBe` status503
+
+        describe "GET /ready" $ do
+            it "returns synced status when synced" $ do
+                withTestDB $ \runner _update -> session
+                    (pure $ Just sampleMetrics)
+                    (queryTestMerkleRoots runner)
+                    (\_ _ -> pure Nothing)
+                    (pure syncedResponse)
+                    $ do
+                        resp <-
+                            request
+                                $ setPath
+                                    defaultRequest{requestMethod = methodGet}
+                                    "/ready"
+                        liftIO $ simpleStatus resp `shouldBe` status200
+                        let decoded = eitherDecode $ simpleBody resp
+                        liftIO $ case decoded of
+                            Left err -> fail $ "JSON decode error: " ++ err
+                            Right response -> do
+                                ready response `shouldBe` True
+                                tipSlot response `shouldBe` Just 1000
+                                processedSlot response `shouldBe` Just 1000
+                                slotsBehind response `shouldBe` Just 0
+
+            it "returns not synced status when not synced" $ do
+                withTestDB $ \runner _update -> session
+                    (pure $ Just sampleMetrics)
+                    (queryTestMerkleRoots runner)
+                    (\_ _ -> pure Nothing)
+                    (pure notSyncedResponse)
+                    $ do
+                        resp <-
+                            request
+                                $ setPath
+                                    defaultRequest{requestMethod = methodGet}
+                                    "/ready"
+                        liftIO $ simpleStatus resp `shouldBe` status200
+                        let decoded = eitherDecode $ simpleBody resp
+                        liftIO $ case decoded of
+                            Left err -> fail $ "JSON decode error: " ++ err
+                            Right response -> do
+                                ready response `shouldBe` False
+                                slotsBehind response `shouldBe` Just 500

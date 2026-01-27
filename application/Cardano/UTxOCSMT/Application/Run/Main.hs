@@ -47,7 +47,8 @@ import Cardano.UTxOCSMT.Application.Database.RocksDB
     , newRunRocksDBCSMTTransaction
     )
 import Cardano.UTxOCSMT.Application.Metrics
-    ( MetricsEvent (BaseCheckpointEvent, MerkleRootEvent)
+    ( Metrics (..)
+    , MetricsEvent (BaseCheckpointEvent, MerkleRootEvent)
     , MetricsParams (..)
     , metricsTracer
     )
@@ -71,6 +72,7 @@ import Cardano.UTxOCSMT.Application.UTxOs (unsafeMkTxIn)
 import Cardano.UTxOCSMT.HTTP.API
     ( InclusionProofResponse (..)
     , MerkleRootEntry (..)
+    , ReadyResponse (..)
     )
 import Cardano.UTxOCSMT.HTTP.Base16
     ( encodeBase16Text
@@ -87,7 +89,8 @@ import Cardano.UTxOCSMT.Mithril.Import
     )
 import Cardano.UTxOCSMT.Mithril.Options qualified as Mithril
 import Cardano.UTxOCSMT.Ouroboros.Types
-    ( Point
+    ( Header
+    , Point
     )
 import Control.Concurrent.Async (async, link)
 import Control.Concurrent.Class.MonadSTM.Strict
@@ -279,6 +282,10 @@ main = withUtf8 $ do
                     armageddonParams
                     runner
 
+            let getReadyResponse =
+                    mkReadyResponse (syncThreshold options)
+                        <$> readTVarIO metricsVar
+
             startHTTPService (trace ServeApi) apiPort
                 $ \port ->
                     runAPIServer
@@ -286,6 +293,7 @@ main = withUtf8 $ do
                         (readTVarIO metricsVar)
                         (queryMerkleRoots runner)
                         (queryInclusionProof runner)
+                        getReadyResponse
 
             -- Check if we should exit after bootstrap
             when (Mithril.mithrilBootstrapOnly mithrilOptions) $ do
@@ -321,6 +329,37 @@ stealMetricsEvent (Update (UpdateForwardTip _ _ _ (Just merkleRoot))) =
 stealMetricsEvent (NotEmpty point) =
     Just $ BaseCheckpointEvent point
 stealMetricsEvent _ = Nothing
+
+-- | Create a ReadyResponse based on metrics and sync threshold
+mkReadyResponse :: Word64 -> Maybe Metrics -> ReadyResponse
+mkReadyResponse threshold mMetrics =
+    case mMetrics of
+        Nothing ->
+            ReadyResponse
+                { ready = False
+                , tipSlot = Nothing
+                , processedSlot = Nothing
+                , slotsBehind = Nothing
+                }
+        Just Metrics{chainTipSlot, lastBlockPoint} ->
+            let tip = unSlotNo <$> chainTipSlot
+                processed = getProcessedSlot lastBlockPoint
+                behind = (-) <$> tip <*> processed
+                isReady = case behind of
+                    Just b -> b <= threshold
+                    Nothing -> False
+            in  ReadyResponse
+                    { ready = isReady
+                    , tipSlot = tip
+                    , processedSlot = processed
+                    , slotsBehind = behind
+                    }
+  where
+    getProcessedSlot
+        :: Maybe (a, Header) -> Maybe Word64
+    getProcessedSlot Nothing = Nothing
+    getProcessedSlot (Just (_, header)) =
+        Just $ unSlotNo $ Network.blockSlot header
 
 -- | Result of database setup
 data SetupResult = SetupResult
