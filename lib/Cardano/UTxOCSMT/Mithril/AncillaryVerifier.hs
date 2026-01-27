@@ -91,15 +91,21 @@ instance FromJSON AncillaryManifest where
         sigHex <- o .:? "signature"
         manifestSignature <- case sigHex of
             Nothing -> pure Nothing
-            Just hex -> case parseJsonHex hex of
+            Just hex -> case parseHexSignature hex of
                 Left err ->
                     fail $ "Invalid signature hex: " <> err
-                Right bs -> case Ed25519.signature bs of
-                    CryptoFailed e ->
-                        fail $ "Invalid Ed25519 signature: " <> show e
-                    CryptoPassed sig ->
-                        pure $ Just $ ManifestSignature sig
+                Right sig ->
+                    pure $ Just $ ManifestSignature sig
         pure AncillaryManifest{..}
+
+-- | Parse a signature from plain hex format (used in manifest)
+parseHexSignature :: Text -> Either String Ed25519.Signature
+parseHexSignature hex =
+    case Base16.decode (T.encodeUtf8 hex) of
+        Left err -> Left $ "Hex decode failed: " <> err
+        Right bs -> case Ed25519.signature bs of
+            CryptoFailed e -> Left $ "Invalid Ed25519 signature: " <> show e
+            CryptoPassed sig -> Right sig
 
 -- | Errors during ancillary verification
 data AncillaryVerificationError
