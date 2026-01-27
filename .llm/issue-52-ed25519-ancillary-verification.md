@@ -63,10 +63,10 @@ Explored `lib/Cardano/UTxOCSMT/Mithril/Client.hs`:
 - [x] Explore current Mithril client code
 - [x] Find manifest file format in ancillary tarball
 - [x] Understand JSON-hex verification key format
-- [ ] Implement JSON-hex decoding in Haskell
-- [ ] Implement Ed25519 verification
-- [ ] Add `verifyAncillaryManifest` function
-- [ ] Integrate into `downloadSnapshotHttp`
+- [x] Implement JSON-hex decoding in Haskell
+- [x] Implement Ed25519 verification
+- [x] Add `verifyAncillaryManifest` function
+- [ ] Integrate into `downloadSnapshotHttp` (IN PROGRESS)
 - [ ] Add tests
 
 ## Progress Log
@@ -89,10 +89,35 @@ Explored `lib/Cardano/UTxOCSMT/Mithril/Client.hs`:
 - **Found key format**: JSON-hex encoding (JSON array of bytes, hex-encoded)
 - **Ed25519 library**: `ed25519_dalek` (Rust) → `crypton` (Haskell)
 
-### Next Steps
-1. Add `crypton` dependency to cabal file
-2. Create `Cardano.UTxOCSMT.Mithril.AncillaryVerifier` module
-3. Implement JSON-hex key parsing
-4. Implement manifest hash computation
-5. Implement Ed25519 verification
-6. Add tests with known test vectors from Mithril
+### Session 3 (2026-01-27)
+- **AncillaryVerifier module fully implemented** at `lib/Cardano/UTxOCSMT/Mithril/AncillaryVerifier.hs`
+  - `parseJsonHex` - decodes Mithril's JSON-hex format
+  - `parseVerificationKey` - parses Ed25519 public key from JSON-hex
+  - `computeManifestHash` - SHA256 of sorted path||hash pairs
+  - `verifySignature` - Ed25519 signature verification
+  - `verifyAncillaryManifest` - full verification flow
+  - `AncillaryVerificationError` - error sum type
+- **crypton already added** to cabal dependencies
+- **Started Client.hs integration**:
+  - Added import for AncillaryVerifier
+  - Added `mithrilAncillaryVk :: Maybe AncillaryVerificationKey` to `MithrilConfig`
+- **Found network-specific keys** in Mithril repo:
+  - Preview: `5b3138392c3139322c3231362c...` (from `mithril-client-cli/config/preview.json`)
+  - Mainnet/Preprod: not yet configured (ancillary feature may be newer)
+
+### Remaining Work
+1. Update `defaultMithrilConfig` to include ancillary key
+2. Add `ancillaryVkForNetwork` function (like `genesisVkForNetwork`)
+3. Add `MithrilVerificationFailed` error variant
+4. Call `verifyAncillaryManifest` after extraction in `downloadSnapshotHttp`
+5. Update `renderMithrilError` for new error variant
+6. Add unit tests for AncillaryVerifier module
+7. Add integration test with real manifest (if available)
+
+### Network Ancillary Verification Keys
+From `mithril-client-cli/config/`:
+```
+preview: 5b3138392c3139322c3231362c3135302c3131342c3231362c3233372c3231302c34352c31382c32312c3139362c3230382c3234362c3134362c322c3235322c3234332c3235312c3139372c32382c3135372c3230342c3134352c33302c31342c3232382c3136382c3132392c38332c3133362c33365d
+mainnet: not yet available
+preprod: not yet available
+```
