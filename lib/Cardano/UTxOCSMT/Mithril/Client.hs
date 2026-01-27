@@ -127,12 +127,14 @@ defaultMithrilConfig manager network downloadDir =
 {- | Get ancillary verification key for network
 
 These are the official Mithril Ed25519 verification keys for
-ancillary file signatures. Returns 'Nothing' for networks where
-ancillary verification is not yet available.
+ancillary file signatures, from mithril-infra/configuration/.
+
+Source: https://mithril.network/doc/manual/getting-started/network-configurations
 -}
 ancillaryVkForNetwork :: MithrilNetwork -> Maybe AncillaryVerificationKey
 ancillaryVkForNetwork MithrilPreview =
-    -- From mithril-client-cli/config/preview.json
+    -- From mithril-infra/configuration/pre-release-preview/ancillary.vkey
+    -- Same key as preprod
     either (const Nothing) Just $
         parseVerificationKey
             "5b3138392c3139322c3231362c3135302c3131342c3231362c323\
@@ -140,8 +142,25 @@ ancillaryVkForNetwork MithrilPreview =
             \2c3134362c322c3235322c3234332c3235312c3139372c32382c3\
             \135372c3230342c3134352c33302c31342c3232382c3136382c31\
             \32392c38332c3133362c33365d"
-ancillaryVkForNetwork MithrilMainnet = Nothing -- Not yet available
-ancillaryVkForNetwork MithrilPreprod = Nothing -- Not yet available
+ancillaryVkForNetwork MithrilPreprod =
+    -- From mithril-infra/configuration/release-preprod/ancillary.vkey
+    -- Same key as preview
+    either (const Nothing) Just $
+        parseVerificationKey
+            "5b3138392c3139322c3231362c3135302c3131342c3231362c323\
+            \3372c3231302c34352c31382c32312c3139362c3230382c323436\
+            \2c3134362c322c3235322c3234332c3235312c3139372c32382c3\
+            \135372c3230342c3134352c33302c31342c3232382c3136382c31\
+            \32392c38332c3133362c33365d"
+ancillaryVkForNetwork MithrilMainnet =
+    -- From mithril-infra/configuration/release-mainnet/ancillary.vkey
+    either (const Nothing) Just $
+        parseVerificationKey
+            "5b32332c37312c39362c3133332c34372c3235332c3232362c313\
+            \3362c3233352c35372c3136342c3130362c3138362c322c32312c\
+            \32392c3132302c3136332c38392c3132312c3137372c3133382c32\
+            \30382c3133382c3231342c39392c35382c32322c302c35382c332c\
+            \36395d"
 
 -- | Unique identifier for a snapshot (certificate hash)
 newtype SnapshotDigest = SnapshotDigest {unSnapshotDigest :: Text}
