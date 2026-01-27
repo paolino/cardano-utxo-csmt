@@ -20,12 +20,11 @@ echo "# Step 2: Run cardano-utxo-chainsync with Mithril bootstrap"
 sleep 1
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
-echo '$ nix run . -- --network preview --mithril-bootstrap --mithril-bootstrap-only --csmt-db-path /tmp/db'
+echo '$ cardano-utxo-chainsync --network preview --mithril-bootstrap --mithril-bootstrap-only --csmt-db-path /tmp/db'
 echo ""
 
-# Run the actual program - timeout after 60 seconds for demo
-# nix run is quiet because record-demo.sh pre-builds
-timeout 60 nix run --quiet . -- \
+# Run the pre-built binary - timeout after 60 seconds for demo
+timeout 60 result/bin/cardano-utxo-chainsync \
     --network preview \
     --mithril-bootstrap \
     --mithril-bootstrap-only \
