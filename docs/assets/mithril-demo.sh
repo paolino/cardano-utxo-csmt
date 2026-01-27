@@ -2,7 +2,7 @@
 # Demo: Mithril Bootstrap with Ed25519 Verification
 set -e
 
-echo "=== Mithril Snapshot Download Demo ==="
+echo "=== Cardano UTxO CSMT - Mithril Bootstrap Demo ==="
 echo ""
 
 echo "# Step 1: Set up environment variables for Preview"
@@ -15,55 +15,18 @@ echo "Verification key loaded (${#ANCILLARY_VERIFICATION_KEY} chars)"
 sleep 2
 
 echo ""
-echo "# Step 2: Fetch snapshot metadata"
-sleep 1
-echo '$ curl -s "$AGGREGATOR_ENDPOINT/artifact/snapshots" | jq ".[0] | {digest, beacon}"'
-curl -s "$AGGREGATOR_ENDPOINT/artifact/snapshots" \
-    | jq ".[0] | {digest, beacon}"
-sleep 2
-
-echo ""
-echo "# Step 3: Download ancillary data (~400MB)"
+echo "# Step 2: Run cardano-utxo-chainsync with Mithril bootstrap"
 sleep 1
 TMPDIR=$(mktemp -d)
-URL=$(curl -s "$AGGREGATOR_ENDPOINT/artifact/snapshots" \
-    | jq -r ".[0].ancillary_locations[0]")
-echo "$ curl -s \"\$URL\" | tar -I zstd -xf - -C $TMPDIR"
-curl -s "$URL" | tar -I zstd -xf - -C "$TMPDIR"
-echo "Download complete."
-sleep 1
+trap "rm -rf $TMPDIR" EXIT
+echo '$ cardano-utxo-chainsync --network preview --mithril-bootstrap --mithril-bootstrap-only --csmt-db-path /tmp/db'
+echo ""
+
+# Run the actual program - timeout after 60 seconds for demo
+timeout 60 nix run --quiet .#cardano-utxo-chainsync -- \
+    --network preview \
+    --mithril-bootstrap \
+    --csmt-db-path "$TMPDIR/db" 2>&1 || true
 
 echo ""
-echo "# Step 4: Verify Ed25519 signature on ancillary manifest"
-sleep 1
-echo "$ cat $TMPDIR/ancillary_manifest.json | jq '{signature: .signature[:40], files: (.data | length)}'"
-cat "$TMPDIR/ancillary_manifest.json" | jq '{signature: (.signature[:40] + "..."), files: (.data | length)}'
-sleep 1
-echo ""
-echo "Verifying manifest signature with ANCILLARY_VERIFICATION_KEY..."
-sleep 1
-echo "✓ Ed25519 signature verified successfully"
-echo "✓ SHA256 hashes verified for all files"
-sleep 2
-
-echo ""
-echo "# Step 5: Ledger state files"
-sleep 1
-SLOT=$(ls "$TMPDIR/ledger" | sort -n | tail -1)
-echo "$ ls $TMPDIR/ledger/$SLOT/"
-ls "$TMPDIR/ledger/$SLOT/"
-echo ""
-echo "Ledger state at slot: $SLOT"
-sleep 1
-
-echo ""
-echo "# Step 6: UTxO data in tables/tvar"
-TVAR_SIZE=$(du -h "$TMPDIR/ledger/$SLOT/tables/tvar" | cut -f1)
-echo "$ du -h $TMPDIR/ledger/$SLOT/tables/tvar"
-echo "$TVAR_SIZE  $TMPDIR/ledger/$SLOT/tables/tvar"
-echo ""
-echo "UTxO backing store size: $TVAR_SIZE"
-
-rm -rf "$TMPDIR"
-echo ""
-echo "=== Done ==="
+echo "=== Demo Complete ==="

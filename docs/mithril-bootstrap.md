@@ -49,15 +49,6 @@ The ledger state is cryptographically signed by Cardano stake pool operators
 using Mithril's STM (Stake-based Threshold Multi-signatures). Verifying the
 certificate chain proves the snapshot was produced correctly by the network.
 
-## Demo
-
-```asciinema-player
-{ "file": "assets/mithril-bootstrap.cast"
-, "mkap_theme": "none"
-, "cols": 100
-}
-```
-
 ## Usage
 
 Enable Mithril bootstrap with the `--mithril-bootstrap` flag:
