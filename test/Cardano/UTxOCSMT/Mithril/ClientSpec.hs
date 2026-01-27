@@ -55,62 +55,62 @@ spec = describe "Mithril Client E2E" $ do
             $ testFetchSnapshot MithrilMainnet
 
     describe "downloadSnapshotHttp" $ do
-        it "downloads preview snapshot and extracts UTxOs" $ do
-            manager <- newManager tlsManagerSettings
-            withSystemTempDirectory "mithril-test" $ \tmpDir -> do
-                let config =
-                        defaultMithrilConfig
-                            manager
-                            MithrilPreview
-                            tmpDir
-                -- Fetch snapshot metadata
-                fetchResult <- fetchLatestSnapshot config
-                case fetchResult of
+        it "downloads preview snapshot and verifies ancillary" $ do
+            testDownloadAndVerify MithrilPreview
+
+        it "downloads preprod snapshot and verifies ancillary" $ do
+            testDownloadAndVerify MithrilPreprod
+
+-- | Test downloading and verifying ancillary files for a network
+testDownloadAndVerify :: MithrilNetwork -> IO ()
+testDownloadAndVerify network = do
+    manager <- newManager tlsManagerSettings
+    withSystemTempDirectory "mithril-test" $ \tmpDir -> do
+        let config = defaultMithrilConfig manager network tmpDir
+        -- Fetch snapshot metadata
+        fetchResult <- fetchLatestSnapshot config
+        case fetchResult of
+            Left err ->
+                fail $ "Failed to fetch snapshot: " ++ show err
+            Right snapshot -> do
+                -- Download via HTTP (with verification if key available)
+                downloadResult <- downloadSnapshotHttp config snapshot
+                case downloadResult of
                     Left err ->
-                        fail $ "Failed to fetch snapshot: " ++ show err
-                    Right snapshot -> do
-                        -- Download via HTTP (no verification)
-                        downloadResult <-
-                            downloadSnapshotHttp config snapshot
-                        case downloadResult of
+                        fail $ "Failed to download: " ++ show err
+                    Right dbPath -> do
+                        -- Check that ledger state exists
+                        ledgerResult <- findLedgerStateFile dbPath
+                        case ledgerResult of
+                            Left (LedgerStateNotFound _) ->
+                                fail "Ledger state directory not found"
+                            Left (NoLedgerStateFiles _) ->
+                                fail "No ledger state files found"
                             Left err ->
-                                fail $ "Failed to download: " ++ show err
-                            Right dbPath -> do
-                                -- Check that ledger state exists
-                                ledgerResult <- findLedgerStateFile dbPath
-                                case ledgerResult of
-                                    Left (LedgerStateNotFound _) ->
-                                        fail
-                                            "Ledger state directory not found"
-                                    Left (NoLedgerStateFiles _) ->
-                                        fail "No ledger state files found"
+                                fail $ "Error: " ++ show err
+                            Right (filePath, slot) -> do
+                                slot `shouldSatisfy` (> 0)
+                                -- New format: ledger/<slot>/
+                                -- Old format: ledger/<slot>-<hash>.lstate
+                                filePath
+                                    `shouldSatisfy` (\p -> "ledger" `isInfixOf` p)
+                                -- Extract UTxOs and verify TxIn decoding
+                                extractResult <-
+                                    extractUTxOsFromSnapshot
+                                        nullTracer
+                                        dbPath
+                                        (verifyTxInDecoding 100)
+                                case extractResult of
                                     Left err ->
-                                        fail $ "Error: " ++ show err
-                                    Right (filePath, slot) -> do
-                                        slot `shouldSatisfy` (> 0)
-                                        -- New format: ledger/<slot>/
-                                        -- Old format: ledger/<slot>-<hash>.lstate
-                                        filePath
-                                            `shouldSatisfy` ( \p ->
-                                                                "ledger" `isInfixOf` p
-                                                            )
-                                        -- Extract UTxOs and verify TxIn decoding
-                                        extractResult <-
-                                            extractUTxOsFromSnapshot
-                                                nullTracer
-                                                dbPath
-                                                (verifyTxInDecoding 100)
-                                        case extractResult of
-                                            Left err ->
-                                                fail
-                                                    $ "Extraction failed: "
-                                                        ++ show err
-                                            Right ((count, decoded), _slot) -> do
-                                                -- Preview should have UTxOs
-                                                count `shouldSatisfy` (> 0)
-                                                -- All sampled TxIns should
-                                                -- decode successfully
-                                                decoded `shouldSatisfy` (>= 100)
+                                        fail
+                                            $ "Extraction failed: "
+                                                ++ show err
+                                    Right ((count, decoded), _slot) -> do
+                                        -- Should have UTxOs
+                                        count `shouldSatisfy` (> 0)
+                                        -- All sampled TxIns should
+                                        -- decode successfully
+                                        decoded `shouldSatisfy` (>= 100)
 
 {- | Verify extracted UTxO bytes can be decoded as Conway-era TxIn/TxOut
 
