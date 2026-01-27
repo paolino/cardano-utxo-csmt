@@ -9,6 +9,7 @@ import CSMT ()
 import Cardano.UTxOCSMT.Application.BlockFetch
     ( EventQueueLength
     , Fetched (..)
+    , HeaderSkipProgress (..)
     , mkBlockFetchApplication
     )
 import Cardano.UTxOCSMT.Application.ChainSync
@@ -32,7 +33,7 @@ import Cardano.UTxOCSMT.Ouroboros.Types
     )
 import Control.Exception (throwIO)
 import Control.Monad (replicateM_)
-import Control.Tracer (Tracer)
+import Control.Tracer (Tracer, contramap)
 import Data.ByteString.Lazy (ByteString)
 import Data.Function (fix)
 import Data.Tracer.TraceWith
@@ -58,6 +59,8 @@ data ApplicationTrace
     | ApplicationRollingBack Point
     | -- | Block processed at slot with UTxO change count
       ApplicationBlockProcessed SlotNo Int
+    | -- | Header sync progress during Mithril catch-up
+      ApplicationHeaderSkipProgress HeaderSkipProgress
 
 -- | Render an 'ApplicationTrace'
 renderApplicationTrace :: ApplicationTrace -> String
@@ -73,6 +76,11 @@ renderApplicationTrace (ApplicationBlockProcessed slot utxoCount) =
         ++ ", "
         ++ show utxoCount
         ++ " UTxO changes"
+renderApplicationTrace (ApplicationHeaderSkipProgress progress) =
+    "Syncing headers: slot "
+        ++ show (unSlotNo $ skipCurrentSlot progress)
+        ++ " / "
+        ++ show (unSlotNo $ skipTargetSlot progress)
 
 origin :: Network.Point block
 origin = Network.Point{getPoint = Origin}
@@ -216,10 +224,14 @@ application
 
             let counting = metricTrace UTxOChangeEvent
 
+            let skipProgressTracer =
+                    contramap ApplicationHeaderSkipProgress tracer
+
             (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
                     headersQueueSize
                     (metricContra BlockFetchEvent)
+                    skipProgressTracer
                     setCheckpoint
                     mSkipTargetSlot
                     $ intersector tracer counting mFinality
