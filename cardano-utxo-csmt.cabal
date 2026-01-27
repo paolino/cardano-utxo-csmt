@@ -311,6 +311,7 @@ test-suite unit-tests
     , cardano-utxo-csmt:http
     , cardano-utxo-csmt:library
     , cereal
+    , containers
     , contra-tracer
     , csmt
     , hspec
@@ -338,6 +339,7 @@ test-suite unit-tests
   other-modules:
     Cardano.UTxOCSMT.Application.Database.RocksDBSpec
     Cardano.UTxOCSMT.HTTP.ServerSpec
+    Cardano.UTxOCSMT.Mithril.AncillaryVerifierSpec
     Cardano.UTxOCSMT.Mithril.ClientSpec
     Cardano.UTxOCSMT.Mithril.ImportSpec
     Data.List.SampleFibonacciSpec
