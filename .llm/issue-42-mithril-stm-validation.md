@@ -11,7 +11,7 @@
   - [x] Lottery calculation
   - [x] Merkle batch verification
   - [x] Verification flow
-  - [ ] Serialization
+  - [x] Serialization (using cereal)
   - [ ] hsblst backend
 - [x] Testing (mock crypto)
   - [x] LotterySpec - phi function and hash mapping
