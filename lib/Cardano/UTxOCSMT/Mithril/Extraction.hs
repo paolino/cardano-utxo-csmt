@@ -13,6 +13,9 @@ state files downloaded via Mithril. It supports:
 
 The extraction reads the raw CBOR bytes from the tables/tvar file
 which stores UTxOs in the InMemory backing store format.
+
+The streaming approach uses incremental CBOR parsing to avoid loading
+the entire file into memory at once.
 -}
 module Cardano.UTxOCSMT.Mithril.Extraction
     ( -- * Extraction
@@ -33,20 +36,28 @@ module Cardano.UTxOCSMT.Mithril.Extraction
 where
 
 import Codec.CBOR.Decoding qualified as CBOR
-import Codec.CBOR.Read (DeserialiseFailure)
-import Codec.CBOR.Read qualified as CBOR
+import Codec.CBOR.Read
+    ( DeserialiseFailure
+    , IDecode (..)
+    , deserialiseIncremental
+    )
 import Control.Exception (IOException, try)
 import Control.Monad (when)
+import Control.Monad.ST (RealWorld, stToIO)
 import Control.Monad.Trans (lift)
 import Control.Tracer (Tracer, traceWith)
-import Data.ByteString.Lazy (ByteString)
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
+import Data.ByteString.Lazy (LazyByteString)
 import Data.ByteString.Lazy qualified as LBS
+import Data.Function ((&))
 import Data.List (sortOn)
 import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
-import Streaming (Of, Stream)
+import Streaming (Of, Stream, effect)
+import Streaming.ByteString qualified as SB
 import Streaming.Prelude qualified as S
 import System.Directory
     ( doesDirectoryExist
@@ -54,6 +65,7 @@ import System.Directory
     , listDirectory
     )
 import System.FilePath (takeExtension, (</>))
+import System.IO (IOMode (..), withFile)
 
 -- | Result of UTxO extraction
 data ExtractionResult = ExtractionResult
@@ -218,7 +230,7 @@ extractUTxOsFromSnapshot
     :: Tracer IO ExtractionTrace
     -> FilePath
     -- ^ Path to db directory containing ledger/
-    -> ( Stream (Of (ByteString, ByteString)) IO ()
+    -> ( Stream (Of (LazyByteString, LazyByteString)) IO ()
          -> IO a
        )
     -- ^ Consumer for the UTxO stream
@@ -254,97 +266,198 @@ extractUTxOsFromSnapshot tracer dbPath consumer = do
         Left (e :: IOException) -> pure $ Left $ ExtractionIOError e
         Right r -> pure r
 
--- | Stream UTxOs from the tables/tvar file
+{- | Stream UTxOs from the tables/tvar file
+
+Uses incremental CBOR parsing to stream UTxOs without loading the
+entire file into memory. The file is read in chunks and parsed
+incrementally using the cborg library's 'deserialiseIncremental'.
+-}
 streamUtxos
     :: Tracer IO ExtractionTrace
     -> FilePath
     -- ^ Path to tvar file
-    -> (Stream (Of (ByteString, ByteString)) IO () -> IO a)
+    -> ( Stream (Of (LazyByteString, LazyByteString)) IO ()
+         -> IO a
+       )
     -- ^ Consumer
     -> IO (Either ExtractionError a)
-streamUtxos tracer tvarPath consumer = do
-    -- Read the file content
-    content <- LBS.readFile tvarPath
+streamUtxos tracer tvarPath consumer =
+    withFile tvarPath ReadMode $ \handle -> do
+        let byteStream =
+                SB.hGetContents handle
+                    & SB.toChunks
+        -- Parse header incrementally
+        headerResult <- parseHeader byteStream
+        case headerResult of
+            Left err ->
+                pure $ Left $ TablesDecodeFailed err
+            Right (mLen, remainingStream) -> do
+                -- Stream KV pairs incrementally
+                let kvStream = streamKVPairs mLen remainingStream
+                    trackedStream = trackProgress tracer 0 kvStream
+                a <- consumer trackedStream
+                pure $ Right a
 
-    -- Parse the header and get the remaining bytes with the map
-    case parseHeader content of
-        Left err -> pure $ Left $ TablesDecodeFailed err
-        Right (remaining, mapLen) -> do
-            -- Create a stream of UTxO key-value pairs
-            let stream' = streamKVPairs mapLen remaining
-                trackedStream = trackProgress tracer 0 stream'
-            a <- consumer trackedStream
-            pure $ Right a
-
-{- | Parse the tvar file header and return remaining bytes + map length
+{- | Parse the tvar file header incrementally
 
 The tvar file format (Mithril snapshot) is:
 1. List of length 1 (the tables wrapper)
 2. Map (indefinite-length in practice)
 3. Key-value pairs as CBOR bytes
+
+Returns the map length and remaining byte stream.
 -}
 parseHeader
-    :: ByteString -> Either DeserialiseFailure (ByteString, Maybe Int)
-parseHeader = CBOR.deserialiseFromBytes headerDecoder
+    :: Stream (Of ByteString) IO ()
+    -> IO
+        (Either DeserialiseFailure (Maybe Int, Stream (Of ByteString) IO ()))
+parseHeader byteStream = do
+    decoder <- stToIO $ deserialiseIncremental headerDecoder
+    feedHeader decoder byteStream
   where
-    headerDecoder :: CBOR.Decoder s (Maybe Int)
+    headerDecoder :: CBOR.Decoder RealWorld (Maybe Int)
     headerDecoder = do
         -- Decode list wrapper (length 1)
         _ <- CBOR.decodeListLen
         -- Decode map length (Nothing = indefinite)
         CBOR.decodeMapLenOrIndef
 
--- | Stream key-value pairs from the remaining bytes
+    feedHeader
+        :: IDecode RealWorld (Maybe Int)
+        -> Stream (Of ByteString) IO ()
+        -> IO
+            ( Either
+                DeserialiseFailure
+                (Maybe Int, Stream (Of ByteString) IO ())
+            )
+    feedHeader decoder stream' = case decoder of
+        Done leftover _ mLen -> do
+            -- Header parsed, return remaining stream
+            let remaining =
+                    if BS.null leftover
+                        then stream'
+                        else S.yield leftover >> stream'
+            pure $ Right (mLen, remaining)
+        Fail _ _ err ->
+            pure $ Left err
+        Partial k -> do
+            next <- S.next stream'
+            case next of
+                Left () -> do
+                    -- End of input during header parsing
+                    decoder' <- stToIO $ k Nothing
+                    feedHeader decoder' (pure ())
+                Right (chunk, rest) -> do
+                    decoder' <- stToIO $ k (Just chunk)
+                    feedHeader decoder' rest
+
+{- | Stream key-value pairs incrementally from byte chunks
+
+The KV pairs are CBOR-encoded as:
+- Key: CBOR bytes (decodeBytes)
+- Value: CBOR bytes (decodeBytes)
+
+For indefinite-length maps, we watch for the break marker.
+-}
 streamKVPairs
     :: Maybe Int
     -- ^ Map length (Nothing = indefinite)
-    -> ByteString
-    -- ^ Remaining bytes after header
-    -> Stream (Of (ByteString, ByteString)) IO ()
-streamKVPairs mLen content = case mLen of
-    Nothing -> streamIndefinite content
-    Just n -> streamFixed n content
+    -> Stream (Of ByteString) IO ()
+    -- ^ Remaining byte chunks after header
+    -> Stream (Of (LazyByteString, LazyByteString)) IO ()
+streamKVPairs mLen byteStream = case mLen of
+    Nothing -> streamIndefinite byteStream
+    Just n -> streamFixed n byteStream
   where
     -- Decode a single key-value pair (both are CBOR bytes)
-    kvDecoder :: CBOR.Decoder s (ByteString, ByteString)
+    kvDecoder :: CBOR.Decoder RealWorld (LazyByteString, LazyByteString)
     kvDecoder = do
         k <- LBS.fromStrict <$> CBOR.decodeBytes
         v <- LBS.fromStrict <$> CBOR.decodeBytes
         pure (k, v)
 
-    streamFixed
-        :: Int -> ByteString -> Stream (Of (ByteString, ByteString)) IO ()
-    streamFixed 0 _ = pure ()
-    streamFixed n bs =
-        case CBOR.deserialiseFromBytes kvDecoder bs of
-            Left _ -> pure ()
-            Right (rest, kv) -> do
-                S.yield kv
-                streamFixed (n - 1) rest
-
-    streamIndefinite
-        :: ByteString -> Stream (Of (ByteString, ByteString)) IO ()
-    streamIndefinite bs =
-        case CBOR.deserialiseFromBytes breakOrKv bs of
-            Left _ -> pure ()
-            Right (_, Nothing) -> pure () -- Break marker
-            Right (rest, Just kv) -> do
-                S.yield kv
-                streamIndefinite rest
-
-    breakOrKv :: CBOR.Decoder s (Maybe (ByteString, ByteString))
-    breakOrKv = do
+    -- Decoder that checks for break marker first
+    breakOrKvDecoder
+        :: CBOR.Decoder
+            RealWorld
+            (Maybe (LazyByteString, LazyByteString))
+    breakOrKvDecoder = do
         isBreak <- CBOR.decodeBreakOr
         if isBreak
             then pure Nothing
             else Just <$> kvDecoder
 
+    streamFixed
+        :: Int
+        -> Stream (Of ByteString) IO ()
+        -> Stream (Of (LazyByteString, LazyByteString)) IO ()
+    streamFixed 0 _ = pure ()
+    streamFixed n stream' = effect $ do
+        decoder <- stToIO $ deserialiseIncremental kvDecoder
+        pure $ feedFixed n decoder stream'
+
+    feedFixed
+        :: Int
+        -> IDecode RealWorld (LazyByteString, LazyByteString)
+        -> Stream (Of ByteString) IO ()
+        -> Stream (Of (LazyByteString, LazyByteString)) IO ()
+    feedFixed _ (Fail{}) _ = pure ()
+    feedFixed n (Done leftover _ kv) stream' = do
+        S.yield kv
+        let remaining =
+                if BS.null leftover
+                    then stream'
+                    else S.yield leftover >> stream'
+        streamFixed (n - 1) remaining
+    feedFixed n (Partial k) stream' = effect $ do
+        next <- S.next stream'
+        case next of
+            Left () -> do
+                decoder' <- stToIO $ k Nothing
+                pure $ feedFixed n decoder' (pure ())
+            Right (chunk, rest) -> do
+                decoder' <- stToIO $ k (Just chunk)
+                pure $ feedFixed n decoder' rest
+
+    streamIndefinite
+        :: Stream (Of ByteString) IO ()
+        -> Stream (Of (LazyByteString, LazyByteString)) IO ()
+    streamIndefinite stream' = effect $ do
+        decoder <- stToIO $ deserialiseIncremental breakOrKvDecoder
+        pure $ feedIndefinite decoder stream'
+
+    feedIndefinite
+        :: IDecode
+            RealWorld
+            (Maybe (LazyByteString, LazyByteString))
+        -> Stream (Of ByteString) IO ()
+        -> Stream (Of (LazyByteString, LazyByteString)) IO ()
+    feedIndefinite (Fail{}) _ = pure ()
+    feedIndefinite (Done leftover _ mKv) stream' = case mKv of
+        Nothing -> pure () -- Break marker - end of map
+        Just kv -> do
+            S.yield kv
+            let remaining =
+                    if BS.null leftover
+                        then stream'
+                        else S.yield leftover >> stream'
+            streamIndefinite remaining
+    feedIndefinite (Partial k) stream' = effect $ do
+        next <- S.next stream'
+        case next of
+            Left () -> do
+                decoder' <- stToIO $ k Nothing
+                pure $ feedIndefinite decoder' (pure ())
+            Right (chunk, rest) -> do
+                decoder' <- stToIO $ k (Just chunk)
+                pure $ feedIndefinite decoder' rest
+
 -- | Track progress and trace every 10000 UTxOs
 trackProgress
     :: Tracer IO ExtractionTrace
     -> Word64
-    -> Stream (Of (ByteString, ByteString)) IO ()
-    -> Stream (Of (ByteString, ByteString)) IO ()
+    -> Stream (Of (LazyByteString, LazyByteString)) IO ()
+    -> Stream (Of (LazyByteString, LazyByteString)) IO ()
 trackProgress tracer = go
   where
     go !count stream' = do
