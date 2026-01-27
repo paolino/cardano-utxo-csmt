@@ -32,6 +32,7 @@ import Cardano.UTxOCSMT.Ouroboros.Types
 import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
 import Ouroboros.Consensus.Cardano.Node ()
+import Ouroboros.Network.Block (SlotNo)
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point (WithOrigin (Origin))
 import Ouroboros.Network.Protocol.ChainSync.Client
@@ -52,37 +53,43 @@ starting from the provided points, then follow the chain forward.
 mkChainSyncApplication
     :: Tracer IO Header
     -- ^ Tracer for logging received headers
+    -> Tracer IO SlotNo
+    -- ^ Tracer for chain tip slot updates
     -> Intersector Header
     -- ^ Callback handlers for intersection results
     -> [Point]
     -- ^ Starting points to find intersection (usually tip + finality)
     -> ChainSyncApplication
-mkChainSyncApplication tracer intersector startingPoints =
-    ChainSyncClient $ pure $ intersect tracer startingPoints intersector
+mkChainSyncApplication tracer tipTracer intersector startingPoints =
+    ChainSyncClient
+        $ pure
+        $ intersect tracer tipTracer startingPoints intersector
 
 intersect
     :: Tracer IO Header
+    -> Tracer IO SlotNo
     -> [Point]
     -> Intersector Header
     -> ClientStIdle Header Point Tip IO ()
-intersect tracer points Intersector{intersectFound, intersectNotFound} =
+intersect tracer tipTracer points Intersector{intersectFound, intersectNotFound} =
     SendMsgFindIntersect points
         $ ClientStIntersect
             { recvMsgIntersectFound = \point _ ->
                 ChainSyncClient $ do
                     nextFollower <- intersectFound point
-                    pure $ next tracer nextFollower
+                    pure $ next tracer tipTracer nextFollower
             , recvMsgIntersectNotFound = \_ ->
                 ChainSyncClient $ do
                     (intersector', points') <- intersectNotFound
-                    pure $ intersect tracer points' intersector'
+                    pure $ intersect tracer tipTracer points' intersector'
             }
 
 next
     :: Tracer IO Header
+    -> Tracer IO SlotNo
     -> Follower Header
     -> ChainSyncIdle
-next tracer follower = ($ follower)
+next tracer tipTracer follower = ($ follower)
     $ fix
     $ \go (Follower{rollForward, rollBackward}) ->
         let
@@ -92,17 +99,29 @@ next tracer follower = ($ follower)
                 case progressOrRewind of
                     Progress follower' -> pure $ go follower'
                     Rewind points follower' ->
-                        pure $ intersect tracer points follower'
+                        pure $ intersect tracer tipTracer points follower'
                     Reset intersector' ->
-                        pure $ intersect tracer [Network.Point Origin] intersector'
+                        pure
+                            $ intersect
+                                tracer
+                                tipTracer
+                                [Network.Point Origin]
+                                intersector'
         in
             SendMsgRequestNext
                 (pure ()) -- spare time for other work
                 ClientStNext
-                    { recvMsgRollForward = \header _ -> do
+                    { recvMsgRollForward = \header tip -> do
                         checkResult $ do
                             traceWith tracer header
+                            traceTipSlot tipTracer tip
                             Progress <$> rollForward header
                     , recvMsgRollBackward = \point _ ->
                         checkResult $ rollBackward point
                     }
+
+-- | Extract and trace the slot from the chain tip
+traceTipSlot :: Tracer IO SlotNo -> Tip -> IO ()
+traceTipSlot tipTracer tip = case tip of
+    Network.TipGenesis -> pure ()
+    Network.Tip slot _ _ -> traceWith tipTracer slot

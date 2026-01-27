@@ -30,7 +30,7 @@ import Data.ByteArray.Encoding
     )
 import Data.ByteString.Char8 qualified as B
 import Data.ByteString.Short qualified as SBS
-import Data.Word (Word32)
+import Data.Word (Word32, Word64)
 import Network.Socket (PortNumber)
 import OptEnvConf
     ( Parser
@@ -109,6 +109,8 @@ data Options = Options
     , apiDocsPort :: Maybe PortNumber
     , metricsOn :: Bool
     , mithrilOptions :: MithrilOptions
+    , syncThreshold :: Word64
+    -- ^ Number of slots behind chain tip to consider synced (default: 100)
     }
 
 -- | Get effective network magic from options
@@ -278,6 +280,19 @@ apiDocsPortOption =
             , option
             ]
 
+syncThresholdOption :: Parser Word64
+syncThresholdOption =
+    setting
+        [ long "sync-threshold"
+        , help
+            "Number of slots behind chain tip to consider synced \
+            \(default: 100, ~33 minutes)"
+        , metavar "SLOTS"
+        , value 100
+        , reader auto
+        , option
+        ]
+
 optionsParser :: Parser Options
 optionsParser =
     mkOptions
@@ -292,18 +307,32 @@ optionsParser =
         <*> apiDocsPortOption
         <*> metricsSwitch
         <*> mithrilOptionsParser'
+        <*> syncThresholdOption
   where
-    mkOptions net nodeName' port' start queue db logP api apiDocs metrics mithril =
-        Options
-            { network = net
-            , nodeNameOverride = nodeName'
-            , portNumberOverride = port'
-            , startingPoint = start
-            , headersQueueSize = queue
-            , dbPath = db
-            , logPath = logP
-            , apiPort = api
-            , apiDocsPort = apiDocs
-            , metricsOn = metrics
-            , mithrilOptions = mithril{mithrilNetwork = mithrilNetworkFor net}
-            }
+    mkOptions
+        net
+        nodeName'
+        port'
+        start
+        queue
+        db
+        logP
+        api
+        apiDocs
+        metrics
+        mithril
+        threshold =
+            Options
+                { network = net
+                , nodeNameOverride = nodeName'
+                , portNumberOverride = port'
+                , startingPoint = start
+                , headersQueueSize = queue
+                , dbPath = db
+                , logPath = logP
+                , apiPort = api
+                , apiDocsPort = apiDocs
+                , metricsOn = metrics
+                , mithrilOptions = mithril{mithrilNetwork = mithrilNetworkFor net}
+                , syncThreshold = threshold
+                }

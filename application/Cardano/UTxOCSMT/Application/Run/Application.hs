@@ -211,6 +211,7 @@ application
             let chainFollowingApplication =
                     mkChainSyncApplication
                         (metricContra BlockInfoEvent)
+                        (metricContra ChainTipEvent)
                         headerIntersector
                         $ if null availablePoints
                             then
