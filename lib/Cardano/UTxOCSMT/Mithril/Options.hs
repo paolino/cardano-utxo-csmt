@@ -25,6 +25,7 @@ import Data.Text qualified as T
 import OptEnvConf
     ( Parser
     , auto
+    , env
     , help
     , long
     , maybeReader
@@ -47,13 +48,15 @@ data MithrilOptions = MithrilOptions
     , mithrilNetwork :: MithrilNetwork
     -- ^ Target Mithril network
     , mithrilAggregatorUrl :: Maybe String
-    -- ^ Override aggregator URL (uses network default if Nothing)
+    -- ^ Aggregator URL (from env or CLI, falls back to network default)
+    , mithrilGenesisVk :: Maybe Text
+    -- ^ Genesis verification key for mithril-client CLI (from env or CLI)
     , mithrilClientPath :: FilePath
     -- ^ Path to mithril-client binary
     , mithrilDownloadDir :: Maybe FilePath
     -- ^ Directory for snapshot downloads (uses temp dir if Nothing)
-    , mithrilAncillaryVkOverride :: Maybe Text
-    -- ^ Override ancillary verification key (uses network default if Nothing)
+    , mithrilAncillaryVk :: Maybe Text
+    -- ^ Ancillary verification key (from env or CLI)
     , mithrilSkipAncillaryVerification :: Bool
     -- ^ Skip Ed25519 ancillary verification (not recommended)
     }
@@ -109,17 +112,35 @@ mithrilNetworkOption =
         , option
         ]
 
--- | Option to override aggregator URL
+-- | Option for aggregator URL (from env or CLI)
 mithrilAggregatorOption :: Parser (Maybe String)
 mithrilAggregatorOption =
     optional
         $ setting
-            [ long "mithril-aggregator"
+            [ long "aggregator-endpoint"
+            , env "AGGREGATOR_ENDPOINT"
             , help
-                "Override Mithril aggregator URL. \
-                \By default, uses the official aggregator for the selected network."
+                "Mithril aggregator endpoint URL. \
+                \Required for Mithril bootstrap. Uses network default if not set. \
+                \See: https://mithril.network/doc/manual/getting-started/network-configurations"
             , metavar "URL"
             , reader str
+            , option
+            ]
+
+-- | Option for genesis verification key (from env or CLI)
+mithrilGenesisVkOption :: Parser (Maybe Text)
+mithrilGenesisVkOption =
+    optional
+        $ setting
+            [ long "genesis-verification-key"
+            , env "GENESIS_VERIFICATION_KEY"
+            , help
+                "Genesis verification key for mithril-client CLI (JSON-hex format). \
+                \Required when using mithril-client binary for STM verification. \
+                \Get official keys from mithril-infra/configuration/{network}/genesis.vkey"
+            , metavar "KEY"
+            , reader (T.pack <$> str)
             , option
             ]
 
@@ -151,16 +172,18 @@ mithrilDownloadDirOption =
             , option
             ]
 
--- | Option to override ancillary verification key
+-- | Option for ancillary verification key (from env or CLI)
 mithrilAncillaryVkOption :: Parser (Maybe Text)
 mithrilAncillaryVkOption =
     optional
         $ setting
-            [ long "mithril-ancillary-verification-key"
+            [ long "ancillary-verification-key"
+            , env "ANCILLARY_VERIFICATION_KEY"
             , help
-                "Override Ed25519 ancillary verification key (JSON-hex format). \
-                \By default, uses the official Mithril key for the selected network. \
-                \The key is used to verify the signature on ancillary_manifest.json."
+                "Ed25519 ancillary verification key (JSON-hex format). \
+                \Required for Ed25519 verification of Mithril ancillary files. \
+                \The key is used to verify the signature on ancillary_manifest.json. \
+                \Get official keys from mithril-infra/configuration/{network}/ancillary.vkey"
             , metavar "KEY"
             , reader (T.pack <$> str)
             , option
@@ -188,6 +211,7 @@ mithrilOptionsParser =
         <*> mithrilBootstrapOnlySwitch
         <*> mithrilNetworkOption
         <*> mithrilAggregatorOption
+        <*> mithrilGenesisVkOption
         <*> mithrilClientPathOption
         <*> mithrilDownloadDirOption
         <*> mithrilAncillaryVkOption
@@ -204,6 +228,7 @@ mithrilOptionsParser' =
         <*> mithrilBootstrapOnlySwitch
         <*> pure MithrilMainnet -- Placeholder, will be overwritten
         <*> mithrilAggregatorOption
+        <*> mithrilGenesisVkOption
         <*> mithrilClientPathOption
         <*> mithrilDownloadDirOption
         <*> mithrilAncillaryVkOption

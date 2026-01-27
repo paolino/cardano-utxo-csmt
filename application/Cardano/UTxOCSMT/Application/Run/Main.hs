@@ -79,7 +79,9 @@ import Cardano.UTxOCSMT.HTTP.Base16
     , unsafeDecodeBase16Text
     )
 import Cardano.UTxOCSMT.HTTP.Server (runAPIServer, runDocsServer)
-import Cardano.UTxOCSMT.Mithril.AncillaryVerifier (parseVerificationKey)
+import Cardano.UTxOCSMT.Mithril.AncillaryVerifier
+    ( parseVerificationKey
+    )
 import Cardano.UTxOCSMT.Mithril.Client (defaultMithrilConfig)
 import Cardano.UTxOCSMT.Mithril.Client qualified as MithrilClient
 import Cardano.UTxOCSMT.Mithril.Import
@@ -126,7 +128,7 @@ import Data.Serialize
     , putWord64be
     )
 import Data.Serialize.Extra (evalGetM, evalPutM)
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import Data.Text.Encoding qualified as Text
 import Data.Tracer.Intercept (intercept)
 import Data.Tracer.LogFile (logTracer)
@@ -462,16 +464,18 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
             ancillaryVk
                 | Mithril.mithrilSkipAncillaryVerification mithrilOpts =
                     Nothing
-                | Just keyHex <- Mithril.mithrilAncillaryVkOverride mithrilOpts =
+                | Just keyHex <- Mithril.mithrilAncillaryVk mithrilOpts =
                     either (const Nothing) Just (parseVerificationKey keyHex)
                 | otherwise =
-                    MithrilClient.mithrilAncillaryVk baseConfig
+                    Nothing
             mithrilConfig =
                 baseConfig
                     { MithrilClient.mithrilAggregatorUrl =
                         fromMaybe
                             (MithrilClient.mithrilAggregatorUrl baseConfig)
                             (Mithril.mithrilAggregatorUrl mithrilOpts)
+                    , MithrilClient.mithrilGenesisVk =
+                        unpack <$> Mithril.mithrilGenesisVk mithrilOpts
                     , MithrilClient.mithrilClientPath =
                         Mithril.mithrilClientPath mithrilOpts
                     , MithrilClient.mithrilAncillaryVk = ancillaryVk

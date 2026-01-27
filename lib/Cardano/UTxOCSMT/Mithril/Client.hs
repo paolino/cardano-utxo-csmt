@@ -40,7 +40,6 @@ where
 import Cardano.UTxOCSMT.Mithril.AncillaryVerifier
     ( AncillaryVerificationError
     , AncillaryVerificationKey
-    , parseVerificationKey
     , verifyAncillaryManifest
     )
 import Control.Exception (Exception, try)
@@ -101,6 +100,8 @@ data MithrilConfig = MithrilConfig
     -- ^ Target Cardano network
     , mithrilAggregatorUrl :: String
     -- ^ Mithril aggregator URL (defaults to network-specific URL)
+    , mithrilGenesisVk :: Maybe String
+    -- ^ Genesis verification key for mithril-client CLI (JSON-hex format)
     , mithrilClientPath :: FilePath
     -- ^ Path to mithril-client binary
     , mithrilDownloadDir :: FilePath
@@ -118,49 +119,12 @@ defaultMithrilConfig manager network downloadDir =
     MithrilConfig
         { mithrilNetwork = network
         , mithrilAggregatorUrl = defaultAggregatorUrl network
+        , mithrilGenesisVk = Nothing
         , mithrilClientPath = "mithril-client"
         , mithrilDownloadDir = downloadDir
         , mithrilHttpManager = manager
-        , mithrilAncillaryVk = ancillaryVkForNetwork network
+        , mithrilAncillaryVk = Nothing
         }
-
-{- | Get ancillary verification key for network
-
-These are the official Mithril Ed25519 verification keys for
-ancillary file signatures, from mithril-infra/configuration/.
-
-Source: https://mithril.network/doc/manual/getting-started/network-configurations
--}
-ancillaryVkForNetwork :: MithrilNetwork -> Maybe AncillaryVerificationKey
-ancillaryVkForNetwork MithrilPreview =
-    -- From mithril-infra/configuration/pre-release-preview/ancillary.vkey
-    -- Same key as preprod
-    either (const Nothing) Just $
-        parseVerificationKey
-            "5b3138392c3139322c3231362c3135302c3131342c3231362c323\
-            \3372c3231302c34352c31382c32312c3139362c3230382c323436\
-            \2c3134362c322c3235322c3234332c3235312c3139372c32382c3\
-            \135372c3230342c3134352c33302c31342c3232382c3136382c31\
-            \32392c38332c3133362c33365d"
-ancillaryVkForNetwork MithrilPreprod =
-    -- From mithril-infra/configuration/release-preprod/ancillary.vkey
-    -- Same key as preview
-    either (const Nothing) Just $
-        parseVerificationKey
-            "5b3138392c3139322c3231362c3135302c3131342c3231362c323\
-            \3372c3231302c34352c31382c32312c3139362c3230382c323436\
-            \2c3134362c322c3235322c3234332c3235312c3139372c32382c3\
-            \135372c3230342c3134352c33302c31342c3232382c3136382c31\
-            \32392c38332c3133362c33365d"
-ancillaryVkForNetwork MithrilMainnet =
-    -- From mithril-infra/configuration/release-mainnet/ancillary.vkey
-    either (const Nothing) Just $
-        parseVerificationKey
-            "5b32332c37312c39362c3133332c34372c3235332c3232362c313\
-            \3362c3233352c35372c3136342c3130362c3138362c322c32312c\
-            \32392c3132302c3136332c38392c3132312c3137372c3133382c32\
-            \30382c3133382c3231342c39392c35382c32322c302c35382c332c\
-            \36395d"
 
 -- | Unique identifier for a snapshot (certificate hash)
 newtype SnapshotDigest = SnapshotDigest {unSnapshotDigest :: Text}
@@ -224,6 +188,8 @@ data MithrilError
       MithrilExtractionFailed Int Text
     | -- | Ed25519 ancillary verification failed
       MithrilVerificationFailed AncillaryVerificationError
+    | -- | Missing genesis verification key for mithril-client CLI
+      MithrilMissingGenesisVk
     deriving stock (Show)
 
 instance Exception MithrilError
@@ -253,6 +219,8 @@ renderMithrilError (MithrilExtractionFailed code msg) =
     "Extraction failed (exit " <> show code <> "): " <> T.unpack msg
 renderMithrilError (MithrilVerificationFailed err) =
     "Ancillary verification failed: " <> show err
+renderMithrilError MithrilMissingGenesisVk =
+    "Missing GENESIS_VERIFICATION_KEY for mithril-client CLI"
 
 -- | Trace events for Mithril operations
 data MithrilTrace
@@ -349,56 +317,41 @@ downloadSnapshot
         { mithrilClientPath
         , mithrilAggregatorUrl
         , mithrilDownloadDir
-        , mithrilNetwork
+        , mithrilGenesisVk
         }
-    (SnapshotDigest digest) = do
-        -- Run mithril-client cardano-db download
-        -- Include ancillary files (ledger state) for UTxO extraction
-        let args =
-                [ "cardano-db"
-                , "download"
-                , "--include-ancillary"
-                , T.unpack digest
-                ]
-            envVars =
-                [ ("AGGREGATOR_ENDPOINT", mithrilAggregatorUrl)
-                , ("GENESIS_VERIFICATION_KEY", genesisVkForNetwork mithrilNetwork)
-                ]
-        (exitCode, stdout, stderr) <-
-            readProcess
-                $ setEnv envVars
-                $ setWorkingDir mithrilDownloadDir
-                $ proc mithrilClientPath args
-        case exitCode of
-            ExitSuccess ->
-                pure $ Right $ mithrilDownloadDir <> "/db"
-            ExitFailure code ->
-                pure
-                    $ Left
-                    $ MithrilClientFailed
-                        code
-                        (decodeStdout stdout)
-                        (decodeStdout stderr)
+    (SnapshotDigest digest) =
+        case mithrilGenesisVk of
+            Nothing -> pure $ Left MithrilMissingGenesisVk
+            Just genesisVk -> do
+                -- Run mithril-client cardano-db download
+                -- Include ancillary files (ledger state) for UTxO extraction
+                let args =
+                        [ "cardano-db"
+                        , "download"
+                        , "--include-ancillary"
+                        , T.unpack digest
+                        ]
+                    envVars =
+                        [ ("AGGREGATOR_ENDPOINT", mithrilAggregatorUrl)
+                        , ("GENESIS_VERIFICATION_KEY", genesisVk)
+                        ]
+                (exitCode, stdout, stderr) <-
+                    readProcess
+                        $ setEnv envVars
+                        $ setWorkingDir mithrilDownloadDir
+                        $ proc mithrilClientPath args
+                case exitCode of
+                    ExitSuccess ->
+                        pure $ Right $ mithrilDownloadDir <> "/db"
+                    ExitFailure code ->
+                        pure
+                            $ Left
+                            $ MithrilClientFailed
+                                code
+                                (decodeStdout stdout)
+                                (decodeStdout stderr)
       where
         decodeStdout = T.pack . show . LBS.toStrict
-
-{- | Get genesis verification key for network
-These are the official Mithril genesis verification keys
--}
-genesisVkForNetwork :: MithrilNetwork -> String
-genesisVkForNetwork MithrilMainnet =
-    "5b3139312c36362c3134302c3138372c36312c3136372c3133302c3130372c393\
-    \72c37372c32392c3138322c3132372c3133342c3137382c3139382c3138392c38\
-    \372c32382c3136312c3131322c3132372c38392c3234312c36382c3136382c313\
-    \1342c3138392c3234312c3234312c3231322c3134345d"
-genesisVkForNetwork MithrilPreprod =
-    "5b3132372c37332c3132342c3136312c362c3133372c3133312c3231392c3230\
-    \372c32392c3134342c3139382c363638382c3136312c3133302c3231322c3134\
-    \342c3233332c3139322c33385d"
-genesisVkForNetwork MithrilPreview =
-    "5b3134302c3136382c3134352c3137382c3138362c3131342c3133362c313935\
-    \2c3231312c3132342c3133332c3137332c3139382c3133392c3233302c313332\
-    \2c3139362c3231342c3234312c36365d"
 
 {- | Download a snapshot via HTTP (without verification)
 
@@ -414,7 +367,11 @@ downloadSnapshotHttp
     -> SnapshotMetadata
     -> IO (Either MithrilError FilePath)
 downloadSnapshotHttp
-    MithrilConfig{mithrilDownloadDir, mithrilHttpManager, mithrilAncillaryVk}
+    MithrilConfig
+        { mithrilDownloadDir
+        , mithrilHttpManager
+        , mithrilAncillaryVk
+        }
     SnapshotMetadata{snapshotAncillaryLocations} =
         case snapshotAncillaryLocations of
             [] -> pure $ Left MithrilNoLocations

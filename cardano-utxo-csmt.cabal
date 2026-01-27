@@ -168,8 +168,6 @@ library library
     , base16-bytestring
     , bytestring
     , cardano-crypto-class
-    , containers
-    , crypton
     , cardano-ledger-api
     , cardano-ledger-babbage
     , cardano-ledger-binary
@@ -180,7 +178,9 @@ library library
     , cborg
     , cereal
     , comonad
+    , containers
     , contra-tracer
+    , crypton
     , csmt
     , directory
     , exceptions
