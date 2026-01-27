@@ -420,3 +420,36 @@ cabal run cardano-utxo-chainsync -- \
   - `8c4912f fix: add error handling and logging to diagnose startup crashes`
 
 **Ready for:** Testing the original "Syncing headers" feature now that connection works! 🎉
+
+---
+
+## Run 8 (Started 11:47:54 - Full E2E Test with Mithril) - IN PROGRESS
+
+### Status: Mithril import in progress
+
+**Purpose:** Full E2E test to verify the "Syncing headers" progress logging feature works after Mithril bootstrap.
+
+**Command:**
+```bash
+cabal run cardano-utxo-chainsync -- \
+  --network preview \
+  --node-name localhost \
+  --port 3037 \
+  --mithril-bootstrap \
+  --csmt-db-path /tmp/e2e-test-progress/db-mithril \
+  --log-path /tmp/e2e-test-progress/log-mithril.txt
+```
+
+**Progress (as of 11:59 UTC):**
+- Mithril snapshot: `b77a696ddefe1d8b394764057b7d886a2cfb2f1267c5919011bce0df467384e5`
+- UTxO extraction: ~620,000 / ~2,900,000 (estimated)
+- Rate: ~917-937 UTxOs/second
+
+**Expected Sequence:**
+1. Mithril import completes (~2.9M UTxOs)
+2. Database setup
+3. Node connection with `--node-name localhost`
+4. **Header skip phase** - Should see "Syncing headers: slot X / Y" logs every 1000 slots
+5. Block processing begins at tip
+
+**Waiting for:** "Syncing headers" progress logs after Mithril completes.
