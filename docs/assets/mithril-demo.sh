@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Demo: Mithril Bootstrap with Ed25519 Verification
+# Run via record-demo.sh which pre-builds the binary
 set -e
 
 echo "=== Cardano UTxO CSMT - Mithril Bootstrap Demo ==="
@@ -19,13 +20,15 @@ echo "# Step 2: Run cardano-utxo-chainsync with Mithril bootstrap"
 sleep 1
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
-echo '$ cardano-utxo-chainsync --network preview --mithril-bootstrap --mithril-bootstrap-only --csmt-db-path /tmp/db'
+echo '$ nix run . -- --network preview --mithril-bootstrap --mithril-bootstrap-only --csmt-db-path /tmp/db'
 echo ""
 
 # Run the actual program - timeout after 60 seconds for demo
-timeout 60 nix run --quiet .#cardano-utxo-chainsync -- \
+# nix run is quiet because record-demo.sh pre-builds
+timeout 60 nix run --quiet . -- \
     --network preview \
     --mithril-bootstrap \
+    --mithril-bootstrap-only \
     --csmt-db-path "$TMPDIR/db" 2>&1 || true
 
 echo ""
