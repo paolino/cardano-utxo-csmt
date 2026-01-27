@@ -254,9 +254,9 @@ verifyFileHashes baseDir fileHashes = do
                 if actualHash == expectedHash
                     then go rest
                     else
-                        pure $
-                            Left $
-                                HashMismatch relPath expectedHash actualHash
+                        pure
+                            $ Left
+                            $ HashMismatch relPath expectedHash actualHash
 
     computeFileHashHex path = do
         hash <- computeFileHash path

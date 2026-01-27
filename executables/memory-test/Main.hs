@@ -137,7 +137,8 @@ main = do
                                 $ "Rate: "
                                     ++ show
                                         ( fromIntegral count
-                                            / realToFrac elapsed :: Double
+                                            / realToFrac elapsed
+                                            :: Double
                                         )
                                     ++ " UTxOs/sec"
                             putStrLn ""

@@ -62,7 +62,8 @@ spec = describe "AncillaryVerifier" $ do
 
         it "fails on key with wrong length" $ do
             -- Only 16 bytes instead of 32
-            let shortKey = "5b312c322c332c342c352c362c372c382c392c31302c31312c31322c31332c31342c31352c31365d"
+            let shortKey =
+                    "5b312c322c332c342c352c362c372c382c392c31302c31312c31322c31332c31342c31352c31365d"
             parseVerificationKey shortKey `shouldSatisfy` isLeft
 
     describe "computeManifestHash" $ do
