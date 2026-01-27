@@ -8,6 +8,7 @@ module Main (main) where
 
 import Test.Hspec
 
+import Mithril.STM.IntegrationSpec qualified as IntegrationSpec
 import Mithril.STM.LotterySpec qualified as LotterySpec
 import Mithril.STM.MerkleSpec qualified as MerkleSpec
 import Mithril.STM.SerializationSpec qualified as SerializationSpec
@@ -19,3 +20,4 @@ main = hspec $ do
     describe "Mithril.STM.Merkle" MerkleSpec.spec
     describe "Mithril.STM.Serialization" SerializationSpec.spec
     describe "Mithril.STM.Verify" VerifySpec.spec
+    describe "Mithril.STM.Integration" IntegrationSpec.spec

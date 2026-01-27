@@ -104,18 +104,24 @@ test-suite mithril-stm-test
   hs-source-dirs:   mithril-stm-test
   main-is:          Main.hs
   other-modules:
+    Mithril.STM.IntegrationSpec
     Mithril.STM.LotterySpec
     Mithril.STM.MerkleSpec
     Mithril.STM.SerializationSpec
     Mithril.STM.VerifySpec
 
   build-depends:
+    , aeson
     , base                           >=4.14 && <5
     , bytestring
     , cardano-utxo-csmt:mithril-stm
     , cereal
     , hspec
+    , http-client
+    , http-client-tls
+    , http-types
     , QuickCheck
+    , vector
 
 library http
   import:           warnings
