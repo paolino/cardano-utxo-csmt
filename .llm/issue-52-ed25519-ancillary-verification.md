@@ -119,16 +119,26 @@ Explored `lib/Cardano/UTxOCSMT/Mithril/Client.hs`:
 - Fixed type ambiguity in `computeManifestHash` with `@SHA256` type application
 - Cleaned up unused imports
 
+### Session 5 (2026-01-27)
+- **Found all network keys**: Discovered keys are in `mithril-infra/configuration/`
+  not just `mithril-client-cli/config/`
+- **Added Preprod and Mainnet keys**: All three networks now have verification
+- **Fixed signature format**: Manifest uses plain hex, not JSON-hex
+- **E2E tests pass**: Preview and Preprod both verify signatures successfully
+
 ### Status: COMPLETE
 All implementation and tests are complete. The Ed25519 verification is
-integrated into `downloadSnapshotHttp` and will verify ancillary manifests
-automatically for networks with configured verification keys (currently
-Preview only).
+integrated into `downloadSnapshotHttp` and verifies ancillary manifests
+for all three networks (Preview, Preprod, Mainnet).
 
 ### Network Ancillary Verification Keys
-From `mithril-client-cli/config/`:
+From `mithril-infra/configuration/{network}/ancillary.vkey`:
+Source: https://mithril.network/doc/manual/getting-started/network-configurations
+
 ```
 preview: 5b3138392c3139322c3231362c3135302c3131342c3231362c3233372c3231302c34352c31382c32312c3139362c3230382c3234362c3134362c322c3235322c3234332c3235312c3139372c32382c3135372c3230342c3134352c33302c31342c3232382c3136382c3132392c38332c3133362c33365d
-mainnet: not yet available
-preprod: not yet available
+preprod: 5b3138392c3139322c3231362c3135302c3131342c3231362c3233372c3231302c34352c31382c32312c3139362c3230382c3234362c3134362c322c3235322c3234332c3235312c3139372c32382c3135372c3230342c3134352c33302c31342c3232382c3136382c3132392c38332c3133362c33365d
+mainnet: 5b32332c37312c39362c3133332c34372c3235332c3232362c3133362c3233352c35372c3136342c3130362c3138362c322c32312c32392c3132302c3136332c38392c3132312c3137372c3133382c3230382c3133382c3231342c39392c35382c32322c302c35382c332c36395d
 ```
+
+Note: Preview and Preprod share the same verification key. Mainnet has a distinct key.
