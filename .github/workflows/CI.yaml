@@ -32,11 +32,6 @@ jobs:
         with:
           name: cardano-utxo-appImage
           path: cardano-utxo.AppImage
-      - name: Upload tarball Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cardano-utxo
-          path: output-linux-tarball
       - name: Build rpm artifact
         run: nix bundle --bundler github:NixOS/bundlers#toRPM .#cardano-utxo -o cardano-utxo.rpm --quiet
       - name: Upload rpm artifact
