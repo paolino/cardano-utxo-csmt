@@ -10,7 +10,7 @@ cradle:
       component: "cardano-utxo-csmt:http"
 
     - path: "executables/swagger/main.hs"
-      component: "cardano-utxo-csmt:exe:cardano-utxo-csmt-swagger"
+      component: "cardano-utxo-csmt:exe:cardano-utxo-swagger"
 
     - path: "executables/chainsync/main.hs"
       component: "cardano-utxo-csmt:exe:cardano-utxo"
