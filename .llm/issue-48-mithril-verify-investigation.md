@@ -44,7 +44,8 @@ Add `--mithril-verify-mode` option for controlling snapshot verification:
 ### Test Results
 
 - All 56 unit tests pass
-- E2E verified download with STM mode works (tested with 2603.1-pre)
+- Ed25519 mode (`--mithril-verify-mode ed25519`) works correctly
+- STM mode blocked by upstream aggregator bug (see Known Issues)
 
 ## CLI Usage
 
@@ -93,7 +94,13 @@ This is a serialization mismatch between the aggregator and client versions. The
 **Impact:** STM verification mode will fail until IOG updates the aggregators.
 **Workaround:** Use `--mithril-verify-mode ed25519` (default) which works correctly.
 
+## Status
+
+**PR #50 ready for review.** STM mode implementation complete but blocked by upstream.
+
 ## Commits
 
 1. `ab7452e` - feat: add --mithril-verify-mode option for verification control
 2. `98a3b22` - feat: add mithril 2603.1-pre and E2E shell for STM verification testing
+3. `bfc5c41` - docs: update investigation notes for --mithril-verify-mode
+4. `aac97da` - docs: document STM mode blocked by aggregator bug
