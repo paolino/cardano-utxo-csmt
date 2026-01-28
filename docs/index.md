@@ -6,9 +6,18 @@ A service that maintains a Compact Sparse Merkle Tree over Cardano's UTxO set, e
 
 - **Real-time Sync**: Follows the Cardano blockchain via node-to-node protocol
 - **Merkle Proofs**: Generate cryptographic inclusion proofs for any UTxO
-- **Multi-Era Support**: Works with all Cardano eras (Byron through Conway)
 - **Rollback Handling**: Gracefully handles chain reorganizations
 - **REST API**: Simple HTTP interface for queries and proofs
+
+## Presentation
+
+<div style="position: relative; width: 100%; padding-bottom: 58%; margin-bottom: 1em;">
+<iframe src="presentation/index.html" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; border-radius: 8px;"></iframe>
+</div>
+
+**Controls:** Arrow keys / Space (navigate) | F (fullscreen) | Esc (overview)
+
+[Open fullscreen presentation](presentation/index.html){target="_blank"}
 
 ## How It Works
 
@@ -26,40 +35,6 @@ Each block updates the tree, producing a new Merkle root that commits to the ent
 - **Bridges**: Prove UTxO state to external systems
 - **Auditing**: Cryptographic proof of UTxO set at any point
 
-## Quick Start
-
-```bash
-# Using nix with Mithril bootstrap (preview network)
-nix run github:paolino/cardano-utxo-csmt#cardano-utxo-chainsync -- \
-  --network preview \
-  --mithril-bootstrap \
-  --csmt-db-path /tmp/csmt-db
-```
-
-See [Getting Started](getting-started.md) for detailed setup instructions.
-
-## Installation
-
-### Docker
-
-```bash
-gh run download -n cardano-utxo-csmt-image
-docker load < output-docker-image
-```
-
-### Nix
-
-```bash
-# Setup caching
-nix shell nixpkgs#cachix -c cachix use paolino
-
-# Run directly
-nix run github:paolino/cardano-utxo-csmt
-
-# Or build a standalone binary
-nix bundle github:paolino/cardano-utxo-csmt -o utxo-csmt
-```
-
 ## Project Status
 
 - [x] Chain synchronization via node-to-node protocol
@@ -68,6 +43,7 @@ nix bundle github:paolino/cardano-utxo-csmt -o utxo-csmt
 - [x] HTTP API with Swagger documentation
 - [x] Merkle roots endpoint
 - [x] Inclusion proofs endpoint
+- [ ] Bootstrap without mithril
 - [ ] Exclusion proofs
 - [ ] Address completeness proofs
 

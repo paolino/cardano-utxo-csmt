@@ -1,10 +1,10 @@
 # Getting Started
 
-This guide will help you get the Cardano UTxO CSMT service running on preprod.
+This guide covers installation, configuration and usage of the Cardano UTxO CSMT service.
 
 ## Prerequisites
 
-- A running Cardano node with node-to-node protocol access
+- A trusted running Cardano node with secure node-to-node protocol access
 - Network connectivity to the node's port (default: 3001)
 
 ## Setup Environment Variables
@@ -37,11 +37,9 @@ Mithril bootstrap requires environment variables for verification. Download and 
 
 Source: [Mithril Network Configurations](https://mithril.network/doc/manual/getting-started/network-configurations)
 
-## Quick Start
+## Installation
 
-> **Coming Soon:** Docker quickstart with pre-configured environment.
-
-### Nix (Preprod)
+### Nix
 
 ```bash
 # Setup caching (recommended)
@@ -55,21 +53,19 @@ nix run github:paolino/cardano-utxo-csmt -- \
   --api-port 8080
 ```
 
-#### Demo
-
 ```asciinema-player
 { "file": "assets/mithril-bootstrap.cast"
 , "mkap_theme": "none"
 , "cols": 100
 }
 ```
-
 This will:
 
 1. Download the latest Mithril snapshot for preprod
 2. Verify the Ed25519 signature on the ancillary manifest
 3. Extract and import the UTxO set into the CSMT database
 4. Start chain sync from the snapshot slot
+
 
 ## Configuration Options
 
@@ -86,14 +82,6 @@ This will:
 | `--genesis-verification-key` | Genesis key for mithril-client CLI |
 | `--aggregator-endpoint` | Mithril aggregator URL |
 | `--mithril-skip-ancillary-verification` | Skip Ed25519 verification (not recommended) |
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `AGGREGATOR_ENDPOINT` | Mithril aggregator URL |
-| `GENESIS_VERIFICATION_KEY` | Genesis verification key (JSON-hex) |
-| `ANCILLARY_VERIFICATION_KEY` | Ed25519 ancillary verification key (JSON-hex) |
 
 ## Verifying the Service
 

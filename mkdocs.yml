@@ -41,4 +41,3 @@ nav:
   - Architecture: architecture.md
   - API Reference:
       - Swagger UI: swagger-ui.md
-  - Presentation: presentation/slides.md

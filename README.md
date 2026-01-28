@@ -13,32 +13,6 @@ An HTTP service that maintains a Compact Sparse Merkle Tree (CSMT) over Cardano'
 - **Rollback Handling**: Graceful chain reorganization support
 - **REST API**: Simple HTTP interface with Swagger documentation
 
-## Quick Start
-
-```bash
-# Using nix with Mithril bootstrap (preview network)
-nix run github:paolino/cardano-utxo-csmt#cardano-utxo-chainsync -- \
-  --network preview \
-  --mithril-bootstrap \
-  --csmt-db-path /tmp/csmt-db
-```
-
-## Installation
-
-### Docker
-
-```bash
-gh run download -n cardano-utxo-csmt-image
-docker load < output-docker-image
-```
-
-### Nix
-
-```bash
-nix shell nixpkgs#cachix -c cachix use paolino
-nix run github:paolino/cardano-utxo-csmt
-```
-
 ## Documentation
 
 Full documentation available at **[paolino.github.io/cardano-utxo-csmt](https://paolino.github.io/cardano-utxo-csmt/)**
