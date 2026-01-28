@@ -13,9 +13,11 @@ module Main (main) where
 
 import Cardano.UTxOCSMT.Mithril.Client
     ( MithrilNetwork (..)
+    , MithrilTrace
     , defaultMithrilConfig
     , downloadSnapshotHttp
     , fetchLatestSnapshot
+    , renderMithrilTrace
     )
 import Cardano.UTxOCSMT.Mithril.Extraction
     ( ExtractionTrace (..)
@@ -78,6 +80,9 @@ optionsParser =
 tracer :: Tracer IO ExtractionTrace
 tracer = contramap renderExtractionTrace stdoutTracer
 
+mithrilTracer :: Tracer IO MithrilTrace
+mithrilTracer = contramap renderMithrilTrace stdoutTracer
+
 main :: IO ()
 main = do
     Options{optNetwork, optTmpDir} <-
@@ -101,7 +106,7 @@ main = do
             hFlush stdout
 
             -- Download snapshot
-            downloadResult <- downloadSnapshotHttp config snapshot
+            downloadResult <- downloadSnapshotHttp mithrilTracer config snapshot
             case downloadResult of
                 Left err -> fail $ "Failed to download: " ++ show err
                 Right dbPath -> do
