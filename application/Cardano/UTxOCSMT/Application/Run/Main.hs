@@ -291,6 +291,23 @@ main = withUtf8 $ do
                     prisms
                     context
 
+            let getReadyResponse =
+                    mkReadyResponse (syncThreshold options)
+                        <$> readTVarIO metricsVar
+
+            -- Start API server early so /metrics is available during bootstrap
+            startHTTPService
+                (trace . HTTPServiceError)
+                (trace ServeApi)
+                apiPort
+                $ \port ->
+                    runAPIServer
+                        port
+                        (readTVarIO metricsVar)
+                        (queryMerkleRoots runner)
+                        (queryInclusionProof runner)
+                        getReadyResponse
+
             -- Do Mithril bootstrap before creating Update state
             SetupResult{setupStartingPoint, setupMithrilSlot} <-
                 setupDB tracer startingPoint mithrilOptions runner
@@ -303,22 +320,6 @@ main = withUtf8 $ do
                     slotHash
                     armageddonParams
                     runner
-
-            let getReadyResponse =
-                    mkReadyResponse (syncThreshold options)
-                        <$> readTVarIO metricsVar
-
-            startHTTPService
-                (trace . HTTPServiceError)
-                (trace ServeApi)
-                apiPort
-                $ \port ->
-                    runAPIServer
-                        port
-                        (readTVarIO metricsVar)
-                        (queryMerkleRoots runner)
-                        (queryInclusionProof runner)
-                        getReadyResponse
 
             -- Check if we should exit after bootstrap
             when (Mithril.mithrilBootstrapOnly mithrilOptions) $ do
@@ -368,7 +369,13 @@ stealMetricsEvent (Update (UpdateForwardTip _ _ _ (Just merkleRoot))) =
 stealMetricsEvent (NotEmpty point) =
     Just $ BaseCheckpointEvent point
 stealMetricsEvent (Mithril ImportStarting) =
+    Just $ BootstrapPhaseEvent Downloading
+stealMetricsEvent (Mithril (ImportExtractingUTxO _)) =
     Just $ BootstrapPhaseEvent Extracting
+stealMetricsEvent (Mithril (ImportExtraction ExtractionCounting)) =
+    Just $ BootstrapPhaseEvent Counting
+stealMetricsEvent (Mithril (ImportExtraction (ExtractionDecodedState total))) =
+    Just $ ExtractionTotalEvent total
 stealMetricsEvent (Mithril (ImportExtraction (ExtractionProgress count))) =
     Just $ ExtractionProgressEvent count
 stealMetricsEvent _ = Nothing
