@@ -34,12 +34,12 @@ let
       cardano-cli."cardano-cli:exe:cardano-cli"
     ];
     shellHook = ''
-      echo "Entering shell for cardano-utxo-csmt CLI development"
+      echo "Entering shell for cardano-utxo CLI development"
     '';
   };
 
   mkProject = ctx@{ lib, pkgs, ... }: {
-    name = "cardano-utxo-csmt";
+    name = "cardano-utxo";
     src = ./..;
     compiler-nix-name = "ghc984";
     shell = shell { inherit pkgs; };
@@ -58,5 +58,5 @@ in {
   packages.cardano-utxo =
     project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo;
   packages.cardano-utxo-swagger =
-    project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-csmt-swagger;
+    project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-swagger;
 }
