@@ -21,10 +21,11 @@
       url = "github:intersectmbo/cardano-haskell-packages?ref=repo";
       flake = false;
     };
+    mithril.url = "github:input-output-hk/mithril/2603.1-pre";
   };
 
   outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, mkdocs, asciinema
-    , cardano-cli, iohkNix, CHaP, ... }:
+    , cardano-cli, iohkNix, CHaP, mithril, ... }:
     let
       version = self.dirtyShortRev or self.shortRev;
       parts = flake-parts.lib.mkFlake { inherit inputs; } {
@@ -47,6 +48,7 @@
               cardano-cli = cardano-cli.packages.${system};
               mkdocs = mkdocs.packages.${system};
               asciinema = asciinema.packages.${system};
+              mithril-client = mithril.packages.${system}.mithril-client-cli;
             };
 
             docker-image = pkgs.callPackage ./nix/docker-image.nix {

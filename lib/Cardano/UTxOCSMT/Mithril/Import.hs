@@ -30,6 +30,7 @@ import Cardano.UTxOCSMT.Mithril.Client
     , MithrilError
     , MithrilTrace (..)
     , SnapshotMetadata (..)
+    , downloadSnapshot
     , downloadSnapshotHttp
     , fetchLatestSnapshot
     , renderMithrilError
@@ -42,6 +43,7 @@ import Cardano.UTxOCSMT.Mithril.Extraction
     , renderExtractionError
     , renderExtractionTrace
     )
+import Cardano.UTxOCSMT.Mithril.Options (MithrilVerifyMode (..))
 import Cardano.UTxOCSMT.Mithril.Streaming
     ( StreamTrace
     , defaultStreamConfig
@@ -128,7 +130,10 @@ renderImportTrace (ImportExtractionError err) =
 This function orchestrates the full Mithril bootstrap process:
 
 1. Fetches the latest snapshot metadata from the aggregator
-2. Downloads and verifies the snapshot using mithril-client
+2. Downloads and verifies the snapshot based on verify mode:
+   - 'VerifyStm': Full STM verification via mithril-client CLI
+   - 'VerifyEd25519': Ed25519 signature verification of ancillary
+   - 'VerifyNone': Direct HTTP download without verification
 3. Extracts the UTxO set from the downloaded ledger state
 4. Streams UTxOs into the CSMT database
 5. Returns the checkpoint for chain sync to continue from
@@ -136,6 +141,8 @@ This function orchestrates the full Mithril bootstrap process:
 importFromMithril
     :: Tracer IO ImportTrace
     -- ^ Tracer for progress logging
+    -> MithrilVerifyMode
+    -- ^ Verification mode (stm, ed25519, none)
     -> MithrilConfig
     -- ^ Mithril client configuration
     -> RunCSMTTransaction
@@ -148,7 +155,7 @@ importFromMithril
         IO
     -- ^ CSMT transaction runner for database operations
     -> IO ImportResult
-importFromMithril tracer config runner = do
+importFromMithril tracer verifyMode config runner = do
     traceWith tracer ImportStarting
 
     -- Step 1: Fetch latest snapshot metadata
@@ -170,16 +177,31 @@ importFromMithril tracer config runner = do
                 $ ImportMithril
                 $ MithrilSnapshotFound digest slot epoch
 
-            -- Step 2: Download and verify snapshot
+            -- Step 2: Download and verify snapshot based on mode
             traceWith tracer
                 $ ImportMithril
                 $ MithrilDownloading digest (mithrilDownloadDir config)
 
-            downloadResult <-
-                downloadSnapshotHttp
-                    (contramap ImportMithril tracer)
-                    config
-                    snapshot
+            downloadResult <- case verifyMode of
+                VerifyStm -> do
+                    -- Full STM verification via mithril-client CLI
+                    traceWith tracer
+                        $ ImportMithril
+                        $ MithrilVerifying digest
+                    downloadSnapshot config snapshot
+                VerifyEd25519 ->
+                    -- Ed25519 verification of ancillary manifest
+                    downloadSnapshotHttp
+                        (contramap ImportMithril tracer)
+                        config
+                        snapshot
+                VerifyNone ->
+                    -- No verification - direct HTTP download
+                    -- (config should have mithrilAncillaryVk = Nothing)
+                    downloadSnapshotHttp
+                        (contramap ImportMithril tracer)
+                        config{mithrilAncillaryVk = Nothing}
+                        snapshot
 
             case downloadResult of
                 Left err -> do

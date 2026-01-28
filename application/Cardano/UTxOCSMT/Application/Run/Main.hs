@@ -460,14 +460,12 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
                     manager
                     (Mithril.mithrilNetwork mithrilOpts)
                     downloadDir
-            -- Determine ancillary verification key
-            ancillaryVk
-                | Mithril.mithrilSkipAncillaryVerification mithrilOpts =
-                    Nothing
-                | Just keyHex <- Mithril.mithrilAncillaryVk mithrilOpts =
-                    either (const Nothing) Just (parseVerificationKey keyHex)
-                | otherwise =
-                    Nothing
+            -- Determine ancillary verification key (for Ed25519 mode)
+            ancillaryVk = case Mithril.mithrilVerifyMode mithrilOpts of
+                Mithril.VerifyEd25519
+                    | Just keyHex <- Mithril.mithrilAncillaryVk mithrilOpts ->
+                        either (const Nothing) Just (parseVerificationKey keyHex)
+                _ -> Nothing
             mithrilConfig =
                 baseConfig
                     { MithrilClient.mithrilAggregatorUrl =
@@ -484,6 +482,7 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
         result <-
             importFromMithril
                 (contramap Mithril (contra id))
+                (Mithril.mithrilVerifyMode mithrilOpts)
                 mithrilConfig
                 runner
 

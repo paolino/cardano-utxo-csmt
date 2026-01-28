@@ -1,4 +1,4 @@
-{ CHaP, indexState, pkgs, mkdocs, asciinema, cardano-cli, ... }:
+{ CHaP, indexState, pkgs, mkdocs, asciinema, cardano-cli, mithril-client, ... }:
 
 let
   indexTool = { index-state = indexState; };
@@ -49,8 +49,19 @@ let
 
   project = pkgs.haskell-nix.cabalProject' mkProject;
 
+  # Minimal E2E shell for testing with mithril-client
+  e2eShell = project.shellFor {
+    tools = { cabal = indexTool; };
+    buildInputs = [ mithril-client pkgs.just ];
+    withHoogle = pkgs.lib.mkForce false;
+    shellHook = pkgs.lib.mkForce ''
+      echo "E2E shell: mithril-client $(mithril-client --version)"
+    '';
+  };
+
 in {
   devShells.default = project.shell;
+  devShells.e2e = e2eShell;
   inherit project;
   packages.cardano-utxo-csmt =
     project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-csmt;

@@ -9,10 +9,11 @@ bootstrapping of the UTxO CSMT database. Options include:
 * Network selection (mainnet, preprod, preview)
 * Custom aggregator URL override
 * Path to mithril-client binary
-* Ancillary verification key override
+* Verification mode (stm, ed25519, none)
 -}
 module Cardano.UTxOCSMT.Mithril.Options
     ( MithrilOptions (..)
+    , MithrilVerifyMode (..)
     , mithrilOptionsParser
     , mithrilOptionsParser'
     , mithrilEnabledSwitch
@@ -39,6 +40,28 @@ import OptEnvConf
     , value
     )
 
+{- | Verification mode for Mithril snapshot downloads
+
+* 'VerifyStm' - Full STM certificate verification via mithril-client CLI
+* 'VerifyEd25519' - Ed25519 signature verification of ancillary manifest
+* 'VerifyNone' - No verification (not recommended for production)
+-}
+data MithrilVerifyMode
+    = -- | Full STM certificate chain verification via mithril-client
+      VerifyStm
+    | -- | Ed25519 signature verification of ancillary files
+      VerifyEd25519
+    | -- | No verification (testing only)
+      VerifyNone
+    deriving stock (Show, Eq, Ord)
+
+-- | Parse verification mode from string
+readVerifyMode :: String -> Maybe MithrilVerifyMode
+readVerifyMode "stm" = Just VerifyStm
+readVerifyMode "ed25519" = Just VerifyEd25519
+readVerifyMode "none" = Just VerifyNone
+readVerifyMode _ = Nothing
+
 -- | Complete Mithril bootstrap options
 data MithrilOptions = MithrilOptions
     { mithrilEnabled :: Bool
@@ -57,8 +80,8 @@ data MithrilOptions = MithrilOptions
     -- ^ Directory for snapshot downloads (uses temp dir if Nothing)
     , mithrilAncillaryVk :: Maybe Text
     -- ^ Ancillary verification key (from env or CLI)
-    , mithrilSkipAncillaryVerification :: Bool
-    -- ^ Skip Ed25519 ancillary verification (not recommended)
+    , mithrilVerifyMode :: MithrilVerifyMode
+    -- ^ Verification mode: stm, ed25519, or none
     }
     deriving stock (Show, Eq)
 
@@ -189,18 +212,20 @@ mithrilAncillaryVkOption =
             , option
             ]
 
--- | Switch to skip ancillary verification
-mithrilSkipAncillaryVerificationSwitch :: Parser Bool
-mithrilSkipAncillaryVerificationSwitch =
+-- | Option to select verification mode
+mithrilVerifyModeOption :: Parser MithrilVerifyMode
+mithrilVerifyModeOption =
     setting
-        [ long "mithril-skip-ancillary-verification"
+        [ long "mithril-verify-mode"
         , help
-            "Skip Ed25519 verification of ancillary manifest. \
-            \NOT RECOMMENDED: disables cryptographic verification of \
-            \downloaded ledger state files."
-        , reader auto
-        , value False
-        , switch True
+            "Verification mode for Mithril downloads. \
+            \Options: stm (full STM verification via mithril-client), \
+            \ed25519 (Ed25519 signature verification, default), \
+            \none (no verification, testing only)."
+        , metavar "MODE"
+        , reader $ maybeReader readVerifyMode
+        , value VerifyEd25519
+        , option
         ]
 
 -- | Combined parser for all Mithril options
@@ -215,7 +240,7 @@ mithrilOptionsParser =
         <*> mithrilClientPathOption
         <*> mithrilDownloadDirOption
         <*> mithrilAncillaryVkOption
-        <*> mithrilSkipAncillaryVerificationSwitch
+        <*> mithrilVerifyModeOption
 
 {- | Parser for Mithril options without network selection.
 
@@ -232,4 +257,4 @@ mithrilOptionsParser' =
         <*> mithrilClientPathOption
         <*> mithrilDownloadDirOption
         <*> mithrilAncillaryVkOption
-        <*> mithrilSkipAncillaryVerificationSwitch
+        <*> mithrilVerifyModeOption
