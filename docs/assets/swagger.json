@@ -1,5 +1,56 @@
 {
     "definitions": {
+        "BootstrapPhase": {
+            "description": "Current bootstrap phase: extracting, syncing_headers, or synced",
+            "enum": [
+                "extracting",
+                "syncing_headers",
+                "synced"
+            ],
+            "type": "string"
+        },
+        "ExtractionProgress": {
+            "description": "Progress of UTxO extraction from Mithril snapshot",
+            "properties": {
+                "current": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "rate": {
+                    "format": "double",
+                    "type": "number"
+                }
+            },
+            "required": [
+                "current",
+                "rate"
+            ],
+            "type": "object"
+        },
+        "HeaderSyncProgress": {
+            "description": "Progress of header synchronization after Mithril import",
+            "properties": {
+                "currentSlot": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "targetSlot": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "currentSlot",
+                "targetSlot"
+            ],
+            "type": "object"
+        },
         "InclusionProofResponse": {
             "description": "Current inclusion proof and output for the given transaction input.",
             "properties": {
@@ -65,6 +116,9 @@
                     "format": "double",
                     "type": "number"
                 },
+                "bootstrapPhase": {
+                    "$ref": "#/definitions/BootstrapPhase"
+                },
                 "chainTipSlot": {
                     "format": "int64",
                     "maximum": 1.8446744073709551615e19,
@@ -76,6 +130,12 @@
                 },
                 "currentMerkleRoot": {
                     "type": "string"
+                },
+                "extractionProgress": {
+                    "$ref": "#/definitions/ExtractionProgress"
+                },
+                "headerSyncProgress": {
+                    "$ref": "#/definitions/HeaderSyncProgress"
                 },
                 "lastBlockPoint": {
                     "type": "string"
@@ -105,7 +165,10 @@
                 "currentEra",
                 "currentMerkleRoot",
                 "baseCheckpoint",
-                "chainTipSlot"
+                "chainTipSlot",
+                "bootstrapPhase",
+                "extractionProgress",
+                "headerSyncProgress"
             ],
             "type": "object"
         },

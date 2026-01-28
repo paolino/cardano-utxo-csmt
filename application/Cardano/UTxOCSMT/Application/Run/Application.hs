@@ -21,7 +21,8 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     , Update (..)
     )
 import Cardano.UTxOCSMT.Application.Metrics
-    ( MetricsEvent (..)
+    ( BootstrapPhase (..)
+    , MetricsEvent (..)
     )
 import Cardano.UTxOCSMT.Application.UTxOs (Change (..), uTxOs)
 import Cardano.UTxOCSMT.Ouroboros.Connection (runNodeApplication)
@@ -241,9 +242,20 @@ application
 
             let counting = metricTrace UTxOChangeEvent
 
+                -- Tracer that emits to both app trace and metrics
+                metricsSkipTracer = Tracer
+                    $ \HeaderSkipProgress{skipCurrentSlot, skipTargetSlot} ->
+                        metricTrace
+                            $ HeaderSyncProgressEvent
+                                skipCurrentSlot
+                                skipTargetSlot
+                appSkipTracer = contramap ApplicationHeaderSkipProgress tracer
+
             skipProgressTracer <-
-                throttleBySlot 1000
-                    $ contramap ApplicationHeaderSkipProgress tracer
+                throttleBySlot 1000 (appSkipTracer <> metricsSkipTracer)
+
+            let onSkipComplete =
+                    metricTrace $ BootstrapPhaseEvent Synced
 
             (blockFetchApplication, headerIntersector) <-
                 mkBlockFetchApplication
@@ -251,6 +263,7 @@ application
                     (metricContra BlockFetchEvent)
                     skipProgressTracer
                     setCheckpoint
+                    onSkipComplete
                     mSkipTargetSlot
                     $ intersector tracer counting mFinality
                     $ Syncing initialDBUpdate
