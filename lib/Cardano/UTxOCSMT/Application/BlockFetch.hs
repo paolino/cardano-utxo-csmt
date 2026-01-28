@@ -101,6 +101,8 @@ mkBlockFetchApplication
     -- ^ tracer for header skip progress during Mithril catch-up
     -> (Point -> IO ())
     -- ^ Action to set the base checkpoint
+    -> IO ()
+    -- ^ Action to call when skip phase completes
     -> Maybe SlotNo
     -- ^ Optional skip until slot for Mithril bootstrap
     -> Intersector Fetched
@@ -111,6 +113,7 @@ mkBlockFetchApplication
     tr
     skipProgressTracer
     setCheckpoint
+    onSkipComplete
     mSkipTargetSlot
     blockIntersector = do
         queue <- newQueue maxQueueLen
@@ -124,6 +127,7 @@ mkBlockFetchApplication
                 queue
                 skipProgressTracer
                 setCheckpoint
+                onSkipComplete
                 mSkipTargetSlot
                 skipActiveVar
                 blockIntersector
@@ -136,6 +140,8 @@ headerFollower
     -- ^ Tracer for skip progress
     -> (Point -> IO ())
     -- ^ Action to set the base checkpoint
+    -> IO ()
+    -- ^ Action to call when skip phase completes
     -> Maybe SlotNo
     -- ^ Target slot to skip until (Nothing = no skip)
     -> StrictTVar IO Bool
@@ -146,6 +152,7 @@ headerFollower
     queue@Queue{pushQueue, waitEmptyQueue}
     skipProgressTracer
     setCheckpoint
+    onSkipComplete
     mSkipTargetSlot
     skipActiveVar = fix $ \go ->
         Follower
@@ -161,6 +168,7 @@ headerFollower
                             -- Reached target slot: save checkpoint, disable skip
                             atomically $ writeTVar skipActiveVar False
                             setCheckpoint point
+                            onSkipComplete
                             -- Now start normal operation
                             pushQueue point
                         | otherwise ->
@@ -194,6 +202,7 @@ headerFollower
                                 queue
                                 skipProgressTracer
                                 setCheckpoint
+                                onSkipComplete
                                 mSkipTargetSlot
                                 skipActiveVar
                                 blockIntersector
@@ -205,6 +214,7 @@ headerFollower
                                 queue
                                 skipProgressTracer
                                 setCheckpoint
+                                onSkipComplete
                                 mSkipTargetSlot
                                 skipActiveVar
                                 blockIntersector
@@ -217,6 +227,8 @@ mkHeaderIntersector
     -- ^ Tracer for skip progress
     -> (Point -> IO ())
     -- ^ Action to set the base checkpoint
+    -> IO ()
+    -- ^ Action to call when skip phase completes
     -> Maybe SlotNo
     -- ^ Target slot to skip until (Nothing = no skip)
     -> StrictTVar IO Bool
@@ -227,6 +239,7 @@ mkHeaderIntersector
     q
     skipProgressTracer
     setCheckpoint
+    onSkipComplete
     mSkipTargetSlot
     skipActiveVar =
         fix $ \go blockIntersector ->
@@ -240,6 +253,7 @@ mkHeaderIntersector
                             q
                             skipProgressTracer
                             setCheckpoint
+                            onSkipComplete
                             mSkipTargetSlot
                             skipActiveVar
                 , intersectNotFound = do

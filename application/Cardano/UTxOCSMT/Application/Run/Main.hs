@@ -47,8 +47,9 @@ import Cardano.UTxOCSMT.Application.Database.RocksDB
     , newRunRocksDBCSMTTransaction
     )
 import Cardano.UTxOCSMT.Application.Metrics
-    ( Metrics (..)
-    , MetricsEvent (BaseCheckpointEvent, MerkleRootEvent)
+    ( BootstrapPhase (..)
+    , Metrics (..)
+    , MetricsEvent (..)
     , MetricsParams (..)
     , metricsTracer
     )
@@ -84,6 +85,7 @@ import Cardano.UTxOCSMT.Mithril.AncillaryVerifier
     )
 import Cardano.UTxOCSMT.Mithril.Client (defaultMithrilConfig)
 import Cardano.UTxOCSMT.Mithril.Client qualified as MithrilClient
+import Cardano.UTxOCSMT.Mithril.Extraction (ExtractionTrace (..))
 import Cardano.UTxOCSMT.Mithril.Import
     ( ImportResult (..)
     , ImportTrace (..)
@@ -108,6 +110,7 @@ import Control.Monad (when, (<=<))
 import Control.Tracer
     ( Contravariant (..)
     , Tracer (..)
+    , traceWith
     )
 import Data.ByteArray ()
 import Data.ByteArray.Encoding
@@ -331,7 +334,13 @@ main = withUtf8 $ do
             -- Log before starting the application
             trace ApplicationStarting
 
-            -- Emit the base checkpoint to metrics
+            -- Emit bootstrap phase based on whether we need to sync headers
+            case mSkipTargetSlot of
+                Just _ ->
+                    traceWith metricsEvent $ BootstrapPhaseEvent SyncingHeaders
+                Nothing ->
+                    traceWith metricsEvent $ BootstrapPhaseEvent Synced
+
             result <-
                 application
                     (networkMagic options)
@@ -358,6 +367,10 @@ stealMetricsEvent (Update (UpdateForwardTip _ _ _ (Just merkleRoot))) =
     Just $ MerkleRootEvent merkleRoot
 stealMetricsEvent (NotEmpty point) =
     Just $ BaseCheckpointEvent point
+stealMetricsEvent (Mithril ImportStarting) =
+    Just $ BootstrapPhaseEvent Extracting
+stealMetricsEvent (Mithril (ImportExtraction (ExtractionProgress count))) =
+    Just $ ExtractionProgressEvent count
 stealMetricsEvent _ = Nothing
 
 -- | Create a ReadyResponse based on metrics and sync threshold
