@@ -46,6 +46,7 @@ CI:
     just unit
     cabal-fmt -c cardano-utxo-csmt.cabal
     find . -type f -name '*.hs' -not -path '*/dist-newstyle/*' -exec fourmolu -m check {} +
+    nixfmt -c ./*.nix nix/*.nix
     find . -type f -name '*.hs' -not -path '*/dist-newstyle/*' -exec hlint {} +
     just update-swagger
     git diff --exit-code docs/assets/swagger.json
