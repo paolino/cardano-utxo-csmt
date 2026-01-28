@@ -21,6 +21,10 @@ Full documentation available at **[paolino.github.io/cardano-utxo-csmt](https://
 - [Architecture](https://paolino.github.io/cardano-utxo-csmt/architecture/)
 - [API Reference](https://paolino.github.io/cardano-utxo-csmt/swagger-ui/)
 
+## Roadmap
+
+See [Milestones](https://github.com/paolino/cardano-utxo-csmt/milestones) for planned releases and progress.
+
 ## License
 
 Apache-2.0
