@@ -143,7 +143,6 @@ library library
     Cardano.UTxOCSMT.Application.Options
     Cardano.UTxOCSMT.Application.SampleList
     Cardano.UTxOCSMT.Application.UTxOs
-    Cardano.UTxOCSMT.Bootstrap.App
     Cardano.UTxOCSMT.Mithril.AncillaryVerifier
     Cardano.UTxOCSMT.Mithril.Client
     Cardano.UTxOCSMT.Mithril.Extraction
@@ -233,17 +232,7 @@ executable cardano-utxo-csmt-swagger
 
   default-language: Haskell2010
 
-executable cardano-utxo-csmt
-  import:           warnings
-  ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
-  main-is:          executables/cli/main.hs
-  build-depends:
-    , base
-    , cardano-utxo-csmt:library
-
-  default-language: Haskell2010
-
-executable cardano-utxo-chainsync
+executable cardano-utxo
   import:           warnings
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N -O2
   main-is:          executables/chainsync/main.hs

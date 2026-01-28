@@ -16,15 +16,15 @@ echo "Verification key loaded (${#ANCILLARY_VERIFICATION_KEY} chars)"
 sleep 2
 
 echo ""
-echo "# Step 2: Run cardano-utxo-chainsync with Mithril bootstrap"
+echo "# Step 2: Run cardano-utxo with Mithril bootstrap"
 sleep 1
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
-echo '$ cardano-utxo-chainsync --network preview --mithril-bootstrap --mithril-bootstrap-only --csmt-db-path /tmp/db'
+echo '$ cardano-utxo --network preview --mithril-bootstrap --mithril-bootstrap-only --csmt-db-path /tmp/db'
 echo ""
 
 # Run the pre-built binary - timeout after 60 seconds for demo
-timeout 60 result/bin/cardano-utxo-chainsync \
+timeout 60 result/bin/cardano-utxo \
     --network preview \
     --mithril-bootstrap \
     --mithril-bootstrap-only \
