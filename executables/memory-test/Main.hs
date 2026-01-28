@@ -16,6 +16,7 @@ import Cardano.UTxOCSMT.Mithril.Client
     , defaultMithrilConfig
     , downloadSnapshotHttp
     , fetchLatestSnapshot
+    , renderMithrilTrace
     )
 import Cardano.UTxOCSMT.Mithril.Extraction
     ( ExtractionTrace (..)
@@ -101,7 +102,10 @@ main = do
             hFlush stdout
 
             -- Download snapshot
-            downloadResult <- downloadSnapshotHttp config snapshot
+            let mithrilTracer =
+                    contramap renderMithrilTrace stdoutTracer
+            downloadResult <-
+                downloadSnapshotHttp mithrilTracer config snapshot
             case downloadResult of
                 Left err -> fail $ "Failed to download: " ++ show err
                 Right dbPath -> do

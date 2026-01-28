@@ -70,6 +70,7 @@ import Network.HTTP.Client
     )
 import Network.HTTP.Types.Status (statusCode)
 import System.Directory (createDirectoryIfMissing)
+import System.Environment (getEnvironment)
 import System.Exit (ExitCode (..))
 import System.IO (Handle, IOMode (..), withBinaryFile)
 import System.Process.Typed
@@ -308,10 +309,15 @@ parseLatestSnapshot bs = do
         [] -> Nothing
         (s : _) -> Just s
 
--- | Download and verify a snapshot using mithril-client CLI
+{- | Download and verify a snapshot using mithril-client CLI
+
+Uses v2 backend with minimal range (--start N --end N) to download only
+the last immutable file plus ancillary files. This reduces download size
+from ~14GB to ~500MB-1GB while maintaining full STM verification.
+-}
 downloadSnapshot
     :: MithrilConfig
-    -> SnapshotDigest
+    -> SnapshotMetadata
     -> IO (Either MithrilError FilePath)
 downloadSnapshot
     MithrilConfig
@@ -319,26 +325,49 @@ downloadSnapshot
         , mithrilAggregatorUrl
         , mithrilDownloadDir
         , mithrilGenesisVk
+        , mithrilNetwork
         }
-    (SnapshotDigest digest) =
+    SnapshotMetadata{snapshotDigest, snapshotBeaconSlot} =
         case mithrilGenesisVk of
             Nothing -> pure $ Left MithrilMissingGenesisVk
             Just genesisVk -> do
-                -- Run mithril-client cardano-db download
-                -- Include ancillary files (ledger state) for UTxO extraction
-                let args =
+                -- Run mithril-client cardano-db download with v2 backend
+                -- Use --start and --end to download only the last immutable
+                -- file plus ancillary files (ledger state) for UTxO extraction
+                -- This reduces download from ~14GB to ~500MB-1GB
+                currentEnv <- getEnvironment
+                let immutableNum = show snapshotBeaconSlot
+                    args =
                         [ "cardano-db"
                         , "download"
+                        , "--backend"
+                        , "v2"
+                        , "--start"
+                        , immutableNum
+                        , "--end"
+                        , immutableNum
                         , "--include-ancillary"
-                        , T.unpack digest
+                        , "--download-dir"
+                        , mithrilDownloadDir
+                        , T.unpack (unSnapshotDigest snapshotDigest)
                         ]
-                    envVars =
+                    -- Merge custom env vars with current environment
+                    customEnvVars =
                         [ ("AGGREGATOR_ENDPOINT", mithrilAggregatorUrl)
                         , ("GENESIS_VERIFICATION_KEY", genesisVk)
+                        ,
+                            ( "ANCILLARY_VERIFICATION_KEY"
+                            , ancillaryVkForNetwork mithrilNetwork
+                            )
                         ]
+                    mergedEnv =
+                        customEnvVars
+                            ++ filter
+                                ((`notElem` map fst customEnvVars) . fst)
+                                currentEnv
                 (exitCode, stdout, stderr) <-
                     readProcess
-                        $ setEnv envVars
+                        $ setEnv mergedEnv
                         $ setWorkingDir mithrilDownloadDir
                         $ proc mithrilClientPath args
                 case exitCode of
@@ -461,3 +490,25 @@ downloadSnapshotHttp
                     Right () -> do
                         traceWith tracer MithrilAncillaryVerified
                         pure $ Right path
+
+{- | Get ancillary verification key for network (JSON-hex format)
+
+These are the official Mithril ancillary verification keys for signing
+volatile and ledger state files. Used by mithril-client for v2 backend.
+-}
+ancillaryVkForNetwork :: MithrilNetwork -> String
+ancillaryVkForNetwork MithrilMainnet =
+    "5b32332c37312c39362c3133332c34372c3235332c3232362c3133362c323335\
+    \2c35372c3136342c3130362c3138362c322c32312c32392c3132302c3136332c\
+    \38392c3132312c3137372c3133382c3230382c3133382c3231342c39392c3538\
+    \2c32322c302c35382c332c36395d"
+ancillaryVkForNetwork MithrilPreprod =
+    "5b3138392c3139322c3231362c3135302c3131342c3231362c3233372c323130\
+    \2c34352c31382c32312c3139362c3230382c3234362c3134362c322c3235322c\
+    \3234332c3235312c3139372c32382c3135372c3230342c3134352c33302c3134\
+    \2c3232382c3136382c3132392c38332c3133362c33365d"
+ancillaryVkForNetwork MithrilPreview =
+    "5b3138392c3139322c3231362c3135302c3131342c3231362c3233372c323130\
+    \2c34352c31382c32312c3139362c3230382c3234362c3134362c322c3235322c\
+    \3234332c3235312c3139372c32382c3135372c3230342c3134352c33302c3134\
+    \2c3232382c3136382c3132392c38332c3133362c33365d"
