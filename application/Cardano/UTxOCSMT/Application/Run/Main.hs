@@ -142,7 +142,7 @@ import Data.Tracer.TraceWith
     )
 import Data.Word (Word16, Word64)
 import Database.KV.Cursor (firstEntry)
-import Database.KV.Transaction (iterating, query)
+import Database.KV.Transaction (iterating)
 import Database.RocksDB
     ( BatchOp
     , ColumnFamily
@@ -640,12 +640,10 @@ queryInclusionProof
     -> IO (Maybe InclusionProofResponse)
 queryInclusionProof (RunCSMTTransaction runCSMT) txIdText txIx = do
     runCSMT $ do
-        proofBytes <- generateInclusionProof fromKVLazy CSMTCol txIn
-        txOut <- query KVCol txIn
+        result <- generateInclusionProof fromKVLazy KVCol CSMTCol txIn
         merkle <- queryMerkleRoot
         pure $ do
-            proof' <- proofBytes
-            out <- txOut
+            (out, proof') <- result
             let merkleText = fmap (Text.decodeUtf8 . convertToBase Base16 . renderHash) merkle
             pure
                 InclusionProofResponse

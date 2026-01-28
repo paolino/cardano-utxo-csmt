@@ -65,7 +65,6 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word16)
-import Database.KV.Transaction (query)
 import Database.RocksDB
     ( BatchOp
     , ColumnFamily
@@ -184,13 +183,15 @@ queryTestInclusionProof
     -> IO (Maybe InclusionProofResponse)
 queryTestInclusionProof (RunCSMTTransaction runCSMT) actualKey txIdText txIx =
     runCSMT $ do
-        proofBytes <-
-            generateInclusionProof (fromKV testCSMTContext) CSMTCol actualKey
-        txOut <- query KVCol actualKey
+        result <-
+            generateInclusionProof
+                (fromKV testCSMTContext)
+                KVCol
+                CSMTCol
+                actualKey
         merkle <- queryMerkleRoot
         pure $ do
-            proof' <- proofBytes
-            out <- txOut
+            (out, proof') <- result
             let merkleText = fmap (encodeBase16Text . renderHash) merkle
             pure
                 InclusionProofResponse

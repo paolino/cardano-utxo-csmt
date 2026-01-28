@@ -103,7 +103,7 @@ main = do
                 putStrLn "Found snapshot, downloading..."
 
                 -- Download snapshot
-                downloadResult <- downloadSnapshotHttp config snapshot
+                downloadResult <- downloadSnapshotHttp nullTracer config snapshot
                 case downloadResult of
                     Left err -> fail $ "Failed to download: " ++ show err
                     Right dbPath -> do
