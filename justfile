@@ -19,16 +19,16 @@ hlint:
 
 bench:
     #!/usr/bin/env bash
-    cabal bench
+    cabal bench -O0
 unit match="" *args='' :
     #!/usr/bin/env bash
     # shellcheck disable=SC2050
     if [[ '{{ match }}' == "" ]]; then
-      cabal test unit-tests \
+      cabal test unit-tests -O0 \
           --test-show-details=direct \
           --test-options="{{args}}"
     else
-      cabal test unit-tests \
+      cabal test unit-tests -O0 \
           --test-show-details=direct \
           --test-option=--match \
           --test-option="{{ match }}" \
@@ -37,7 +37,7 @@ unit match="" *args='' :
 
 build:
     #!/usr/bin/env bash
-    cabal build all --enable-tests --enable-benchmarks
+    cabal build all --enable-tests --enable-benchmarks -O0
 
 CI:
     #!/usr/bin/env bash
@@ -97,7 +97,7 @@ release version arch:
 integration match="":
     #!/usr/bin/env bash
     set -euo pipefail
-    cabal test cardano-utxo-csmt-integration-test \
+    cabal test cardano-utxo-csmt-integration-test -O0 \
         --test-show-details=direct \
         --test-option=--match \
         --test-option="{{ match }}"
@@ -105,21 +105,8 @@ integration match="":
 integration-all:
     #!/usr/bin/env bash
     set -euo pipefail
-    cabal test cardano-utxo-csmt-integration-test \
+    cabal test cardano-utxo-csmt-integration-test -O0 \
         --test-show-details=direct
-
-# Utility to dump UTxO from a preprod cardano node socket and load it into the CSMT UTxO database
-dump-and-load-utxo socket-path address:
-    #!/usr/bin/env bash
-    nix develop -c cardano-cli query utxo \
-        --socket-path "{{ socket-path }}" \
-        --testnet-magic 1 \
-        --address "{{ address }}" \
-        --output-cbor-bin > test/assets/utxo.bin
-    nix shell -c cardano-utxo-csmt \
-        -i test/assets/utxo.bin \
-        -c test/assets/db \
-        -n 5000 # depending on the address this is an arbitrary number
 
 update-swagger:
     #!/usr/bin/env bash
@@ -137,7 +124,7 @@ mithril-extraction-memory-test network="preprod":
     echo "Tmp dir: $tmp_dir (cleaned up on exit)"
     echo "This will download a Mithril snapshot (~2-3GB for preprod)"
     echo ""
-    cabal run memory-test -- \
+    cabal run memory-test -O0 -- \
         --network "{{ network }}" \
         --tmp-dir "$tmp_dir"
 
@@ -145,7 +132,7 @@ mithril-extraction-memory-test network="preprod":
 mithril-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
-    cabal test unit-tests \
+    cabal test unit-tests -O0 \
         --test-show-details=direct \
         --test-option=--match \
         --test-option="Mithril"
