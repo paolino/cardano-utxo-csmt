@@ -135,7 +135,11 @@ traceMetricsWithTime (Tracer tr) = Tracer $ \me -> do
 
 -- | Bootstrap phase during startup
 data BootstrapPhase
-    = -- | Extracting UTxOs from Mithril snapshot
+    = -- | Downloading Mithril snapshot
+      Downloading
+    | -- | Counting UTxOs in snapshot
+      Counting
+    | -- | Extracting UTxOs from Mithril snapshot
       Extracting
     | -- | Syncing headers after Mithril import
       SyncingHeaders
@@ -145,6 +149,8 @@ data BootstrapPhase
 
 instance ToJSON BootstrapPhase where
     toJSON = \case
+        Downloading -> "downloading"
+        Counting -> "counting"
         Extracting -> "extracting"
         SyncingHeaders -> "syncing_headers"
         Synced -> "synced"
@@ -155,7 +161,13 @@ instance ToSchema BootstrapPhase where
             $ Swagger.NamedSchema (Just "BootstrapPhase")
             $ mempty
             & Swagger.type_ ?~ Swagger.SwaggerString
-            & Swagger.enum_ ?~ ["extracting", "syncing_headers", "synced"]
+            & Swagger.enum_
+                ?~ [ "downloading"
+                   , "counting"
+                   , "extracting"
+                   , "syncing_headers"
+                   , "synced"
+                   ]
             & description
                 ?~ "Current bootstrap phase: extracting, syncing_headers, \
                    \or synced"
@@ -176,6 +188,8 @@ data MetricsEvent
       ChainTipEvent SlotNo
     | -- | current bootstrap phase
       BootstrapPhaseEvent BootstrapPhase
+    | -- | extraction total (from decoded ledger state)
+      ExtractionTotalEvent Word64
     | -- | extraction progress (UTxOs extracted so far)
       ExtractionProgressEvent Word64
     | -- | header sync progress (current slot, target slot)
@@ -187,21 +201,35 @@ makePrisms ''MetricsEvent
 data ExtractionProgress = ExtractionProgress
     { extractionCurrent :: Word64
     -- ^ Number of UTxOs extracted so far
+    , extractionTotal :: Maybe Word64
+    -- ^ Total number of UTxOs to extract (if known)
+    , extractionPercent :: Maybe Double
+    -- ^ Percentage complete (if total is known)
     , extractionRate :: Double
     -- ^ Extraction rate (UTxOs per second)
     }
     deriving (Show, Eq)
 
 instance ToJSON ExtractionProgress where
-    toJSON ExtractionProgress{extractionCurrent, extractionRate} =
-        object
-            [ "current" .= extractionCurrent
-            , "rate" .= extractionRate
-            ]
+    toJSON
+        ExtractionProgress
+            { extractionCurrent
+            , extractionTotal
+            , extractionPercent
+            , extractionRate
+            } =
+            object
+                [ "current" .= extractionCurrent
+                , "total" .= extractionTotal
+                , "percent" .= extractionPercent
+                , "rate" .= extractionRate
+                ]
 
 instance ToSchema ExtractionProgress where
     declareNamedSchema _ = do
         word64Schema <- declareSchemaRef (Proxy @Word64)
+        maybeWord64Schema <- declareSchemaRef (Proxy @(Maybe Word64))
+        maybeDoubleSchema <- declareSchemaRef (Proxy @(Maybe Double))
         doubleSchema <- declareSchemaRef (Proxy @Double)
         return
             $ Swagger.NamedSchema (Just "ExtractionProgress")
@@ -210,6 +238,8 @@ instance ToSchema ExtractionProgress where
             & properties
                 .~ fromList
                     [ ("current", word64Schema)
+                    , ("total", maybeWord64Schema)
+                    , ("percent", maybeDoubleSchema)
                     , ("rate", doubleSchema)
                     ]
             & required .~ ["current", "rate"]
@@ -324,20 +354,31 @@ bootstrapPhaseFold :: Fold TimedMetrics (Maybe BootstrapPhase)
 bootstrapPhaseFold = handles (timedEventL . _BootstrapPhaseEvent) Fold.last
 
 -- track extraction progress with rate calculation
-extractionProgressFold :: Int -> Fold TimedMetrics (Maybe ExtractionProgress)
+extractionProgressFold
+    :: Int -> Fold TimedMetrics (Maybe ExtractionProgress)
 extractionProgressFold window =
     combine
-        <$> handles (timedEventL . _ExtractionProgressEvent) Fold.last
+        <$> handles (timedEventL . _ExtractionTotalEvent) Fold.last
+        <*> handles (timedEventL . _ExtractionProgressEvent) Fold.last
         <*> speedOfSomeEvent window _ExtractionProgressEvent
   where
-    combine Nothing _ = Nothing
-    combine (Just current) rate =
-        Just ExtractionProgress{extractionCurrent = current, extractionRate = rate}
+    combine _ Nothing _ = Nothing
+    combine mTotal (Just current) rate =
+        Just
+            ExtractionProgress
+                { extractionCurrent = current
+                , extractionTotal = mTotal
+                , extractionPercent = calcPercent current <$> mTotal
+                , extractionRate = rate
+                }
+    calcPercent current total =
+        (fromIntegral current / fromIntegral total) * 100
 
 -- track header sync progress
 headerSyncProgressFold :: Fold TimedMetrics (Maybe HeaderSyncProgress)
 headerSyncProgressFold =
-    handles (timedEventL . _HeaderSyncProgressEvent) $ lmap toProgress Fold.last
+    handles (timedEventL . _HeaderSyncProgressEvent)
+        $ lmap toProgress Fold.last
   where
     toProgress (current, target) =
         HeaderSyncProgress
