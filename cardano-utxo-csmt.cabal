@@ -310,6 +310,7 @@ test-suite unit-tests
     , lens
     , memory
     , mempack
+    , opt-env-conf
     , ouroboros-network-api
     , QuickCheck
     , rocksdb-haskell-jprupp
@@ -327,6 +328,7 @@ test-suite unit-tests
   main-is:            main.hs
   other-modules:
     Cardano.UTxOCSMT.Application.Database.RocksDBSpec
+    Cardano.UTxOCSMT.Application.OptionsSpec
     Cardano.UTxOCSMT.HTTP.ServerSpec
     Cardano.UTxOCSMT.Mithril.AncillaryVerifierSpec
     Cardano.UTxOCSMT.Mithril.ClientSpec

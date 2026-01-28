@@ -1,0 +1,252 @@
+{- |
+Module      : Cardano.UTxOCSMT.Application.OptionsSpec
+Description : Unit tests for CLI options parser
+
+Tests for the OptEnvConf-based CLI options parser, verifying:
+- Default values are correctly applied
+- Option parsing works with various argument combinations
+- Network selection parses correctly and derives Mithril network
+- Ancillary verification options work as expected
+-}
+module Cardano.UTxOCSMT.Application.OptionsSpec
+    ( spec
+    )
+where
+
+import Cardano.UTxOCSMT.Application.Options
+    ( CardanoNetwork (..)
+    , MithrilNetwork (..)
+    , MithrilOptions (..)
+    , Options (..)
+    , optionsParser
+    )
+import Data.List.NonEmpty (NonEmpty)
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+import Data.Text qualified as T
+import OptEnvConf.Args (parseArgs)
+import OptEnvConf.Capability (Capabilities (..))
+import OptEnvConf.EnvMap (EnvMap (..))
+import OptEnvConf.Error (ParseError)
+import OptEnvConf.Run (runParserOn)
+import Test.Hspec
+    ( Spec
+    , describe
+    , it
+    , shouldBe
+    )
+
+spec :: Spec
+spec = describe "Application.Options" $ do
+    describe "default values" $ do
+        it "has network = Mainnet by default" $ do
+            opts <- expectSuccess $ runParser ["-d", "/tmp/db"]
+            network opts `shouldBe` Mainnet
+
+        it "has mithrilEnabled = False by default" $ do
+            opts <- expectSuccess $ runParser ["-d", "/tmp/db"]
+            mithrilEnabled (mithrilOptions opts) `shouldBe` False
+
+        it "has mithrilBootstrapOnly = False by default" $ do
+            opts <- expectSuccess $ runParser ["-d", "/tmp/db"]
+            mithrilBootstrapOnly (mithrilOptions opts) `shouldBe` False
+
+        it "has mithrilClientPath = 'mithril-client' by default" $ do
+            opts <- expectSuccess $ runParser ["-d", "/tmp/db"]
+            mithrilClientPath (mithrilOptions opts) `shouldBe` "mithril-client"
+
+        it "has mithrilSkipAncillaryVerification = False by default" $ do
+            opts <- expectSuccess $ runParser ["-d", "/tmp/db"]
+            mithrilSkipAncillaryVerification (mithrilOptions opts)
+                `shouldBe` False
+
+        it "has syncThreshold = 100 by default" $ do
+            opts <- expectSuccess $ runParser ["-d", "/tmp/db"]
+            syncThreshold opts `shouldBe` 100
+
+    describe "--network option" $ do
+        it "parses mainnet and sets MithrilMainnet" $ do
+            opts <-
+                expectSuccess
+                    $ runParser ["-d", "/tmp/db", "--network", "mainnet"]
+            network opts `shouldBe` Mainnet
+            mithrilNetwork (mithrilOptions opts) `shouldBe` MithrilMainnet
+
+        it "parses preprod and sets MithrilPreprod" $ do
+            opts <-
+                expectSuccess
+                    $ runParser ["-d", "/tmp/db", "--network", "preprod"]
+            network opts `shouldBe` Preprod
+            mithrilNetwork (mithrilOptions opts) `shouldBe` MithrilPreprod
+
+        it "parses preview and sets MithrilPreview" $ do
+            opts <-
+                expectSuccess
+                    $ runParser ["-d", "/tmp/db", "--network", "preview"]
+            network opts `shouldBe` Preview
+            mithrilNetwork (mithrilOptions opts) `shouldBe` MithrilPreview
+
+        it "fails on invalid network" $ do
+            result <- runParser ["-d", "/tmp/db", "--network", "invalid"]
+            isLeft result `shouldBe` True
+
+    describe "--mithril-bootstrap flag" $ do
+        it "enables mithril bootstrap when present" $ do
+            opts <-
+                expectSuccess
+                    $ runParser ["-d", "/tmp/db", "--mithril-bootstrap"]
+            mithrilEnabled (mithrilOptions opts) `shouldBe` True
+
+    describe "--mithril-bootstrap-only flag" $ do
+        it "enables bootstrap-only mode when present" $ do
+            opts <-
+                expectSuccess
+                    $ runParser ["-d", "/tmp/db", "--mithril-bootstrap-only"]
+            mithrilBootstrapOnly (mithrilOptions opts) `shouldBe` True
+
+    describe "--mithril-client-path option" $ do
+        it "accepts custom path" $ do
+            opts <-
+                expectSuccess
+                    $ runParser
+                        ["-d", "/tmp/db", "--mithril-client-path", "/usr/bin/mithril"]
+            mithrilClientPath (mithrilOptions opts)
+                `shouldBe` "/usr/bin/mithril"
+
+    describe "--aggregator-endpoint option" $ do
+        it "accepts aggregator URL" $ do
+            let url = "https://aggregator.example.com"
+            opts <-
+                expectSuccess
+                    $ runParser ["-d", "/tmp/db", "--aggregator-endpoint", url]
+            mithrilAggregatorUrl (mithrilOptions opts) `shouldBe` Just url
+
+    describe "--genesis-verification-key option" $ do
+        it "accepts genesis verification key" $ do
+            let key = "5b313233343536373839305d"
+            opts <-
+                expectSuccess
+                    $ runParser
+                        ["-d", "/tmp/db", "--genesis-verification-key", key]
+            mithrilGenesisVk (mithrilOptions opts) `shouldBe` Just (T.pack key)
+
+    describe "--mithril-download-dir option" $ do
+        it "accepts download directory" $ do
+            opts <-
+                expectSuccess
+                    $ runParser
+                        ["-d", "/tmp/db", "--mithril-download-dir", "/tmp/mithril"]
+            mithrilDownloadDir (mithrilOptions opts)
+                `shouldBe` Just "/tmp/mithril"
+
+    describe "--ancillary-verification-key option" $ do
+        it "accepts ancillary verification key" $ do
+            let key = "5b393837363534333231305d"
+            opts <-
+                expectSuccess
+                    $ runParser
+                        ["-d", "/tmp/db", "--ancillary-verification-key", key]
+            mithrilAncillaryVk (mithrilOptions opts) `shouldBe` Just (T.pack key)
+
+    describe "--mithril-skip-ancillary-verification flag" $ do
+        it "enables skip verification when present" $ do
+            opts <-
+                expectSuccess
+                    $ runParser
+                        ["-d", "/tmp/db", "--mithril-skip-ancillary-verification"]
+            mithrilSkipAncillaryVerification (mithrilOptions opts)
+                `shouldBe` True
+
+    describe "environment variables" $ do
+        it "reads AGGREGATOR_ENDPOINT from environment" $ do
+            let env =
+                    Map.singleton "AGGREGATOR_ENDPOINT" "https://env.example.com"
+            opts <- expectSuccess $ runParserWithEnv ["-d", "/tmp/db"] env
+            mithrilAggregatorUrl (mithrilOptions opts)
+                `shouldBe` Just "https://env.example.com"
+
+        it "reads GENESIS_VERIFICATION_KEY from environment" $ do
+            let env = Map.singleton "GENESIS_VERIFICATION_KEY" "envkey123"
+            opts <- expectSuccess $ runParserWithEnv ["-d", "/tmp/db"] env
+            mithrilGenesisVk (mithrilOptions opts) `shouldBe` Just "envkey123"
+
+        it "reads ANCILLARY_VERIFICATION_KEY from environment" $ do
+            let env = Map.singleton "ANCILLARY_VERIFICATION_KEY" "ancillarykey"
+            opts <- expectSuccess $ runParserWithEnv ["-d", "/tmp/db"] env
+            mithrilAncillaryVk (mithrilOptions opts)
+                `shouldBe` Just "ancillarykey"
+
+        it "CLI option overrides environment variable" $ do
+            let env =
+                    Map.singleton "AGGREGATOR_ENDPOINT" "https://env.example.com"
+            opts <-
+                expectSuccess
+                    $ runParserWithEnv
+                        [ "-d"
+                        , "/tmp/db"
+                        , "--aggregator-endpoint"
+                        , "https://cli.example.com"
+                        ]
+                        env
+            mithrilAggregatorUrl (mithrilOptions opts)
+                `shouldBe` Just "https://cli.example.com"
+
+    describe "combined options" $ do
+        it "parses multiple options together" $ do
+            opts <-
+                expectSuccess
+                    $ runParser
+                        [ "-d"
+                        , "/tmp/db"
+                        , "--network"
+                        , "preprod"
+                        , "--mithril-bootstrap"
+                        , "--mithril-client-path"
+                        , "/custom/path"
+                        , "--aggregator-endpoint"
+                        , "https://example.com"
+                        ]
+            network opts `shouldBe` Preprod
+            mithrilNetwork (mithrilOptions opts) `shouldBe` MithrilPreprod
+            mithrilEnabled (mithrilOptions opts) `shouldBe` True
+            mithrilClientPath (mithrilOptions opts) `shouldBe` "/custom/path"
+            mithrilAggregatorUrl (mithrilOptions opts)
+                `shouldBe` Just "https://example.com"
+
+-- | Run the parser with given arguments and empty environment
+runParser
+    :: [String]
+    -> IO (Either (NonEmpty ParseError) Options)
+runParser args = runParserWithEnv args Map.empty
+
+-- | Run the parser with given arguments and environment
+runParserWithEnv
+    :: [String]
+    -> Map.Map String String
+    -> IO (Either (NonEmpty ParseError) Options)
+runParserWithEnv args env =
+    runParserOn
+        (Capabilities Set.empty) -- No special capabilities needed
+        Nothing -- No terminal capabilities
+        optionsParser
+        (parseArgs args)
+        (EnvMap env)
+        Nothing -- No config file
+
+-- | Expect parser to succeed, fail test otherwise
+expectSuccess
+    :: IO (Either (NonEmpty ParseError) Options)
+    -> IO Options
+expectSuccess action = do
+    result <- action
+    case result of
+        Right opts -> pure opts
+        Left errs ->
+            fail
+                $ "Expected successful parse, got errors: "
+                    <> show errs
+
+-- | Check if result is Left
+isLeft :: Either a b -> Bool
+isLeft (Left _) = True
+isLeft _ = False
