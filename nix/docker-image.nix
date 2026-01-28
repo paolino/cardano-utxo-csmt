@@ -7,7 +7,7 @@ pkgs.dockerTools.buildImage {
   copyToRoot = pkgs.buildEnv {
     name = "image-root";
     paths = [
-      project.packages.cardano-utxo-csmt.package.components.exes.cardano-utxo-csmt
+      project.packages.cardano-utxo-csmt.package.components.exes.cardano-utxo
     ];
   };
 }

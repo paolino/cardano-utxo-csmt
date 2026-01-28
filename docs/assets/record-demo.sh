@@ -11,7 +11,7 @@ DEMO_SCRIPT="$SCRIPT_DIR/mithril-demo.sh"
 cd "$PROJECT_ROOT"
 
 echo "=== Pre-building with nix ==="
-nix build --quiet .#cardano-utxo-chainsync
+nix build --quiet .#cardano-utxo
 echo "Build complete."
 echo ""
 

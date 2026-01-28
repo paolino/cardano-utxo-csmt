@@ -54,7 +54,7 @@ certificate chain proves the snapshot was produced correctly by the network.
 Enable Mithril bootstrap with the `--mithril-bootstrap` flag:
 
 ```bash
-cardano-utxo-chainsync \
+cardano-utxo \
     --network preview \
     --mithril-bootstrap \
     --csmt-db-path /path/to/db
@@ -254,7 +254,7 @@ Ancillary files (ledger state) are protected by Ed25519 signature verification:
 This verification runs automatically when `ANCILLARY_VERIFICATION_KEY` is set. To skip it (not recommended):
 
 ```bash
-cardano-utxo-chainsync \
+cardano-utxo \
     --mithril-bootstrap \
     --mithril-skip-ancillary-verification \
     ...
@@ -263,7 +263,7 @@ cardano-utxo-chainsync \
 To use a custom verification key via CLI:
 
 ```bash
-cardano-utxo-chainsync \
+cardano-utxo \
     --mithril-bootstrap \
     --ancillary-verification-key "5b32332c37312c..." \
     ...

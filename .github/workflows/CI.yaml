@@ -17,40 +17,40 @@ jobs:
         with:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Build executable
-        run: nix build .#cardano-utxo-csmt --quiet
+        run: nix build .#cardano-utxo --quiet
       - name: Build docker image
         run: nix build .#docker-image -o output-docker-image --quiet
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cardano-utxo-csmt-image
+          name: cardano-utxo-image
           path: output-docker-image
       - name: Build AppImage
-        run: nix bundle --bundler github:ralismark/nix-appimage .#cardano-utxo-csmt -o cardano-utxo-csmt.AppImage --quiet
+        run: nix bundle --bundler github:ralismark/nix-appimage .#cardano-utxo -o cardano-utxo.AppImage --quiet
       - name: Upload appImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cardano-utxo-csmt-appImage
-          path: cardano-utxo-csmt.AppImage
+          name: cardano-utxo-appImage
+          path: cardano-utxo.AppImage
       - name: Upload tarball Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cardano-utxo-csmt
+          name: cardano-utxo
           path: output-linux-tarball
       - name: Build rpm artifact
-        run: nix bundle --bundler github:NixOS/bundlers#toRPM -o cardano-utxo-csmt.rpm --quiet
+        run: nix bundle --bundler github:NixOS/bundlers#toRPM .#cardano-utxo -o cardano-utxo.rpm --quiet
       - name: Upload rpm artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cardano-utxo-csmt-rpm
-          path: cardano-utxo-csmt.rpm
+          name: cardano-utxo-rpm
+          path: cardano-utxo.rpm
       - name: Build deb artifact
-        run: nix bundle --bundler github:NixOS/bundlers#toDEB -o cardano-utxo-csmt.deb --quiet
+        run: nix bundle --bundler github:NixOS/bundlers#toDEB .#cardano-utxo -o cardano-utxo.deb --quiet
       - name: Upload deb artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cardano-utxo-csmt-deb
-          path: cardano-utxo-csmt.deb
+          name: cardano-utxo-deb
+          path: cardano-utxo.deb
   unit:
     name: Run unit Tests
     runs-on: ubuntu-latest

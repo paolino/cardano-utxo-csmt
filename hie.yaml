@@ -9,14 +9,11 @@ cradle:
     - path: "http"
       component: "cardano-utxo-csmt:http"
 
-    - path: "executables/cli/main.hs"
-      component: "cardano-utxo-csmt:exe:cardano-utxo-csmt"
-
     - path: "executables/swagger/main.hs"
       component: "cardano-utxo-csmt:exe:cardano-utxo-csmt-swagger"
 
     - path: "executables/chainsync/main.hs"
-      component: "cardano-utxo-csmt:exe:cardano-utxo-chainsync"
+      component: "cardano-utxo-csmt:exe:cardano-utxo"
 
     - path: "test"
       component: "cardano-utxo-csmt:test:unit-tests"
