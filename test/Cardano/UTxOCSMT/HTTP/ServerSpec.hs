@@ -254,6 +254,9 @@ sampleMetrics =
         , currentMerkleRoot = Nothing
         , baseCheckpoint = Nothing
         , chainTipSlot = Nothing
+        , bootstrapPhase = Nothing
+        , extractionProgress = Nothing
+        , headerSyncProgress = Nothing
         }
 
 -- | Sample ReadyResponse for synced state
