@@ -78,6 +78,21 @@ cardano-utxo-chainsync --mithril-bootstrap \
 | `flake.nix` | Add mithril 2603.1-pre input |
 | `nix/project.nix` | Add E2E shell with mithril-client |
 
+## Known Issues
+
+### STM Mode Blocked by Aggregator Bug
+
+The `--mithril-verify-mode stm` option is currently blocked by a server-side bug in the Mithril aggregators. When using the v2 backend API, the aggregators return:
+
+```
+unknown variant `preview`, expected `MainNet` or `TestNet`
+```
+
+This is a serialization mismatch between the aggregator and client versions. The aggregators need to be updated to support the v2 API.
+
+**Impact:** STM verification mode will fail until IOG updates the aggregators.
+**Workaround:** Use `--mithril-verify-mode ed25519` (default) which works correctly.
+
 ## Commits
 
 1. `ab7452e` - feat: add --mithril-verify-mode option for verification control
