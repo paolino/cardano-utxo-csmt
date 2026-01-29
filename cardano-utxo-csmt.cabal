@@ -285,13 +285,6 @@ executable memory-test
 
   default-language: Haskell2010
 
-library test-lib
-  import:           warnings
-  visibility:       public
-  build-depends:
-  hs-source-dirs:   test-lib
-  default-language: Haskell2010
-
 test-suite unit-tests
   import:             warnings
 
