@@ -14,3 +14,4 @@ cardano-utxo-csmt-exe-cardano-utxo-csmt-arx
 utxo-csmt
 .vscode
 cabal.project.local
+.ghc*
