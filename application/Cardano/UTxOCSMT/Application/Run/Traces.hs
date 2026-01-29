@@ -34,6 +34,9 @@ import Cardano.UTxOCSMT.Application.Run.Application
     ( ApplicationTrace
     , renderApplicationTrace
     )
+import Cardano.UTxOCSMT.Mithril.Client
+    ( MithrilTrace (MithrilDownloadProgress)
+    )
 import Cardano.UTxOCSMT.Mithril.Extraction
     ( ExtractionTrace
         ( ExtractionCounting
@@ -136,14 +139,15 @@ stealMetricsEvent (Mithril (ImportExtraction (ExtractionProgress count))) =
     Just $ ExtractionProgressEvent count
 stealMetricsEvent _ = Nothing
 
-{- | Match extraction events for throttling.
+{- | Match bootstrap events for throttling.
 
 Returns frequency in Hz (events per second) for events that should be
-throttled. ExtractionCounting and ExtractionProgress are throttled to
-1 Hz to avoid flooding logs during bootstrap.
+throttled. Download progress, ExtractionCounting and ExtractionProgress
+are throttled to 1 Hz to avoid flooding logs during bootstrap.
 -}
 matchExtractionEvents :: MainTraces -> Maybe Double
 matchExtractionEvents = \case
+    Mithril (ImportMithril (MithrilDownloadProgress _)) -> Just 1.0
     Mithril (ImportExtraction (ExtractionCounting _)) -> Just 1.0
     Mithril (ImportExtraction (ExtractionProgress _)) -> Just 1.0
     _ -> Nothing
@@ -165,7 +169,7 @@ renderThrottledMainTraces Throttled{throttledEvent, throttledDropped} =
                 ++ "] "
         droppedSuffix
             | throttledDropped > 0 =
-                " (+" ++ show throttledDropped ++ " dropped)"
+                " (+" ++ show throttledDropped ++ " messages dropped)"
             | otherwise = ""
     in  if null baseMsg
             then ""

@@ -1,3 +1,6 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE NumericUnderscores #-}
+
 {- |
 Module      : Cardano.UTxOCSMT.Mithril.Client
 Description : Mithril aggregator client for snapshot retrieval
@@ -243,6 +246,8 @@ data MithrilTrace
       MithrilAncillaryVerified
     | -- | Skipping ancillary verification (no key configured)
       MithrilAncillarySkipped
+    | -- | Download progress (bytes downloaded so far)
+      MithrilDownloadProgress Word64
     deriving stock (Show, Eq)
 
 -- | Render trace for logging
@@ -274,6 +279,8 @@ renderMithrilTrace MithrilAncillaryVerified =
     "Ancillary Ed25519 verification successful"
 renderMithrilTrace MithrilAncillarySkipped =
     "Skipping ancillary verification (no key configured for network)"
+renderMithrilTrace (MithrilDownloadProgress bytes) =
+    "Download progress: " <> show (bytes `div` 1_000_000) <> " MB"
 
 -- | Fetch the latest available snapshot metadata from the aggregator
 fetchLatestSnapshot
@@ -416,13 +423,15 @@ downloadSnapshotHttp
 
         -- Stream response body to file handle chunk by chunk
         streamBodyToFile :: Handle -> BodyReader -> IO ()
-        streamBodyToFile handle bodyReader = loop
+        streamBodyToFile handle bodyReader = loop 0
           where
-            loop = do
+            loop !totalBytes = do
                 chunk <- brRead bodyReader
                 unless (BS.null chunk) $ do
                     BS.hPut handle chunk
-                    loop
+                    let newTotal = totalBytes + fromIntegral (BS.length chunk)
+                    traceWith tracer $ MithrilDownloadProgress newTotal
+                    loop newTotal
 
         extractArchive archivePath = do
             -- Extract using tar and zstd: tar -I zstd -xf archive -C dir
