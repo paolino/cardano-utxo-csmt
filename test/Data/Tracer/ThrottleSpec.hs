@@ -7,16 +7,16 @@ import Control.Tracer (Tracer (..), traceWith)
 import Data.IORef (IORef, modifyIORef', newIORef, readIORef)
 import Data.Time.Clock (UTCTime, addUTCTime)
 import Data.Tracer.Throttle (Throttled (..), throttleByFrequency)
-import Data.Tracer.Timestamp (Timestamp (..))
+import Data.Tracer.Timestamp (Timestamped (..))
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 -- | Create a tracer that collects events in a list
 collectTracer :: IORef [a] -> Tracer IO a
 collectTracer ref = Tracer $ \a -> modifyIORef' ref (a :)
 
--- | Helper to create a Timestamp with a specific time
-mkTimestamp :: UTCTime -> String -> Timestamp String
-mkTimestamp = Timestamp
+-- | Helper to create a Timestamped with a specific time
+mkTimestamp :: UTCTime -> String -> Timestamped String
+mkTimestamp = Timestamped
 
 -- | Base time for tests
 baseTime :: UTCTime
@@ -68,7 +68,7 @@ spec = do
             results <- reverse <$> readIORef ref
             length results `shouldBe` 2
             map throttledDropped results `shouldBe` [0, 2]
-            map (timestampEvent . throttledEvent) results
+            map (timestampedEvent . throttledEvent) results
                 `shouldBe` ["event1", "event4"]
 
         it "handles multiple matcher categories independently" $ do
@@ -86,5 +86,5 @@ spec = do
             traceWith tracer (mkTimestamp (addSeconds 0.6 baseTime) "B")
             results <- reverse <$> readIORef ref
             length results `shouldBe` 3 -- A(0s), B(0s), B(0.6s)
-            map (timestampEvent . throttledEvent) results
+            map (timestampedEvent . throttledEvent) results
                 `shouldBe` ["A", "B", "B"]
