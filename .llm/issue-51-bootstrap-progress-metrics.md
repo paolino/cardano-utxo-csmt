@@ -191,3 +191,61 @@ All steps complete:
 4. `application/Cardano/UTxOCSMT/Application/Run/Main.hs` - Extraction events via `stealMetricsEvent`
 5. `test/Cardano/UTxOCSMT/HTTP/ServerSpec.hs` - Updated test fixtures
 6. `docs/assets/swagger.json` - Regenerated
+7. `lib/Cardano/UTxOCSMT/Mithril/Extraction.hs` - Added counting phase, progress events
+8. `lib/Data/Tracer/Timestamps.hs` - Filter empty log messages
+9. `run/*.sh` - Runner scripts for local testing
+
+## Session 2 Updates (2026-01-28)
+
+### Issues Found and Fixed
+
+1. **API not available during bootstrap**: Moved API server startup before `setupDB`
+2. **Extraction rate always 0**: Removed 10k batching from progress events
+3. **Percentage null**: Added pre-counting pass for indefinite-length CBOR maps
+4. **Phase stuck at "counting"**: Added `ExtractionStreamStarting` trace
+5. **Log explosion**: 4M lines for 100k UTxOs - progress logged every item!
+   - Fixed by filtering in `addTimestampsTracer` (empty strings skipped)
+   - Fixed by batching render output (log every 100k, not every 1)
+   - Fixed by handling empty nested renders in `renderMainTraces`
+6. **Disk full handling**: Created issue #67 - should fail, not silently corrupt
+
+### New Bootstrap Phases
+
+```haskell
+data BootstrapPhase
+    = Downloading
+    | Counting
+    | Extracting
+    | SyncingHeaders
+    | Synced
+```
+
+### New Extraction Traces
+
+```haskell
+data ExtractionTrace
+    = ...
+    | ExtractionCounting           -- Start of counting phase
+    | ExtractionCountingProgress Word64  -- Progress during counting
+    | ExtractionDecodedState Word64      -- Total counted
+    | ExtractionStreamStarting     -- Start of extraction phase
+    | ExtractionProgress Word64    -- Progress during extraction
+```
+
+### Remaining Work
+
+- [ ] **CRITICAL: Fix metricsTracer fold not updating** - intercept works (1M events forwarded) but fold doesn't accumulate. Issue is in `metricsTracer` or `metricsFold` in Metrics.hs
+- [ ] Download progress (blocks count) - requires parsing mithril-client stdout
+- [ ] Format code
+- [ ] Final testing
+- [ ] Create PR
+
+### Debug Findings
+
+1. **Intercept is working**: Debug output showed 1+ million events forwarded to metricsEvent tracer
+2. **Phase stuck at "downloading"**: Despite BootstrapPhaseEvent Counting being forwarded, metrics show "downloading"
+3. **Fold accumulation suspect**: The `bootstrapPhaseFold` uses `handles (timedEventL . _BootstrapPhaseEvent) Fold.last` - needs investigation
+4. **metricsTracer architecture**:
+   - Events → TQueue → accumulator thread (every 100ms) → fold → TVar
+   - Output thread (every 1s) → extract from fold → metricsOutput
+   - Issue likely in accumulator or fold step
