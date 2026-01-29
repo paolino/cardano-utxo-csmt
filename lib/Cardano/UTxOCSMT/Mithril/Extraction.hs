@@ -43,7 +43,7 @@ import Codec.CBOR.Read
     )
 import Control.Exception (IOException, try)
 import Control.Monad.ST (RealWorld, stToIO)
-import Control.Monad.Trans (lift)
+import Control.Monad.Trans (MonadIO (..), lift)
 import Control.Tracer (Tracer, traceWith)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
@@ -54,6 +54,7 @@ import Data.List (sortOn)
 import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Tracer.Throttling (every)
 import Data.Word (Word64)
 import Streaming (Of, Stream, effect)
 import Streaming.ByteString qualified as SB
@@ -124,9 +125,11 @@ data ExtractionTrace
     | -- | Decoding ledger state
       ExtractionDecoding
     | -- | Counting UTxOs in snapshot
-      ExtractionCounting
-    | -- | Decoded successfully, extracting UTxOs
+      ExtractionCounting Word64
+    | -- | Counted total UTxOs
       ExtractionDecodedState Word64
+    | -- | Starting extraction stream
+      ExtractionStreamStarting
     | -- | Progress: UTxOs extracted so far
       ExtractionProgress Word64
     | -- | Extraction complete
@@ -141,12 +144,16 @@ renderExtractionTrace (ExtractionFoundLedgerState path slot) =
     "Found ledger state at slot " <> show slot <> ": " <> path
 renderExtractionTrace ExtractionDecoding =
     "Decoding ledger state file..."
-renderExtractionTrace ExtractionCounting =
+renderExtractionTrace (ExtractionCounting count) =
     "Counting UTxOs in snapshot..."
+        <> show count
+        <> " UTxOs so far..."
 renderExtractionTrace (ExtractionDecodedState count) =
     "Counted " <> show count <> " UTxOs in snapshot"
+renderExtractionTrace ExtractionStreamStarting =
+    "Starting extraction stream..."
 renderExtractionTrace (ExtractionProgress count) =
-    "Extracted " <> show count <> " UTxOs..."
+    "Extracted " <> show count <> " UTxOs so far..."
 renderExtractionTrace (ExtractionComplete count) =
     "Extraction complete: " <> show count <> " UTxOs"
 
@@ -300,19 +307,18 @@ streamUtxos tracer tvarPath consumer =
                     Just len -> pure (fromIntegral len)
                     Nothing -> do
                         -- Count UTxOs first (fast pass through file)
-                        traceWith tracer ExtractionCounting
-                        cnt <- countUtxos tvarPath
-                        pure cnt
+                        countUtxos tracer tvarPath
                 traceWith tracer $ ExtractionDecodedState total
+                traceWith tracer ExtractionStreamStarting
                 -- Stream KV pairs incrementally
                 let kvStream = streamKVPairs mLen remainingStream
-                    trackedStream = trackProgress tracer 0 kvStream
+                    trackedStream = trackExtractionProgress tracer 0 kvStream
                 a <- consumer trackedStream
                 pure $ Right a
 
 -- | Count UTxOs in tvar file without fully decoding
-countUtxos :: FilePath -> IO Word64
-countUtxos tvarPath =
+countUtxos :: Tracer IO ExtractionTrace -> FilePath -> IO Word64
+countUtxos tracer tvarPath =
     withFile tvarPath ReadMode $ \handle -> do
         let byteStream = SB.hGetContents handle & SB.toChunks
         headerResult <- parseHeader byteStream
@@ -322,9 +328,27 @@ countUtxos tvarPath =
                 case mLen of
                     Just len -> pure (fromIntegral len)
                     Nothing -> do
-                        -- Count by streaming through
-                        let kvStream = streamKVPairs Nothing remainingStream
-                        fromIntegral <$> S.length_ kvStream
+                        -- Count by streaming through with progress
+                        fmap fromIntegral
+                            $ S.length_
+                            $ counting tracer
+                            $ streamKVPairs Nothing remainingStream
+
+-- | Count stream elements with progress tracking
+counting
+    :: Tracer IO ExtractionTrace
+    -> Stream (Of (LazyByteString, LazyByteString)) IO ()
+    -> Stream (Of (LazyByteString, LazyByteString)) IO ()
+counting (every 1000 -> tracer) = go 0
+  where
+    go !count stream' = effect $ do
+        next <- S.next stream'
+        pure $ case next of
+            Left () -> pure ()
+            Right (_, rest) -> do
+                let newCount = count + 1
+                liftIO $ traceWith tracer $ ExtractionCounting newCount
+                go newCount rest
 
 {- | Parse the tvar file header incrementally
 
@@ -481,12 +505,12 @@ streamKVPairs mLen byteStream = case mLen of
                 pure $ feedIndefinite decoder' rest
 
 -- | Track progress and trace every UTxO
-trackProgress
+trackExtractionProgress
     :: Tracer IO ExtractionTrace
     -> Word64
     -> Stream (Of (LazyByteString, LazyByteString)) IO ()
     -> Stream (Of (LazyByteString, LazyByteString)) IO ()
-trackProgress tracer = go
+trackExtractionProgress (every 1000 -> tracer) = go
   where
     go !count stream' = do
         next <- lift $ S.next stream'

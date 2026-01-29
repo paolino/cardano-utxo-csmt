@@ -372,10 +372,12 @@ stealMetricsEvent (Mithril ImportStarting) =
     Just $ BootstrapPhaseEvent Downloading
 stealMetricsEvent (Mithril (ImportExtractingUTxO _)) =
     Just $ BootstrapPhaseEvent Extracting
-stealMetricsEvent (Mithril (ImportExtraction ExtractionCounting)) =
-    Just $ BootstrapPhaseEvent Counting
+stealMetricsEvent (Mithril (ImportExtraction (ExtractionCounting count))) =
+    Just $ ExtractionProgressEvent count
 stealMetricsEvent (Mithril (ImportExtraction (ExtractionDecodedState total))) =
     Just $ ExtractionTotalEvent total
+stealMetricsEvent (Mithril (ImportExtraction ExtractionStreamStarting)) =
+    Just $ BootstrapPhaseEvent Extracting
 stealMetricsEvent (Mithril (ImportExtraction (ExtractionProgress count))) =
     Just $ ExtractionProgressEvent count
 stealMetricsEvent _ = Nothing
@@ -432,7 +434,7 @@ setupDB
         LazyByteString
         IO
     -> IO SetupResult
-setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransaction{txRunTransaction} = do
+setupDB TraceWith{tracer, trace, contra} startingPoint mithrilOpts runner@RunCSMTTransaction{txRunTransaction} = do
     new <- checkEmptyRollbacks runner
     if new
         then do
@@ -503,7 +505,7 @@ setupDB TraceWith{trace, contra} startingPoint mithrilOpts runner@RunCSMTTransac
 
         result <-
             importFromMithril
-                (contramap Mithril (contra id))
+                (contramap Mithril tracer)
                 mithrilConfig
                 runner
 
