@@ -90,12 +90,13 @@ data ImportTrace
       ImportStreaming StreamTrace
     | -- | Progress: current count, total estimated
       ImportProgress Word64 Word64
-    | -- | Import complete: total UTxOs imported, checkpoint
-      ImportComplete Word64 Point
+    | -- | Import complete: total UTxOs imported, slot, block hash
+      ImportComplete Word64
     | -- | Error during import
       ImportError MithrilError
     | -- | Extraction error
       ImportExtractionError ExtractionError
+    deriving (Show)
 
 -- | Render trace for logging
 renderImportTrace :: ImportTrace -> String
@@ -115,10 +116,10 @@ renderImportTrace (ImportProgress current total) =
         <> " / "
         <> show total
         <> " UTxOs"
-renderImportTrace (ImportComplete count _checkpoint) =
+renderImportTrace (ImportComplete count) =
     "Mithril import complete: "
         <> show count
-        <> " UTxOs imported"
+        <> " UTxOs imported at slot "
 renderImportTrace (ImportError err) =
     "Mithril import error: " <> renderMithrilError err
 renderImportTrace (ImportExtractionError err) =
@@ -211,7 +212,7 @@ importFromMithril TraceWith{tracer, trace} config runner = do
                         Right (count, extractedSlot) -> do
                             let checkpoint = makeCheckpoint snapshot
 
-                            traceWith tracer $ ImportComplete count checkpoint
+                            traceWith tracer $ ImportComplete count
 
                             pure
                                 ImportSuccess

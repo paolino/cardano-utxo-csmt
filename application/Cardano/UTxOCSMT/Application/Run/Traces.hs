@@ -80,6 +80,7 @@ data MainTraces
       HTTPServiceError String
     | -- | Application is connecting to the node
       ApplicationStarting
+    deriving (Show)
 
 -- | Render a 'MainTraces' value to a human-readable log string.
 renderMainTraces :: MainTraces -> String
