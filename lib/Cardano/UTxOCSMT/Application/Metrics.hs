@@ -41,11 +41,12 @@ import Control.Concurrent.Async (async, link)
 import Control.Concurrent.Class.MonadSTM.Strict
     ( MonadSTM (..)
     , flushTQueue
-    , modifyTVar
     , newTQueueIO
     , newTVarIO
+    , readTVar
     , readTVarIO
     , writeTQueue
+    , writeTVar
     )
 import Control.Foldl (Fold (..), handles)
 import Control.Foldl qualified as Fold
@@ -550,9 +551,14 @@ metricsTracer params@MetricsParams{metricsFrequency, metricsOutput} = do
     link <=< async $ forever $ do
         -- let events accumulate, no need to load CPU as they come with timestamps
         threadDelay 100_000
-        atomically $ do
+        (es, currentFold) <- atomically $ do
             es <- flushTQueue eventsQ
-            modifyTVar metricsV $ \metrics -> Fold.fold (duplicate metrics) es
+            currentFold <- readTVar metricsV
+            pure (es, currentFold)
+
+        let !newFold = Fold.fold (duplicate currentFold) es
+        atomically $ writeTVar metricsV newFold
+
     -- output loop
     link <=< async $ forever $ do
         threadDelay metricsFrequency
