@@ -258,6 +258,7 @@ sampleMetrics =
         , extractionProgress = Nothing
         , headerSyncProgress = Nothing
         , downloadedBytes = Nothing
+        , countingProgress = Nothing
         }
 
 -- | Sample ReadyResponse for synced state

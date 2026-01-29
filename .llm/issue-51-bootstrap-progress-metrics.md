@@ -249,3 +249,53 @@ data ExtractionTrace
    - Events → TQueue → accumulator thread (every 100ms) → fold → TVar
    - Output thread (every 1s) → extract from fold → metricsOutput
    - Issue likely in accumulator or fold step
+
+## Session 3 Updates (2026-01-29)
+
+### Module Split Refactoring
+
+The Metrics module (~570 lines) was split into three well-organized modules:
+
+#### New Module Structure
+
+1. **`lib/Control/Foldl/Extra.hs`** (49 lines)
+   - Generic fold utilities: `speedoMeter`, `averageOverWindow`
+   - Reusable beyond just metrics
+   - Module docs with haddock
+
+2. **`lib/Cardano/UTxOCSMT/Application/Metrics/Types.hs`** (363 lines)
+   - All data types: `BootstrapPhase`, `MetricsEvent`, `ExtractionProgress`, `HeaderSyncProgress`, `Metrics`, `MetricsParams`
+   - ToJSON/ToSchema instances
+   - Prisms for `MetricsEvent` (via Template Haskell)
+   - Render utilities: `renderBlockPoint`, `renderPoint`
+
+3. **`lib/Cardano/UTxOCSMT/Application/Metrics.hs`** (256 lines)
+   - Re-exports everything from `Metrics.Types` (API unchanged)
+   - Contains metrics-specific folds and `metricsTracer`
+   - Imports utilities from `Control.Foldl.Extra`
+
+#### Benefits
+
+- **Separation of concerns**: Types vs logic vs generic utilities
+- **Reusability**: `Control.Foldl.Extra` can be used elsewhere
+- **Maintainability**: Smaller, focused modules
+- **Backward compatibility**: Existing imports unchanged
+
+#### Verification
+
+- Build passes with no warnings
+- hlint passes with no hints
+- All existing imports work unchanged
+
+#### Commit
+
+```
+d626d54 refactor: split Metrics module into Types and Foldl.Extra
+```
+
+### Remaining Work
+
+- [x] **CRITICAL: Fix metricsTracer fold not updating** - intercept works (1M events forwarded) but fold doesn't accumulate
+- [ ] Download progress (blocks count) - requires parsing mithril-client stdout
+- [ ] Final testing
+- [ ] Create PR

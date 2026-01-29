@@ -44,6 +44,7 @@ import Cardano.UTxOCSMT.Application.Metrics.Types
     , _BlockInfoEvent
     , _BootstrapPhaseEvent
     , _ChainTipEvent
+    , _CountingProgressEvent
     , _DownloadProgressEvent
     , _ExtractionProgressEvent
     , _ExtractionTotalEvent
@@ -210,6 +211,10 @@ headerSyncProgressFold =
 downloadProgressFold :: Fold TimestampedMetrics (Maybe Word64)
 downloadProgressFold = handles (timestampedEventL . _DownloadProgressEvent) Fold.last
 
+-- track counting progress (UTxOs counted so far)
+countingProgressFold :: Fold TimestampedMetrics (Maybe Word64)
+countingProgressFold = handles (timestampedEventL . _CountingProgressEvent) Fold.last
+
 -- track the whole set of metrics
 metricsFold :: MetricsParams -> Fold TimestampedMetrics Metrics
 metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
@@ -228,6 +233,7 @@ metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
         <*> extractionProgressFold utxoSpeedWindow
         <*> headerSyncProgressFold
         <*> downloadProgressFold
+        <*> countingProgressFold
 
 -- | Create a metrics tracer that collects metrics and outputs them
 metricsTracer :: MetricsParams -> IO (Tracer IO MetricsEvent)
