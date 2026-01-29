@@ -39,6 +39,7 @@ source-repository-package
   type: git
   location: https://github.com/paolino/contra-tracer-contrib
   tag: 9c2555a5e6d72fdd55eb1e13cff812d72ea41913
+  --sha256: sha256-7kThad3EitpJukEUhzMZ/sUv+z9bfwQYLHWin1XCSQ8=
 
 -- Enable iohk flag for contra-tracer-contrib to use CHaP's simple API
 constraints: contra-tracer-contrib +iohk
