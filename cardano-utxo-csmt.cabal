@@ -21,9 +21,10 @@ extra-doc-files: CHANGELOG.md
 
 common warnings
   ghc-options:
-    -Wall -Wunused-imports -Wunused-packages -Wmissing-export-lists
-    -Wname-shadowing -Wdeferred-out-of-scope-variables
-    -Wpartial-type-signatures -Wredundant-constraints
+    -Wall -Werror -Wunused-imports -Wunused-packages
+    -Wmissing-export-lists -Wname-shadowing
+    -Wdeferred-out-of-scope-variables -Wpartial-type-signatures
+    -Wredundant-constraints
 
   default-extensions:
     DataKinds
