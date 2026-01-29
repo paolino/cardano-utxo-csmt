@@ -3,7 +3,7 @@ module Cardano.UTxOCSMT.Application.Run.Traces
     , renderMainTraces
     , renderThrottledMainTraces
     , stealMetricsEvent
-    , matchExtractionEvents
+    , matchHighFrequencyEvents
     )
 where
 
@@ -139,17 +139,18 @@ stealMetricsEvent (Mithril (ImportExtraction (ExtractionProgress count))) =
     Just $ ExtractionProgressEvent count
 stealMetricsEvent _ = Nothing
 
-{- | Match bootstrap events for throttling.
+{- | Match high-frequency events for throttling.
 
 Returns frequency in Hz (events per second) for events that should be
-throttled. Download progress, ExtractionCounting and ExtractionProgress
-are throttled to 1 Hz to avoid flooding logs during bootstrap.
+throttled. Download progress, extraction events, and database updates
+are throttled to 1 Hz to avoid flooding logs during sync.
 -}
-matchExtractionEvents :: MainTraces -> Maybe Double
-matchExtractionEvents = \case
+matchHighFrequencyEvents :: MainTraces -> Maybe Double
+matchHighFrequencyEvents = \case
     Mithril (ImportMithril (MithrilDownloadProgress _)) -> Just 1.0
     Mithril (ImportExtraction (ExtractionCounting _)) -> Just 1.0
     Mithril (ImportExtraction (ExtractionProgress _)) -> Just 1.0
+    Update (UpdateForwardTip{}) -> Just 1.0
     _ -> Nothing
 
 {- | Render a throttled 'MainTraces' value to a log string.
