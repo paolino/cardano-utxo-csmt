@@ -15,8 +15,8 @@ collectTracer :: IORef [a] -> Tracer IO a
 collectTracer ref = Tracer $ \a -> modifyIORef' ref (a :)
 
 -- | Helper to create a Timestamp with a specific time
-mkTimestamp :: UTCTime -> a -> Timestamp a
-mkTimestamp t a = Timestamp t a
+mkTimestamp :: UTCTime -> String -> Timestamp String
+mkTimestamp = Timestamp
 
 -- | Base time for tests
 baseTime :: UTCTime
