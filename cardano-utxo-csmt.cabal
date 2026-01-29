@@ -87,9 +87,13 @@ library application
   other-modules:    Paths_cardano_utxo_csmt
   exposed-modules:
     Cardano.UTxOCSMT.Application.Run.Application
+    Cardano.UTxOCSMT.Application.Run.Config
     Cardano.UTxOCSMT.Application.Run.GenesisData
     Cardano.UTxOCSMT.Application.Run.Main
+    Cardano.UTxOCSMT.Application.Run.Query
     Cardano.UTxOCSMT.Application.Run.RenderMetrics
+    Cardano.UTxOCSMT.Application.Run.Setup
+    Cardano.UTxOCSMT.Application.Run.Traces
 
   build-depends:
     , ansi-terminal
