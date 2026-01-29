@@ -1,3 +1,5 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 module Cardano.UTxOCSMT.Application.Run.RenderMetrics
     ( renderMetrics
     )
@@ -10,6 +12,7 @@ import Cardano.UTxOCSMT.Application.Metrics
     , renderBlockPoint
     )
 import Data.Maybe (fromMaybe)
+import Data.Word (Word64)
 import Ouroboros.Network.Block (blockNo)
 import System.Console.ANSI (hClearScreen, hSetCursorPosition)
 import System.IO (stdout)
@@ -28,12 +31,15 @@ renderMetrics
         , currentMerkleRoot
         , bootstrapPhase
         , extractionProgress
+        , downloadedBytes
         } = do
         hClearScreen stdout
         hSetCursorPosition stdout 0 0
         putStrLn
             $ "Bootstrap Phase: "
                 ++ maybe "N/A" show bootstrapPhase
+                ++ "\nDownload Progress: "
+                ++ renderDownloadProgress downloadedBytes
                 ++ "\nExtraction Progress: "
                 ++ renderExtractionProgress extractionProgress
                 ++ "\nAverage Queue Length: "
@@ -56,6 +62,11 @@ renderMetrics
                 ++ maybe "N/A" show currentMerkleRoot
                 ++ "\nCurrent Era: "
                 ++ fromMaybe "N/A" currentEra
+
+renderDownloadProgress :: Maybe Word64 -> String
+renderDownloadProgress Nothing = "N/A"
+renderDownloadProgress (Just bytes) =
+    show (bytes `div` 1_000_000) ++ " MB"
 
 renderExtractionProgress :: Maybe ExtractionProgress -> String
 renderExtractionProgress Nothing = "N/A"

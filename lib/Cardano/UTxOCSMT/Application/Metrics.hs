@@ -194,6 +194,8 @@ data MetricsEvent
       ExtractionProgressEvent Word64
     | -- | header sync progress (current slot, target slot)
       HeaderSyncProgressEvent SlotNo SlotNo
+    | -- | download progress (bytes downloaded so far)
+      DownloadProgressEvent Word64
 
 makePrisms ''MetricsEvent
 
@@ -386,6 +388,10 @@ headerSyncProgressFold =
             , headerTargetSlot = target
             }
 
+-- track download progress (bytes downloaded)
+downloadProgressFold :: Fold TimedMetrics (Maybe Word64)
+downloadProgressFold = handles (timedEventL . _DownloadProgressEvent) Fold.last
+
 -- | Tracked metrics
 data Metrics = Metrics
     { averageQueueLength :: Double
@@ -405,6 +411,8 @@ data Metrics = Metrics
     -- ^ Progress of UTxO extraction from Mithril snapshot
     , headerSyncProgress :: Maybe HeaderSyncProgress
     -- ^ Progress of header synchronization after Mithril import
+    , downloadedBytes :: Maybe Word64
+    -- ^ Bytes downloaded during Mithril snapshot download
     }
 
 instance ToJSON Metrics where
@@ -423,6 +431,7 @@ instance ToJSON Metrics where
             , bootstrapPhase
             , extractionProgress
             , headerSyncProgress
+            , downloadedBytes
             } =
             object
                 [ "averageQueueLength" .= averageQueueLength
@@ -439,6 +448,7 @@ instance ToJSON Metrics where
                 , "bootstrapPhase" .= bootstrapPhase
                 , "extractionProgress" .= extractionProgress
                 , "headerSyncProgress" .= headerSyncProgress
+                , "downloadedBytes" .= downloadedBytes
                 ]
 
 renderBlockPoint :: (a, Header) -> [Char]
@@ -485,6 +495,7 @@ instance ToSchema Metrics where
                     , ("bootstrapPhase", maybeBootstrapPhaseSchema)
                     , ("extractionProgress", maybeExtractionProgressSchema)
                     , ("headerSyncProgress", maybeHeaderSyncProgressSchema)
+                    , ("downloadedBytes", maybeWord64Schema)
                     ]
             & required
                 .~ [ "averageQueueLength"
@@ -500,6 +511,7 @@ instance ToSchema Metrics where
                    , "bootstrapPhase"
                    , "extractionProgress"
                    , "headerSyncProgress"
+                   , "downloadedBytes"
                    ]
             & description
                 ?~ "Metrics about CSMT operations and blockchain synchronization"
@@ -535,6 +547,7 @@ metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
         <*> bootstrapPhaseFold
         <*> extractionProgressFold utxoSpeedWindow
         <*> headerSyncProgressFold
+        <*> downloadProgressFold
 
 -- | Create a metrics tracer that collects metrics and outputs them
 metricsTracer :: MetricsParams -> IO (Tracer IO MetricsEvent)
