@@ -19,16 +19,16 @@ hlint:
 
 bench:
     #!/usr/bin/env bash
-    cabal bench -O0
+    cabal bench
 unit match="" *args='' :
     #!/usr/bin/env bash
     # shellcheck disable=SC2050
     if [[ '{{ match }}' == "" ]]; then
-      cabal test unit-tests -O0 \
+      cabal test unit-tests \
           --test-show-details=direct \
           --test-options="{{args}}"
     else
-      cabal test unit-tests -O0 \
+      cabal test unit-tests \
           --test-show-details=direct \
           --test-option=--match \
           --test-option="{{ match }}" \
@@ -37,7 +37,7 @@ unit match="" *args='' :
 
 build:
     #!/usr/bin/env bash
-    cabal build all --enable-tests --enable-benchmarks -O0
+    cabal build all --enable-tests --enable-benchmarks
 
 CI:
     #!/usr/bin/env bash
@@ -98,7 +98,7 @@ release version arch:
 integration match="":
     #!/usr/bin/env bash
     set -euo pipefail
-    cabal test cardano-utxo-csmt-integration-test -O0 \
+    cabal test cardano-utxo-csmt-integration-test \
         --test-show-details=direct \
         --test-option=--match \
         --test-option="{{ match }}"
@@ -106,7 +106,7 @@ integration match="":
 integration-all:
     #!/usr/bin/env bash
     set -euo pipefail
-    cabal test cardano-utxo-csmt-integration-test -O0 \
+    cabal test cardano-utxo-csmt-integration-test \
         --test-show-details=direct
 
 update-swagger:
@@ -125,7 +125,7 @@ mithril-extraction-memory-test network="preprod":
     echo "Tmp dir: $tmp_dir (cleaned up on exit)"
     echo "This will download a Mithril snapshot (~2-3GB for preprod)"
     echo ""
-    cabal run memory-test -O0 -- \
+    cabal run memory-test -- \
         --network "{{ network }}" \
         --tmp-dir "$tmp_dir"
 
@@ -133,7 +133,7 @@ mithril-extraction-memory-test network="preprod":
 mithril-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
-    cabal test unit-tests -O0 \
+    cabal test unit-tests \
         --test-show-details=direct \
         --test-option=--match \
         --test-option="Mithril"
