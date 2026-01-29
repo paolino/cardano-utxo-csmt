@@ -131,9 +131,9 @@ stealMetricsEvent (Mithril ImportStarting) =
 stealMetricsEvent (Mithril (ImportMithril (MithrilDownloadProgress bytes))) =
     Just $ DownloadProgressEvent bytes
 stealMetricsEvent (Mithril (ImportExtractingUTxO _)) =
-    Just $ BootstrapPhaseEvent Extracting
+    Just $ BootstrapPhaseEvent Counting
 stealMetricsEvent (Mithril (ImportExtraction (ExtractionCounting count))) =
-    Just $ ExtractionProgressEvent count
+    Just $ CountingProgressEvent count
 stealMetricsEvent (Mithril (ImportExtraction (ExtractionDecodedState total))) =
     Just $ ExtractionTotalEvent total
 stealMetricsEvent (Mithril (ImportExtraction ExtractionStreamStarting)) =

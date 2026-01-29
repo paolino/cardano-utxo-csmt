@@ -30,6 +30,7 @@ module Cardano.UTxOCSMT.Application.Metrics.Types
     , _ExtractionProgressEvent
     , _HeaderSyncProgressEvent
     , _DownloadProgressEvent
+    , _CountingProgressEvent
 
       -- * Progress types
     , ExtractionProgress (..)
@@ -137,6 +138,8 @@ data MetricsEvent
       HeaderSyncProgressEvent SlotNo SlotNo
     | -- | download progress (bytes downloaded so far)
       DownloadProgressEvent Word64
+    | -- | counting progress (UTxOs counted so far)
+      CountingProgressEvent Word64
     deriving (Show)
 
 makePrisms ''MetricsEvent
@@ -243,6 +246,8 @@ data Metrics = Metrics
     -- ^ Progress of header synchronization after Mithril import
     , downloadedBytes :: Maybe Word64
     -- ^ Bytes downloaded during Mithril snapshot download
+    , countingProgress :: Maybe Word64
+    -- ^ UTxOs counted so far during counting phase
     }
     deriving (Show)
 
@@ -263,6 +268,7 @@ instance ToJSON Metrics where
             , extractionProgress
             , headerSyncProgress
             , downloadedBytes
+            , countingProgress
             } =
             object
                 [ "averageQueueLength" .= averageQueueLength
@@ -280,6 +286,7 @@ instance ToJSON Metrics where
                 , "extractionProgress" .= extractionProgress
                 , "headerSyncProgress" .= headerSyncProgress
                 , "downloadedBytes" .= downloadedBytes
+                , "countingProgress" .= countingProgress
                 ]
 
 -- | Render a block point as a string for display
@@ -328,6 +335,7 @@ instance ToSchema Metrics where
                     , ("extractionProgress", maybeExtractionProgressSchema)
                     , ("headerSyncProgress", maybeHeaderSyncProgressSchema)
                     , ("downloadedBytes", maybeWord64Schema)
+                    , ("countingProgress", maybeWord64Schema)
                     ]
             & required
                 .~ [ "averageQueueLength"
@@ -344,6 +352,7 @@ instance ToSchema Metrics where
                    , "extractionProgress"
                    , "headerSyncProgress"
                    , "downloadedBytes"
+                   , "countingProgress"
                    ]
             & description
                 ?~ "Metrics about CSMT operations and blockchain synchronization"

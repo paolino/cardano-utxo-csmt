@@ -137,6 +137,12 @@
                     "minimum": 0,
                     "type": "integer"
                 },
+                "countingProgress": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                },
                 "currentEra": {
                     "type": "string"
                 },
@@ -187,7 +193,8 @@
                 "bootstrapPhase",
                 "extractionProgress",
                 "headerSyncProgress",
-                "downloadedBytes"
+                "downloadedBytes",
+                "countingProgress"
             ],
             "type": "object"
         },

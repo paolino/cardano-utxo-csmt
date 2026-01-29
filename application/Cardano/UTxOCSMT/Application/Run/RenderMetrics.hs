@@ -32,6 +32,7 @@ renderMetrics
         , bootstrapPhase
         , extractionProgress
         , downloadedBytes
+        , countingProgress
         } = do
         hClearScreen stdout
         hSetCursorPosition stdout 0 0
@@ -40,6 +41,8 @@ renderMetrics
                 ++ maybe "N/A" show bootstrapPhase
                 ++ "\nDownload Progress: "
                 ++ renderDownloadProgress downloadedBytes
+                ++ "\nCounting Progress: "
+                ++ renderCountingProgress countingProgress
                 ++ "\nExtraction Progress: "
                 ++ renderExtractionProgress extractionProgress
                 ++ "\nAverage Queue Length: "
@@ -67,6 +70,11 @@ renderDownloadProgress :: Maybe Word64 -> String
 renderDownloadProgress Nothing = "N/A"
 renderDownloadProgress (Just bytes) =
     show (bytes `div` 1_000_000) ++ " MB"
+
+renderCountingProgress :: Maybe Word64 -> String
+renderCountingProgress Nothing = "N/A"
+renderCountingProgress (Just count) =
+    show count ++ " UTxOs counted"
 
 renderExtractionProgress :: Maybe ExtractionProgress -> String
 renderExtractionProgress Nothing = "N/A"
