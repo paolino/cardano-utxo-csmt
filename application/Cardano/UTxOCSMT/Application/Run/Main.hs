@@ -57,7 +57,8 @@ import Cardano.UTxOCSMT.Application.Run.Setup
     )
 import Cardano.UTxOCSMT.Application.Run.Traces
     ( MainTraces (..)
-    , renderMainTraces
+    , matchExtractionEvents
+    , renderThrottledMainTraces
     , stealMetricsEvent
     )
 import Cardano.UTxOCSMT.HTTP.Server (runAPIServer, runDocsServer)
@@ -75,7 +76,8 @@ import Control.Tracer (Contravariant (..), traceWith)
 import Data.Tracer.Intercept (intercept)
 import Data.Tracer.LogFile (logTracer)
 import Data.Tracer.ThreadSafe (newThreadSafeTracer)
-import Data.Tracer.Timestamps (addTimestampsTracer)
+import Data.Tracer.Throttle (throttleByFrequency)
+import Data.Tracer.Timestamp (timestampTracer)
 import Data.Tracer.TraceWith
     ( contra
     , trace
@@ -133,10 +135,12 @@ main = withUtf8 $ do
                     , metricsFrequency = 1_000_000
                     }
         TraceWith{tracer, trace, contra} <-
-            fmap (intercept metricsEvent stealMetricsEvent)
-                $ newThreadSafeTracer
-                $ contramap renderMainTraces
-                $ addTimestampsTracer basicTracer
+            fmap (intercept metricsEvent stealMetricsEvent) $ do
+                throttled <-
+                    throttleByFrequency
+                        [matchExtractionEvents]
+                        (contramap renderThrottledMainTraces basicTracer)
+                newThreadSafeTracer $ timestampTracer throttled
         startHTTPService
             (trace . HTTPServiceError)
             (trace ServeDocs)

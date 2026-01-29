@@ -1,7 +1,9 @@
 module Cardano.UTxOCSMT.Application.Run.Traces
     ( MainTraces (..)
     , renderMainTraces
+    , renderThrottledMainTraces
     , stealMetricsEvent
+    , matchExtractionEvents
     )
 where
 
@@ -45,6 +47,9 @@ import Cardano.UTxOCSMT.Mithril.Import
     , renderImportTrace
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
+import Data.Time.Format (defaultTimeLocale, formatTime)
+import Data.Tracer.Throttle (Throttled (..))
+import Data.Tracer.Timestamp (Timestamped (..))
 
 {- | Main application trace types for logging various events during
 the application lifecycle.
@@ -130,3 +135,38 @@ stealMetricsEvent (Mithril (ImportExtraction ExtractionStreamStarting)) =
 stealMetricsEvent (Mithril (ImportExtraction (ExtractionProgress count))) =
     Just $ ExtractionProgressEvent count
 stealMetricsEvent _ = Nothing
+
+{- | Match extraction events for throttling.
+
+Returns frequency in Hz (events per second) for events that should be
+throttled. ExtractionCounting and ExtractionProgress are throttled to
+1 Hz to avoid flooding logs during bootstrap.
+-}
+matchExtractionEvents :: MainTraces -> Maybe Double
+matchExtractionEvents = \case
+    Mithril (ImportExtraction (ExtractionCounting _)) -> Just 1.0
+    Mithril (ImportExtraction (ExtractionProgress _)) -> Just 1.0
+    _ -> Nothing
+
+{- | Render a throttled 'MainTraces' value to a log string.
+
+Includes timestamp and drop count information when events were throttled.
+-}
+renderThrottledMainTraces :: Throttled MainTraces -> String
+renderThrottledMainTraces Throttled{throttledEvent, throttledDropped} =
+    let Timestamped{timestampedTime, timestampedEvent} = throttledEvent
+        baseMsg = renderMainTraces timestampedEvent
+        timestampStr =
+            "["
+                ++ formatTime
+                    defaultTimeLocale
+                    "%Y-%m-%d %H:%M:%S"
+                    timestampedTime
+                ++ "] "
+        droppedSuffix
+            | throttledDropped > 0 =
+                " (+" ++ show throttledDropped ++ " dropped)"
+            | otherwise = ""
+    in  if null baseMsg
+            then ""
+            else timestampStr ++ baseMsg ++ droppedSuffix
