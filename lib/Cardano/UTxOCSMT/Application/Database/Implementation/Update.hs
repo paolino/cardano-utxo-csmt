@@ -83,6 +83,7 @@ data UpdateTrace slot hash
     = UpdateArmageddon ArmageddonTrace
     | UpdateForwardTip slot Int Int (Maybe hash)
     | UpdateNewState [slot]
+    deriving (Show)
 
 renderUpdateTrace :: Show slot => UpdateTrace slot hash -> String
 renderUpdateTrace (UpdateArmageddon t) = renderArmageddonTrace t

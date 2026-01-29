@@ -185,6 +185,7 @@ data MetricsEvent
       HeaderSyncProgressEvent SlotNo SlotNo
     | -- | download progress (bytes downloaded so far)
       DownloadProgressEvent Word64
+    deriving (Show)
 
 makePrisms ''MetricsEvent
 
@@ -404,6 +405,7 @@ data Metrics = Metrics
     , downloadedBytes :: Maybe Word64
     -- ^ Bytes downloaded during Mithril snapshot download
     }
+    deriving (Show)
 
 instance ToJSON Metrics where
     toJSON

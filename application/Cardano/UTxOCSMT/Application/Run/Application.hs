@@ -64,6 +64,7 @@ data ApplicationTrace
       ApplicationBlockProcessed SlotNo Int
     | -- | Header sync progress during Mithril catch-up
       ApplicationHeaderSkipProgress HeaderSkipProgress
+    deriving (Show)
 
 -- | Render an 'ApplicationTrace'
 renderApplicationTrace :: ApplicationTrace -> String

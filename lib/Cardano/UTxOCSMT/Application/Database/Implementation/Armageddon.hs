@@ -37,6 +37,7 @@ data ArmageddonTrace
     = ArmageddonStarted
     | ArmageddonCompleted
     | SetupDone
+    deriving (Show)
 
 renderArmageddonTrace :: ArmageddonTrace -> String
 renderArmageddonTrace ArmageddonStarted = " Armageddon cleanup started."
