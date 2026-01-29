@@ -1,6 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE NumericUnderscores #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 {- |
 Module      : Cardano.UTxOCSMT.Application.Metrics
@@ -31,8 +30,26 @@ module Cardano.UTxOCSMT.Application.Metrics
 where
 
 import CSMT.Hashes (Hash)
-import Cardano.UTxOCSMT.Application.BlockFetch
-    ( EventQueueLength (..)
+import Cardano.UTxOCSMT.Application.Metrics.Types
+    ( BootstrapPhase (..)
+    , ExtractionProgress (..)
+    , HeaderSyncProgress (..)
+    , Metrics (..)
+    , MetricsEvent (..)
+    , MetricsParams (..)
+    , renderBlockPoint
+    , renderPoint
+    , _BaseCheckpointEvent
+    , _BlockFetchEvent
+    , _BlockInfoEvent
+    , _BootstrapPhaseEvent
+    , _ChainTipEvent
+    , _DownloadProgressEvent
+    , _ExtractionProgressEvent
+    , _ExtractionTotalEvent
+    , _HeaderSyncProgressEvent
+    , _MerkleRootEvent
+    , _UTxOChangeEvent
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (Header, Point)
 import Control.Comonad (Comonad (..))
@@ -50,68 +67,25 @@ import Control.Concurrent.Class.MonadSTM.Strict
     )
 import Control.Foldl (Fold (..), handles)
 import Control.Foldl qualified as Fold
+import Control.Foldl.Extra (averageOverWindow, speedoMeter)
 import Control.Lens
     ( APrism'
     , Lens'
     , aside
     , lens
     , to
-    , (&)
-    , (.~)
-    , (?~)
     , _Wrapped
     )
-import Control.Lens.TH (makePrisms)
 import Control.Monad (forever, (<=<))
 import Control.Tracer (Tracer (..))
-import Data.Aeson (ToJSON (..), object, (.=))
 import Data.Profunctor (Profunctor (..))
-import Data.Proxy (Proxy (..))
 import Data.SOP.Strict (index_NS)
-import Data.Swagger
-    ( ToSchema (..)
-    , declareSchemaRef
-    , description
-    , properties
-    , required
-    )
-import Data.Swagger qualified as Swagger
-import Data.Text qualified as Text
-import Data.Time (UTCTime, diffUTCTime)
+import Data.Time (UTCTime)
 import Data.Tracer.Timestamp (Timestamped (..), timestampTracer)
 import Data.Word (Word64)
-import GHC.IsList (IsList (..))
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHeader (..))
 import Ouroboros.Consensus.HardFork.Combinator qualified as HF
-import Ouroboros.Network.Block (SlotNo (..), blockPoint)
-import Ouroboros.Network.Block qualified as Network
-import Ouroboros.Network.Point (Block (..), WithOrigin (..))
-
------ library functions to help with metrics collection -----
-
--- Track the speed of events over a sliding window.
-speedoMeter :: Int -> Fold UTCTime Double
-speedoMeter window = Fold count Nothing getSpeed
-  where
-    getSpeed Nothing = 0
-    getSpeed (Just (Nothing, _, _)) = 0
-    getSpeed (Just (Just (startTime, endTime, cnt), _, _)) =
-        fromIntegral cnt / realToFrac (diffUTCTime endTime startTime)
-    count acc time = case acc of
-        Nothing -> Just (Nothing, time, 0)
-        Just (speed, startTime, cnt)
-            | cnt < window ->
-                Just (speed, startTime, cnt + 1)
-            | otherwise -> Just (Just (startTime, time, cnt), time, 0)
-
--- Average over a rolling window
-averageOverWindow :: Fractional a => Int -> Fold a a
-averageOverWindow window = Fold step [] getAverage
-  where
-    step xs x = take window (x : xs)
-    getAverage xs =
-        let l = length xs
-        in  if l == 0 then 0 else sum xs / fromIntegral l
+import Ouroboros.Network.Block (SlotNo (..))
 
 -- | Lens for accessing the event in a 'Timestamped' wrapper
 timestampedEventL :: Lens' (Timestamped a) a
@@ -121,155 +95,7 @@ timestampedEventL = lens timestampedEvent (\t e -> t{timestampedEvent = e})
 timedAsTuple :: Timestamped a -> (UTCTime, a)
 timedAsTuple (Timestamped t e) = (t, e)
 
----------- Metrics specific code ----------
-
--- | Bootstrap phase during startup
-data BootstrapPhase
-    = -- | Downloading Mithril snapshot
-      Downloading
-    | -- | Counting UTxOs in snapshot
-      Counting
-    | -- | Extracting UTxOs from Mithril snapshot
-      Extracting
-    | -- | Syncing headers after Mithril import
-      SyncingHeaders
-    | -- | Fully synced with chain tip
-      Synced
-    deriving (Show, Eq)
-
-instance ToJSON BootstrapPhase where
-    toJSON = \case
-        Downloading -> "downloading"
-        Counting -> "counting"
-        Extracting -> "extracting"
-        SyncingHeaders -> "syncing_headers"
-        Synced -> "synced"
-
-instance ToSchema BootstrapPhase where
-    declareNamedSchema _ =
-        return
-            $ Swagger.NamedSchema (Just "BootstrapPhase")
-            $ mempty
-            & Swagger.type_ ?~ Swagger.SwaggerString
-            & Swagger.enum_
-                ?~ [ "downloading"
-                   , "counting"
-                   , "extracting"
-                   , "syncing_headers"
-                   , "synced"
-                   ]
-            & description
-                ?~ "Current bootstrap phase: extracting, syncing_headers, \
-                   \or synced"
-
--- | The signal we receive to update the metrics
-data MetricsEvent
-    = -- | some blocks are going to be fetched
-      BlockFetchEvent EventQueueLength
-    | -- | one utxo change has been processed
-      UTxOChangeEvent
-    | -- | one block has been processed
-      BlockInfoEvent Header
-    | -- | the current merkle root
-      MerkleRootEvent Hash
-    | -- | the base checkpoint for the UTxO set
-      BaseCheckpointEvent Point
-    | -- | the current chain tip slot from ChainSync
-      ChainTipEvent SlotNo
-    | -- | current bootstrap phase
-      BootstrapPhaseEvent BootstrapPhase
-    | -- | extraction total (from decoded ledger state)
-      ExtractionTotalEvent Word64
-    | -- | extraction progress (UTxOs extracted so far)
-      ExtractionProgressEvent Word64
-    | -- | header sync progress (current slot, target slot)
-      HeaderSyncProgressEvent SlotNo SlotNo
-    | -- | download progress (bytes downloaded so far)
-      DownloadProgressEvent Word64
-    deriving (Show)
-
-makePrisms ''MetricsEvent
-
--- | Progress of UTxO extraction from Mithril snapshot
-data ExtractionProgress = ExtractionProgress
-    { extractionCurrent :: Word64
-    -- ^ Number of UTxOs extracted so far
-    , extractionTotal :: Maybe Word64
-    -- ^ Total number of UTxOs to extract (if known)
-    , extractionPercent :: Maybe Double
-    -- ^ Percentage complete (if total is known)
-    , extractionRate :: Double
-    -- ^ Extraction rate (UTxOs per second)
-    }
-    deriving (Show, Eq)
-
-instance ToJSON ExtractionProgress where
-    toJSON
-        ExtractionProgress
-            { extractionCurrent
-            , extractionTotal
-            , extractionPercent
-            , extractionRate
-            } =
-            object
-                [ "current" .= extractionCurrent
-                , "total" .= extractionTotal
-                , "percent" .= extractionPercent
-                , "rate" .= extractionRate
-                ]
-
-instance ToSchema ExtractionProgress where
-    declareNamedSchema _ = do
-        word64Schema <- declareSchemaRef (Proxy @Word64)
-        maybeWord64Schema <- declareSchemaRef (Proxy @(Maybe Word64))
-        maybeDoubleSchema <- declareSchemaRef (Proxy @(Maybe Double))
-        doubleSchema <- declareSchemaRef (Proxy @Double)
-        return
-            $ Swagger.NamedSchema (Just "ExtractionProgress")
-            $ mempty
-            & Swagger.type_ ?~ Swagger.SwaggerObject
-            & properties
-                .~ fromList
-                    [ ("current", word64Schema)
-                    , ("total", maybeWord64Schema)
-                    , ("percent", maybeDoubleSchema)
-                    , ("rate", doubleSchema)
-                    ]
-            & required .~ ["current", "rate"]
-            & description
-                ?~ "Progress of UTxO extraction from Mithril snapshot"
-
--- | Progress of header synchronization after Mithril import
-data HeaderSyncProgress = HeaderSyncProgress
-    { headerCurrentSlot :: SlotNo
-    -- ^ Current slot being processed
-    , headerTargetSlot :: SlotNo
-    -- ^ Target slot to reach
-    }
-    deriving (Show, Eq)
-
-instance ToJSON HeaderSyncProgress where
-    toJSON HeaderSyncProgress{headerCurrentSlot, headerTargetSlot} =
-        object
-            [ "currentSlot" .= unSlotNo headerCurrentSlot
-            , "targetSlot" .= unSlotNo headerTargetSlot
-            ]
-
-instance ToSchema HeaderSyncProgress where
-    declareNamedSchema _ = do
-        word64Schema <- declareSchemaRef (Proxy @Word64)
-        return
-            $ Swagger.NamedSchema (Just "HeaderSyncProgress")
-            $ mempty
-            & Swagger.type_ ?~ Swagger.SwaggerObject
-            & properties
-                .~ fromList
-                    [ ("currentSlot", word64Schema)
-                    , ("targetSlot", word64Schema)
-                    ]
-            & required .~ ["currentSlot", "targetSlot"]
-            & description
-                ?~ "Progress of header synchronization after Mithril import"
+---------- Metrics specific folds ----------
 
 type TimestampedMetrics = Timestamped MetricsEvent
 
@@ -383,145 +209,6 @@ headerSyncProgressFold =
 -- track download progress (bytes downloaded)
 downloadProgressFold :: Fold TimestampedMetrics (Maybe Word64)
 downloadProgressFold = handles (timestampedEventL . _DownloadProgressEvent) Fold.last
-
--- | Tracked metrics
-data Metrics = Metrics
-    { averageQueueLength :: Double
-    , maxQueueLength :: Maybe Int
-    , utxoChangesCount :: Int
-    , lastBlockPoint :: Maybe (UTCTime, Header)
-    , utxoSpeed :: Double
-    , blockSpeed :: Double
-    , currentEra :: Maybe String
-    , currentMerkleRoot :: Maybe Hash
-    , baseCheckpoint :: Maybe Point
-    , chainTipSlot :: Maybe SlotNo
-    -- ^ The current chain tip slot from ChainSync protocol
-    , bootstrapPhase :: Maybe BootstrapPhase
-    -- ^ Current bootstrap phase during startup
-    , extractionProgress :: Maybe ExtractionProgress
-    -- ^ Progress of UTxO extraction from Mithril snapshot
-    , headerSyncProgress :: Maybe HeaderSyncProgress
-    -- ^ Progress of header synchronization after Mithril import
-    , downloadedBytes :: Maybe Word64
-    -- ^ Bytes downloaded during Mithril snapshot download
-    }
-    deriving (Show)
-
-instance ToJSON Metrics where
-    toJSON
-        Metrics
-            { averageQueueLength
-            , maxQueueLength
-            , utxoChangesCount
-            , lastBlockPoint
-            , utxoSpeed
-            , blockSpeed
-            , currentEra
-            , currentMerkleRoot
-            , baseCheckpoint
-            , chainTipSlot
-            , bootstrapPhase
-            , extractionProgress
-            , headerSyncProgress
-            , downloadedBytes
-            } =
-            object
-                [ "averageQueueLength" .= averageQueueLength
-                , "maxQueueLength" .= maxQueueLength
-                , "utxoChangesCount" .= utxoChangesCount
-                , "lastBlockPoint"
-                    .= fmap (Text.pack . renderBlockPoint) lastBlockPoint
-                , "utxoSpeed" .= utxoSpeed
-                , "blockSpeed" .= blockSpeed
-                , "currentEra" .= currentEra
-                , "currentMerkleRoot" .= fmap (Text.pack . show) currentMerkleRoot
-                , "baseCheckpoint" .= fmap (Text.pack . renderPoint) baseCheckpoint
-                , "chainTipSlot" .= fmap unSlotNo chainTipSlot
-                , "bootstrapPhase" .= bootstrapPhase
-                , "extractionProgress" .= extractionProgress
-                , "headerSyncProgress" .= headerSyncProgress
-                , "downloadedBytes" .= downloadedBytes
-                ]
-
-renderBlockPoint :: (a, Header) -> [Char]
-renderBlockPoint (_, header) = renderPoint $ blockPoint header
-
--- | Render a Point as a string for display
-renderPoint
-    :: Point -> [Char]
-renderPoint (Network.Point Origin) = "Origin"
-renderPoint (Network.Point (At block)) =
-    show (blockPointHash block)
-        ++ "@"
-        ++ show (unSlotNo $ blockPointSlot block)
-
-instance ToSchema Metrics where
-    declareNamedSchema _ = do
-        doubleSchema <- declareSchemaRef (Proxy @Double)
-        maybeIntSchema <- declareSchemaRef (Proxy @(Maybe Int))
-        intSchema <- declareSchemaRef (Proxy @Int)
-        maybeStringSchema <- declareSchemaRef (Proxy @(Maybe String))
-        maybeWord64Schema <- declareSchemaRef (Proxy @(Maybe Word64))
-        maybeBootstrapPhaseSchema <-
-            declareSchemaRef (Proxy @(Maybe BootstrapPhase))
-        maybeExtractionProgressSchema <-
-            declareSchemaRef (Proxy @(Maybe ExtractionProgress))
-        maybeHeaderSyncProgressSchema <-
-            declareSchemaRef (Proxy @(Maybe HeaderSyncProgress))
-        return
-            $ Swagger.NamedSchema (Just "Metrics")
-            $ mempty
-            & Swagger.type_ ?~ Swagger.SwaggerObject
-            & properties
-                .~ fromList
-                    [ ("averageQueueLength", doubleSchema)
-                    , ("maxQueueLength", maybeIntSchema)
-                    , ("utxoChangesCount", intSchema)
-                    , ("lastBlockPoint", maybeStringSchema)
-                    , ("utxoSpeed", doubleSchema)
-                    , ("blockSpeed", doubleSchema)
-                    , ("currentEra", maybeStringSchema)
-                    , ("currentMerkleRoot", maybeStringSchema)
-                    , ("baseCheckpoint", maybeStringSchema)
-                    , ("chainTipSlot", maybeWord64Schema)
-                    , ("bootstrapPhase", maybeBootstrapPhaseSchema)
-                    , ("extractionProgress", maybeExtractionProgressSchema)
-                    , ("headerSyncProgress", maybeHeaderSyncProgressSchema)
-                    , ("downloadedBytes", maybeWord64Schema)
-                    ]
-            & required
-                .~ [ "averageQueueLength"
-                   , "maxQueueLength"
-                   , "utxoChangesCount"
-                   , "lastBlockPoint"
-                   , "utxoSpeed"
-                   , "blockSpeed"
-                   , "currentEra"
-                   , "currentMerkleRoot"
-                   , "baseCheckpoint"
-                   , "chainTipSlot"
-                   , "bootstrapPhase"
-                   , "extractionProgress"
-                   , "headerSyncProgress"
-                   , "downloadedBytes"
-                   ]
-            & description
-                ?~ "Metrics about CSMT operations and blockchain synchronization"
-
--- | Metrics configuration parameters
-data MetricsParams = MetricsParams
-    { qlWindow :: Int
-    -- ^ how many samples to consider for average queue length
-    , utxoSpeedWindow :: Int
-    -- ^ how many samples to consider for speed calculation
-    , blockSpeedWindow :: Int
-    -- ^ how many samples to consider for speed calculation
-    , metricsOutput :: Metrics -> IO ()
-    -- ^ function to output the metrics
-    , metricsFrequency :: Int
-    -- ^ frequency in microseconds to output the metrics
-    }
 
 -- track the whole set of metrics
 metricsFold :: MetricsParams -> Fold TimestampedMetrics Metrics
