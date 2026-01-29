@@ -20,6 +20,10 @@
                     "minimum": 0,
                     "type": "integer"
                 },
+                "eta": {
+                    "format": "double",
+                    "type": "number"
+                },
                 "percent": {
                     "format": "double",
                     "type": "number"
