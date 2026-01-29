@@ -5,13 +5,15 @@ where
 
 import CSMT ()
 import Cardano.UTxOCSMT.Application.Metrics
-    ( Metrics (..)
+    ( ExtractionProgress (..)
+    , Metrics (..)
     , renderBlockPoint
     )
 import Data.Maybe (fromMaybe)
 import Ouroboros.Network.Block (blockNo)
 import System.Console.ANSI (hClearScreen, hSetCursorPosition)
 import System.IO (stdout)
+import Text.Printf (printf)
 
 renderMetrics :: Metrics -> IO ()
 renderMetrics
@@ -24,11 +26,17 @@ renderMetrics
         , blockSpeed
         , currentEra
         , currentMerkleRoot
+        , bootstrapPhase
+        , extractionProgress
         } = do
         hClearScreen stdout
         hSetCursorPosition stdout 0 0
         putStrLn
-            $ "Average Queue Length: "
+            $ "Bootstrap Phase: "
+                ++ maybe "N/A" show bootstrapPhase
+                ++ "\nExtraction Progress: "
+                ++ renderExtractionProgress extractionProgress
+                ++ "\nAverage Queue Length: "
                 ++ show averageQueueLength
                 ++ "\nMax Queue Length: "
                 ++ show maxQueueLength
@@ -48,3 +56,16 @@ renderMetrics
                 ++ maybe "N/A" show currentMerkleRoot
                 ++ "\nCurrent Era: "
                 ++ fromMaybe "N/A" currentEra
+
+renderExtractionProgress :: Maybe ExtractionProgress -> String
+renderExtractionProgress Nothing = "N/A"
+renderExtractionProgress (Just ExtractionProgress{..}) =
+    show extractionCurrent
+        ++ " / "
+        ++ maybe "?" show extractionTotal
+        ++ " ("
+        ++ maybe "?" (printf "%.1f") extractionPercent
+        ++ "%)"
+        ++ " @ "
+        ++ printf "%.0f" extractionRate
+        ++ " UTxO/s"
