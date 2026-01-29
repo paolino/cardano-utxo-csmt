@@ -54,7 +54,6 @@ import Data.List (sortOn)
 import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Tracer.Throttling (every)
 import Data.Word (Word64)
 import Streaming (Of, Stream, effect)
 import Streaming.ByteString qualified as SB
@@ -339,7 +338,7 @@ counting
     :: Tracer IO ExtractionTrace
     -> Stream (Of (LazyByteString, LazyByteString)) IO ()
     -> Stream (Of (LazyByteString, LazyByteString)) IO ()
-counting (every 1000 -> tracer) = go 0
+counting tracer = go 0
   where
     go !count stream' = effect $ do
         next <- S.next stream'
@@ -510,7 +509,7 @@ trackExtractionProgress
     -> Word64
     -> Stream (Of (LazyByteString, LazyByteString)) IO ()
     -> Stream (Of (LazyByteString, LazyByteString)) IO ()
-trackExtractionProgress (every 1000 -> tracer) = go
+trackExtractionProgress tracer = go
   where
     go !count stream' = do
         next <- lift $ S.next stream'
