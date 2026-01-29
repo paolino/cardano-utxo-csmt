@@ -151,6 +151,7 @@ library library
     Cardano.UTxOCSMT.Application.Database.RocksDB
     Cardano.UTxOCSMT.Application.KeepAlive
     Cardano.UTxOCSMT.Application.Metrics
+    Cardano.UTxOCSMT.Application.Metrics.Types
     Cardano.UTxOCSMT.Application.Options
     Cardano.UTxOCSMT.Application.SampleList
     Cardano.UTxOCSMT.Application.UTxOs
@@ -164,6 +165,7 @@ library library
     Cardano.UTxOCSMT.Ouroboros.Codecs
     Cardano.UTxOCSMT.Ouroboros.Connection
     Cardano.UTxOCSMT.Ouroboros.Types
+    Control.Foldl.Extra
     Data.List.SampleFibonacci
 
   build-depends:
