@@ -57,7 +57,7 @@ import Cardano.UTxOCSMT.Application.Run.Setup
     )
 import Cardano.UTxOCSMT.Application.Run.Traces
     ( MainTraces (..)
-    , matchExtractionEvents
+    , matchHighFrequencyEvents
     , renderThrottledMainTraces
     , stealMetricsEvent
     )
@@ -138,7 +138,7 @@ main = withUtf8 $ do
             fmap (intercept metricsEvent stealMetricsEvent) $ do
                 throttled <-
                     throttleByFrequency
-                        [matchExtractionEvents]
+                        [matchHighFrequencyEvents]
                         (contramap renderThrottledMainTraces basicTracer)
                 newThreadSafeTracer $ timestampTracer throttled
         startHTTPService
