@@ -3,6 +3,8 @@
         "BootstrapPhase": {
             "description": "Current bootstrap phase: extracting, syncing_headers, or synced",
             "enum": [
+                "downloading",
+                "counting",
                 "extracting",
                 "syncing_headers",
                 "synced"
@@ -18,9 +20,19 @@
                     "minimum": 0,
                     "type": "integer"
                 },
+                "percent": {
+                    "format": "double",
+                    "type": "number"
+                },
                 "rate": {
                     "format": "double",
                     "type": "number"
+                },
+                "total": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
                 }
             },
             "required": [
@@ -131,6 +143,12 @@
                 "currentMerkleRoot": {
                     "type": "string"
                 },
+                "downloadedBytes": {
+                    "format": "int64",
+                    "maximum": 1.8446744073709551615e19,
+                    "minimum": 0,
+                    "type": "integer"
+                },
                 "extractionProgress": {
                     "$ref": "#/definitions/ExtractionProgress"
                 },
@@ -168,7 +186,8 @@
                 "chainTipSlot",
                 "bootstrapPhase",
                 "extractionProgress",
-                "headerSyncProgress"
+                "headerSyncProgress",
+                "downloadedBytes"
             ],
             "type": "object"
         },
