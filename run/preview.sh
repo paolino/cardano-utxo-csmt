@@ -23,7 +23,7 @@ echo "  Log: $LOG_PATH"
 echo "  API: http://localhost:$API_PORT"
 echo "  Docs: http://localhost:$API_DOCS_PORT"
 
-exec nix run .#cardano-utxo -- \
+exec cabal run cardano-utxo -- \
     --network preview \
     --node-name localhost \
     --port 3037 \
@@ -31,6 +31,5 @@ exec nix run .#cardano-utxo -- \
     --log-path "$LOG_PATH" \
     --api-port "$API_PORT" \
     --api-docs-port "$API_DOCS_PORT" \
-    --enable-metrics-reporting \
     --mithril-bootstrap \
     "$@"
