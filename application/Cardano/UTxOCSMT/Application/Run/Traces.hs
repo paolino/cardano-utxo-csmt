@@ -127,6 +127,8 @@ stealMetricsEvent (NotEmpty point) =
     Just $ BaseCheckpointEvent point
 stealMetricsEvent (Mithril ImportStarting) =
     Just $ BootstrapPhaseEvent Downloading
+stealMetricsEvent (Mithril (ImportMithril (MithrilDownloadProgress bytes))) =
+    Just $ DownloadProgressEvent bytes
 stealMetricsEvent (Mithril (ImportExtractingUTxO _)) =
     Just $ BootstrapPhaseEvent Extracting
 stealMetricsEvent (Mithril (ImportExtraction (ExtractionCounting count))) =
