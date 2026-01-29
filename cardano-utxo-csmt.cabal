@@ -157,6 +157,9 @@ library library
     Data.Tracer.Intercept
     Data.Tracer.LogFile
     Data.Tracer.ThreadSafe
+    Data.Tracer.Throttle
+    Data.Tracer.Throttling
+    Data.Tracer.Timestamp
     Data.Tracer.Timestamps
     Data.Tracer.TraceWith
 
@@ -319,6 +322,7 @@ test-suite unit-tests
     , streaming
     , temporary
     , text
+    , time
     , transformers
     , wai
     , wai-extra
@@ -334,6 +338,7 @@ test-suite unit-tests
     Cardano.UTxOCSMT.Mithril.ClientSpec
     Cardano.UTxOCSMT.Mithril.ImportSpec
     Data.List.SampleFibonacciSpec
+    Data.Tracer.ThrottleSpec
 
 benchmark bench
   import:           warnings
