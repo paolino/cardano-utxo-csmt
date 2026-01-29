@@ -190,9 +190,13 @@ extractionProgressFold window =
                 , extractionTotal = mTotal
                 , extractionPercent = calcPercent current <$> mTotal
                 , extractionRate = rate
+                , extractionEta = calcEta current rate <$> mTotal
                 }
     calcPercent current total =
         (fromIntegral current / fromIntegral total) * 100
+    calcEta current rate total
+        | rate > 0 = fromIntegral (total - current) / rate
+        | otherwise = 0
 
 -- track header sync progress
 headerSyncProgressFold

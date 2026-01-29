@@ -12,6 +12,9 @@ import Cardano.UTxOCSMT.Application.Metrics
     , renderBlockPoint
     )
 import Data.Maybe (fromMaybe)
+import Data.Time.Clock (secondsToDiffTime)
+import Data.Time.Format (defaultTimeLocale, formatTime)
+import Data.Time.LocalTime (TimeOfDay, timeToTimeOfDay)
 import Data.Word (Word64)
 import Ouroboros.Network.Block (blockNo)
 import System.Console.ANSI (hClearScreen, hSetCursorPosition)
@@ -88,3 +91,12 @@ renderExtractionProgress (Just ExtractionProgress{..}) =
         ++ " @ "
         ++ printf "%.0f" extractionRate
         ++ " UTxO/s"
+        ++ " - ETA: "
+        ++ maybe "?" formatEta extractionEta
+
+formatEta :: Double -> String
+formatEta seconds =
+    formatTime defaultTimeLocale "%H:%M:%S" tod
+  where
+    tod :: TimeOfDay
+    tod = timeToTimeOfDay $ secondsToDiffTime $ round seconds

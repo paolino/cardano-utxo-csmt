@@ -154,6 +154,8 @@ data ExtractionProgress = ExtractionProgress
     -- ^ Percentage complete (if total is known)
     , extractionRate :: Double
     -- ^ Extraction rate (UTxOs per second)
+    , extractionEta :: Maybe Double
+    -- ^ Estimated seconds remaining (if total and rate are known)
     }
     deriving (Show, Eq)
 
@@ -164,12 +166,14 @@ instance ToJSON ExtractionProgress where
             , extractionTotal
             , extractionPercent
             , extractionRate
+            , extractionEta
             } =
             object
                 [ "current" .= extractionCurrent
                 , "total" .= extractionTotal
                 , "percent" .= extractionPercent
                 , "rate" .= extractionRate
+                , "eta" .= extractionEta
                 ]
 
 instance ToSchema ExtractionProgress where
@@ -188,6 +192,7 @@ instance ToSchema ExtractionProgress where
                     , ("total", maybeWord64Schema)
                     , ("percent", maybeDoubleSchema)
                     , ("rate", doubleSchema)
+                    , ("eta", maybeDoubleSchema)
                     ]
             & required .~ ["current", "rate"]
             & description
