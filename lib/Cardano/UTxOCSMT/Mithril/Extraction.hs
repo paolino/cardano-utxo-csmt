@@ -43,7 +43,7 @@ import Codec.CBOR.Read
     )
 import Control.Exception (IOException, try)
 import Control.Monad.ST (RealWorld, stToIO)
-import Control.Monad.Trans (MonadIO (..), lift)
+import Control.Monad.Trans (lift)
 import Control.Tracer (Tracer, traceWith)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
@@ -328,26 +328,23 @@ countUtxos tracer tvarPath =
                     Just len -> pure (fromIntegral len)
                     Nothing -> do
                         -- Count by streaming through with progress
-                        fmap fromIntegral
-                            $ S.length_
-                            $ counting tracer
+                        counting tracer
                             $ streamKVPairs Nothing remainingStream
 
--- | Count stream elements with progress tracking
+-- | Count stream elements with progress tracing
 counting
     :: Tracer IO ExtractionTrace
-    -> Stream (Of (LazyByteString, LazyByteString)) IO ()
-    -> Stream (Of (LazyByteString, LazyByteString)) IO ()
-counting tracer = go 0
-  where
-    go !count stream' = effect $ do
-        next <- S.next stream'
-        pure $ case next of
-            Left () -> pure ()
-            Right (_, rest) -> do
-                let newCount = count + 1
-                liftIO $ traceWith tracer $ ExtractionCounting newCount
-                go newCount rest
+    -> Stream (Of a) IO ()
+    -> IO Word64
+counting tracer =
+    S.foldM_
+        ( \count _ -> do
+            let newCount = count + 1
+            traceWith tracer $ ExtractionCounting newCount
+            pure newCount
+        )
+        (pure 0)
+        pure
 
 {- | Parse the tvar file header incrementally
 
