@@ -51,6 +51,7 @@ import Cardano.UTxOCSMT.Mithril.Streaming
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
 import Control.Tracer (Tracer, contramap, traceWith)
 import Data.ByteString.Lazy (ByteString)
+import Data.Tracer.TraceWith (trace, tracer, pattern TraceWith)
 import Data.Word (Word64)
 import Database.RocksDB (BatchOp, ColumnFamily)
 import Ouroboros.Network.Block qualified as Network
@@ -148,30 +149,30 @@ importFromMithril
         IO
     -- ^ CSMT transaction runner for database operations
     -> IO ImportResult
-importFromMithril tracer config runner = do
-    traceWith tracer ImportStarting
+importFromMithril TraceWith{tracer, trace} config runner = do
+    trace ImportStarting
 
     -- Step 1: Fetch latest snapshot metadata
-    traceWith tracer
+    trace
         $ ImportMithril
         $ MithrilFetchingSnapshot (mithrilAggregatorUrl config)
     snapshotResult <- fetchLatestSnapshot config
 
     case snapshotResult of
         Left err -> do
-            traceWith tracer $ ImportError err
+            trace $ ImportError err
             pure $ ImportFailed err
         Right snapshot -> do
             let digest = snapshotDigest snapshot
                 slot = snapshotBeaconSlot snapshot
                 epoch = snapshotBeaconEpoch snapshot
 
-            traceWith tracer
+            trace
                 $ ImportMithril
                 $ MithrilSnapshotFound digest slot epoch
 
             -- Step 2: Download and verify snapshot
-            traceWith tracer
+            trace
                 $ ImportMithril
                 $ MithrilDownloading digest (mithrilDownloadDir config)
 
