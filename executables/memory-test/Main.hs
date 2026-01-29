@@ -24,7 +24,7 @@ import Cardano.UTxOCSMT.Mithril.Extraction
     , extractUTxOsFromSnapshot
     , renderExtractionTrace
     )
-import Control.Tracer (Tracer, contramap, nullTracer, stdoutTracer)
+import Control.Tracer (Tracer, contramap, stdoutTracer)
 import Data.Time (diffUTCTime, getCurrentTime)
 import Data.Word (Word64)
 import Network.HTTP.Client (newManager)

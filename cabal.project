@@ -34,3 +34,11 @@ source-repository-package
   location: https://github.com/paolino/cardano-read-ledger
   tag: 2a9521e9282e4955f5454847c3f87eb7e7ac1730
   --sha256: sha256-g4pY67U7PqJ8DIKmhYImMs7FW3NmQFKPl4PYqMQT+sE=
+
+source-repository-package
+  type: git
+  location: https://github.com/paolino/contra-tracer-contrib
+  tag: 2c8340e01670539b28f606b66a999b276c3ba215
+
+-- Enable iohk flag for contra-tracer-contrib to use CHaP's simple API
+constraints: contra-tracer-contrib +iohk
