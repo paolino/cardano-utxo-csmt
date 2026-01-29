@@ -51,14 +51,16 @@ import Control.Foldl (Fold (..), handles)
 import Control.Foldl qualified as Fold
 import Control.Lens
     ( APrism'
+    , Lens'
     , aside
+    , lens
     , to
     , (&)
     , (.~)
     , (?~)
     , _Wrapped
     )
-import Control.Lens.TH (makeLensesFor, makePrisms)
+import Control.Lens.TH (makePrisms)
 import Control.Monad (forever, (<=<))
 import Control.Tracer (Tracer (..))
 import Data.Aeson (ToJSON (..), object, (.=))
@@ -74,7 +76,8 @@ import Data.Swagger
     )
 import Data.Swagger qualified as Swagger
 import Data.Text qualified as Text
-import Data.Time (UTCTime, diffUTCTime, getCurrentTime)
+import Data.Time (UTCTime, diffUTCTime)
+import Data.Tracer.Timestamp (Timestamped (..), timestampTracer)
 import Data.Word (Word64)
 import GHC.IsList (IsList (..))
 import Ouroboros.Consensus.HardFork.Combinator (OneEraHeader (..))
@@ -109,27 +112,13 @@ averageOverWindow window = Fold step [] getAverage
         let l = length xs
         in  if l == 0 then 0 else sum xs / fromIntegral l
 
--- Event tagged with the time it was recorded.
-data Timed a = Timed
-    { timedTimestamp :: UTCTime
-    , timedEvent :: a
-    }
+-- | Lens for accessing the event in a 'Timestamped' wrapper
+timestampedEventL :: Lens' (Timestamped a) a
+timestampedEventL = lens timestampedEvent (\t e -> t{timestampedEvent = e})
 
-makeLensesFor
-    [ ("timedEvent", "timedEventL")
-    ]
-    ''Timed
-
--- support to use event prisms with 'aside'
-timedAsTuple :: Timed a -> (UTCTime, a)
-timedAsTuple (Timed t e) = (t, e)
-
--- A tracer that tags metrics events with the current time.
-traceMetricsWithTime
-    :: Tracer IO (Timed a) -> Tracer IO a
-traceMetricsWithTime (Tracer tr) = Tracer $ \me -> do
-    now <- getCurrentTime
-    tr $ Timed{timedTimestamp = now, timedEvent = me}
+-- | Support to use event prisms with 'aside'
+timedAsTuple :: Timestamped a -> (UTCTime, a)
+timedAsTuple (Timestamped t e) = (t, e)
 
 ---------- Metrics specific code ----------
 
@@ -280,31 +269,31 @@ instance ToSchema HeaderSyncProgress where
             & description
                 ?~ "Progress of header synchronization after Mithril import"
 
-type TimedMetrics = Timed MetricsEvent
+type TimestampedMetrics = Timestamped MetricsEvent
 
 -- track the last block point seen
 lastBlockPointFold
-    :: Fold (Timed MetricsEvent) (Maybe (UTCTime, Header))
+    :: Fold TimestampedMetrics (Maybe (UTCTime, Header))
 lastBlockPointFold =
     lmap timedAsTuple
         $ handles (aside _BlockInfoEvent) Fold.last
 
 -- track average block fetch queue length
-averageBlockFetchLength :: Int -> Fold TimedMetrics Double
+averageBlockFetchLength :: Int -> Fold TimestampedMetrics Double
 averageBlockFetchLength window =
     handles
-        (timedEventL . _BlockFetchEvent . _Wrapped . to fromIntegral)
+        (timestampedEventL . _BlockFetchEvent . _Wrapped . to fromIntegral)
         $ averageOverWindow window
 
 -- track max block fetch queue length
-maxBlockFetchQueueLength :: Fold TimedMetrics (Maybe Int)
+maxBlockFetchQueueLength :: Fold TimestampedMetrics (Maybe Int)
 maxBlockFetchQueueLength =
     handles
-        (timedEventL . _BlockFetchEvent . _Wrapped)
+        (timestampedEventL . _BlockFetchEvent . _Wrapped)
         Fold.maximum
 
 -- track speed of some event type
-speedOfSomeEvent :: Int -> APrism' a b -> Fold (Timed a) Double
+speedOfSomeEvent :: Int -> APrism' a b -> Fold (Timestamped a) Double
 speedOfSomeEvent window prism =
     lmap timedAsTuple
         $ handles (aside prism)
@@ -312,23 +301,23 @@ speedOfSomeEvent window prism =
         $ speedoMeter window
 
 -- speed of utxo changes processed
-utxoSpeedFold :: Int -> Fold TimedMetrics Double
+utxoSpeedFold :: Int -> Fold TimestampedMetrics Double
 utxoSpeedFold window = speedOfSomeEvent window _UTxOChangeEvent
 
 -- speed of blocks processed
-blockSpeedFold :: Int -> Fold TimedMetrics Double
+blockSpeedFold :: Int -> Fold TimestampedMetrics Double
 blockSpeedFold window = speedOfSomeEvent window _BlockInfoEvent
 
 -- total number of utxo changes processed
-totalUtxoChangesFold :: Fold TimedMetrics Int
+totalUtxoChangesFold :: Fold TimestampedMetrics Int
 totalUtxoChangesFold =
     handles
-        (timedEventL . _UTxOChangeEvent)
+        (timestampedEventL . _UTxOChangeEvent)
         Fold.genericLength
 
-currentEraFold :: Fold TimedMetrics (Maybe String)
+currentEraFold :: Fold TimestampedMetrics (Maybe String)
 currentEraFold =
-    handles (timedEventL . _BlockInfoEvent) $ lmap getEra Fold.last
+    handles (timestampedEventL . _BlockInfoEvent) $ lmap getEra Fold.last
   where
     getEra :: Header -> String
     getEra (HF.HardForkHeader (OneEraHeader x)) = case index_NS x of
@@ -341,27 +330,27 @@ currentEraFold =
         6 -> "conway"
         _ -> "unknown"
 
-getCurrentMerkleRoot :: Fold TimedMetrics (Maybe Hash)
-getCurrentMerkleRoot = handles (timedEventL . _MerkleRootEvent) Fold.last
+getCurrentMerkleRoot :: Fold TimestampedMetrics (Maybe Hash)
+getCurrentMerkleRoot = handles (timestampedEventL . _MerkleRootEvent) Fold.last
 
-getBaseCheckpoint :: Fold TimedMetrics (Maybe Point)
-getBaseCheckpoint = handles (timedEventL . _BaseCheckpointEvent) Fold.last
+getBaseCheckpoint :: Fold TimestampedMetrics (Maybe Point)
+getBaseCheckpoint = handles (timestampedEventL . _BaseCheckpointEvent) Fold.last
 
 -- track the chain tip slot
-chainTipSlotFold :: Fold TimedMetrics (Maybe SlotNo)
-chainTipSlotFold = handles (timedEventL . _ChainTipEvent) Fold.last
+chainTipSlotFold :: Fold TimestampedMetrics (Maybe SlotNo)
+chainTipSlotFold = handles (timestampedEventL . _ChainTipEvent) Fold.last
 
 -- track bootstrap phase
-bootstrapPhaseFold :: Fold TimedMetrics (Maybe BootstrapPhase)
-bootstrapPhaseFold = handles (timedEventL . _BootstrapPhaseEvent) Fold.last
+bootstrapPhaseFold :: Fold TimestampedMetrics (Maybe BootstrapPhase)
+bootstrapPhaseFold = handles (timestampedEventL . _BootstrapPhaseEvent) Fold.last
 
 -- track extraction progress with rate calculation
 extractionProgressFold
-    :: Int -> Fold TimedMetrics (Maybe ExtractionProgress)
+    :: Int -> Fold TimestampedMetrics (Maybe ExtractionProgress)
 extractionProgressFold window =
     combine
-        <$> handles (timedEventL . _ExtractionTotalEvent) Fold.last
-        <*> handles (timedEventL . _ExtractionProgressEvent) Fold.last
+        <$> handles (timestampedEventL . _ExtractionTotalEvent) Fold.last
+        <*> handles (timestampedEventL . _ExtractionProgressEvent) Fold.last
         <*> speedOfSomeEvent window _ExtractionProgressEvent
   where
     combine _ Nothing _ = Nothing
@@ -377,9 +366,10 @@ extractionProgressFold window =
         (fromIntegral current / fromIntegral total) * 100
 
 -- track header sync progress
-headerSyncProgressFold :: Fold TimedMetrics (Maybe HeaderSyncProgress)
+headerSyncProgressFold
+    :: Fold TimestampedMetrics (Maybe HeaderSyncProgress)
 headerSyncProgressFold =
-    handles (timedEventL . _HeaderSyncProgressEvent)
+    handles (timestampedEventL . _HeaderSyncProgressEvent)
         $ lmap toProgress Fold.last
   where
     toProgress (current, target) =
@@ -389,8 +379,8 @@ headerSyncProgressFold =
             }
 
 -- track download progress (bytes downloaded)
-downloadProgressFold :: Fold TimedMetrics (Maybe Word64)
-downloadProgressFold = handles (timedEventL . _DownloadProgressEvent) Fold.last
+downloadProgressFold :: Fold TimestampedMetrics (Maybe Word64)
+downloadProgressFold = handles (timestampedEventL . _DownloadProgressEvent) Fold.last
 
 -- | Tracked metrics
 data Metrics = Metrics
@@ -531,7 +521,7 @@ data MetricsParams = MetricsParams
     }
 
 -- track the whole set of metrics
-metricsFold :: MetricsParams -> Fold TimedMetrics Metrics
+metricsFold :: MetricsParams -> Fold TimestampedMetrics Metrics
 metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
     Metrics
         <$> averageBlockFetchLength qlWindow
@@ -553,18 +543,19 @@ metricsFold MetricsParams{qlWindow, utxoSpeedWindow, blockSpeedWindow} =
 metricsTracer :: MetricsParams -> IO (Tracer IO MetricsEvent)
 metricsTracer params@MetricsParams{metricsFrequency, metricsOutput} = do
     eventsQ <- newTQueueIO -- unbounded or we risk to slow down the application
+    -- shared state for metrics accumulation
     metricsV <- newTVarIO $ metricsFold params
-    let tracer =
-            traceMetricsWithTime
-                $ Tracer
-                $ \msg -> atomically $ writeTQueue eventsQ msg
     link <=< async $ forever $ do
         -- let events accumulate, no need to load CPU as they come with timestamps
         threadDelay 100_000
         atomically $ do
             es <- flushTQueue eventsQ
             modifyTVar metricsV $ \metrics -> Fold.fold (duplicate metrics) es
+    -- output loop
     link <=< async $ forever $ do
         threadDelay metricsFrequency
         readTVarIO metricsV >>= metricsOutput . extract
-    pure tracer
+    pure
+        $ timestampTracer
+        $ Tracer
+        $ \msg -> atomically $ writeTQueue eventsQ msg
