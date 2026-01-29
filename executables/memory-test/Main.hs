@@ -24,6 +24,7 @@ import Cardano.UTxOCSMT.Mithril.Extraction
     , extractUTxOsFromSnapshot
     , renderExtractionTrace
     )
+import Control.Monad (when)
 import Control.Tracer (Tracer, contramap, stdoutTracer)
 import Data.Time (diffUTCTime, getCurrentTime)
 import Data.Word (Word64)
@@ -132,7 +133,7 @@ main = do
                             fail $ "Extraction failed: " ++ show err
                         Right (count, slot) -> do
                             putStrLn ""
-                            putStrLn $ "=== Results ==="
+                            putStrLn "=== Results ==="
                             putStrLn $ "Total UTxOs: " ++ show count
                             putStrLn $ "Slot: " ++ show slot
                             putStrLn
@@ -162,9 +163,7 @@ countUtxos = go 0
             Right (_, rest) -> do
                 -- Progress every 100k
                 let newCount = count + 1
-                if newCount `mod` 100000 == 0
-                    then do
-                        putStrLn $ "  " ++ show newCount ++ " UTxOs..."
-                        hFlush stdout
-                    else pure ()
+                when (newCount `mod` 100000 == 0) $ do
+                    putStrLn $ "  " ++ show newCount ++ " UTxOs..."
+                    hFlush stdout
                 go newCount rest
