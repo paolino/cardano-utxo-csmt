@@ -90,6 +90,7 @@ import Ouroboros.Consensus.Ledger.SupportsPeerSelection (PortNumber)
 import Ouroboros.Network.Block (SlotNo (..))
 import Paths_cardano_utxo_csmt (version)
 import System.Exit (exitSuccess)
+import System.IO (BufferMode (..), hSetBuffering, stdout)
 
 -- | Start an HTTP service in a linked async thread
 startHTTPService
@@ -108,6 +109,7 @@ startHTTPService logError traceAction (Just port) runServer = do
 -- | Main entry point
 main :: IO ()
 main = withUtf8 $ do
+    hSetBuffering stdout NoBuffering
     options@Options
         { dbPath
         , logPath
