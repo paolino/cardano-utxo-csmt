@@ -408,6 +408,26 @@ After Mithril import, perform a header-only chain sync scan:
 
 This adds a few seconds of header scanning but avoids replaying all blocks.
 
+## Alternative: Direct Chain Sync
+
+For environments where Mithril is not available or not desired, a direct chain sync
+approach is planned that syncs the UTxO set from the node without external dependencies.
+
+See [issue #58](https://github.com/cardano-scaling/cardano-utxo-csmt/issues/58) for details
+and [architecture](architecture.md#direct-chain-sync-planned) for the data flow.
+
+**Planned optimizations:**
+
+1. **Era projection**: Project all TxOut to Conway era before storage, simplifying
+   era handling with a unified representation
+
+2. **Change reduction**: Buffer UTxO changes in an intermediate database and reduce
+   them before loading into the CSMT. This eliminates transient UTxOs (created and
+   consumed during sync) from ever touching the CSMT
+
+These optimizations should significantly reduce the work needed to build the initial
+CSMT compared to naive block-by-block replay.
+
 ## Security Considerations
 
 ### Ed25519 Ancillary Verification (Implemented)

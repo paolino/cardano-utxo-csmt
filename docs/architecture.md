@@ -97,3 +97,46 @@ When the node reports a rollback:
 3. Resume following from the new chain tip
 
 If rollback exceeds stored history (truncation), the service restarts sync from genesis.
+
+## Bootstrapping
+
+Two approaches are available for initial UTxO set population:
+
+### Mithril Bootstrap
+
+Downloads a certified UTxO snapshot from Mithril aggregators, then syncs headers
+to reach the snapshot slot before continuing normal block processing.
+
+See [Mithril Bootstrap](mithril-bootstrap.md) for details.
+
+### Direct Chain Sync (Planned)
+
+For environments where Mithril is not available, a direct chain sync approach
+is planned with two key optimizations:
+
+1. **Era projection**: Project all TxOut to Conway era before storage
+2. **Change reduction**: Reduce UTxO changes inline as ChainSync writes to the buffer,
+   eliminating transient UTxOs that are created and consumed during sync
+3. **Double buffering**: ChainSync and CSMT work concurrently on separate buffers
+
+```
+ChainSync ──reduce+write──► Buffer A              CSMT idle
+                               │
+                             [swap]
+                               │
+ChainSync ──reduce+write──► Buffer B    ◄──── CSMT applies Buffer A
+                               │
+                             [swap]
+                               │
+ChainSync ──reduce+write──► Buffer A    ◄──── CSMT applies Buffer B
+```
+
+Reduction happens inline during ChainSync writes:
+
+- **Insert**: add `TxIn → TxOut` to active buffer
+- **Delete**: if `TxIn` exists in buffer, remove it (transient UTxO eliminated);
+  otherwise record as pending delete
+
+CSMT applies the already-reduced batch without additional processing.
+
+See [issue #58](https://github.com/cardano-scaling/cardano-utxo-csmt/issues/58) for details.
