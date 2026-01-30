@@ -299,19 +299,17 @@ setupDB
                                     , setupMithrilSlot = Just importSlot
                                     }
                         ImportFailed err -> do
-                            -- Fall back to regular setup if Mithril fails
                             trace $ Mithril $ ImportError err
-                            txRunTransaction clearBootstrapInProgress
-                            regularSetup
+                            error
+                                $ "Mithril bootstrap failed: "
+                                    <> show err
+                                    <> "\nCannot continue with incomplete bootstrap."
                         ImportExtractionFailed err -> do
-                            -- Fall back to regular setup if extraction fails
                             trace $ Mithril $ ImportExtractionError err
-                            txRunTransaction clearBootstrapInProgress
-                            regularSetup
-                        ImportSkipped _reason -> do
-                            -- Fall back to regular setup
-                            txRunTransaction clearBootstrapInProgress
-                            regularSetup
+                            error
+                                $ "Mithril extraction failed: "
+                                    <> show err
+                                    <> "\nCannot continue with incomplete bootstrap."
 
 {- | Check if the rollbacks column family is empty.
 

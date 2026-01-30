@@ -175,7 +175,7 @@ mkReadyResponse threshold mMetrics =
                     , slotsBehind = behind
                     }
   where
-    -- | Safe subtraction that returns 0 instead of underflowing
+    -- \| Safe subtraction that returns 0 instead of underflowing
     safeSub :: Word64 -> Word64 -> Word64
     safeSub a b
         | a >= b = a - b
