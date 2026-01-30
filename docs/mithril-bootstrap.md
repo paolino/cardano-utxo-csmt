@@ -48,10 +48,12 @@ Bootstrap time depends on three phases:
 
 **Notes:**
 
-- Times measured on typical hardware (SSD, 100Mbps connection)
+- Times measured with a **local cardano-node** (same machine or LAN)
+- Hardware: SSD storage, 100Mbps+ connection for Mithril download
 - Extraction rate: ~800-1000 UTxOs/second
-- Header sync rate: ~15,000-20,000 slots/second
+- Header sync rate: ~15,000-20,000 slots/second (depends on node proximity)
 - Mainnet estimates are projections based on preview/preprod measurements
+- Remote nodes will have slower header sync due to network latency
 
 ### Comparison with Full Sync
 
