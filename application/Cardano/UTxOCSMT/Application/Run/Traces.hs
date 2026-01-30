@@ -32,7 +32,7 @@ import Cardano.UTxOCSMT.Application.Metrics
     , MetricsEvent (..)
     )
 import Cardano.UTxOCSMT.Application.Run.Application
-    ( ApplicationTrace
+    ( ApplicationTrace (..)
     , renderApplicationTrace
     )
 import Cardano.UTxOCSMT.Mithril.Client
@@ -175,6 +175,8 @@ stealMetricsEvent (Update (UpdateForwardTip _ _ _ (Just merkleRoot))) =
     Just $ MerkleRootEvent merkleRoot
 stealMetricsEvent (NotEmpty point) =
     Just $ BaseCheckpointEvent point
+stealMetricsEvent (Application (ApplicationRollingBack _)) =
+    Just $ BootstrapPhaseEvent RollingBack
 stealMetricsEvent (Mithril ImportStarting) =
     Just $ BootstrapPhaseEvent Downloading
 stealMetricsEvent (Mithril (ImportMithril (MithrilDownloadProgress bytes))) =

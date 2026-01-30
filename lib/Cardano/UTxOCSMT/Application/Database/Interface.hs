@@ -23,6 +23,7 @@ module Cardano.UTxOCSMT.Application.Database.Interface
       -- * Update interface
     , Update (..)
     , State (..)
+    , TipOf
 
       -- * Database dump, for inspection/testing
     , Dump (..)
@@ -53,6 +54,9 @@ data State m slot key value
     | -- | Database is truncating, no possible rollbacks, the protocol should reset to Origin
       Truncating (Update m slot key value)
 
+-- | Type family mapping a slot type to its chain tip type
+type family TipOf slot
+
 {- | Represents an update to the database. We offer a continuation-based API so that
 the database implementation can thread an internal state without messing up with the
 monad stack.
@@ -61,9 +65,12 @@ Valid consumers should always pick the continuation
 data Update m slot key value = Update
     { forwardTipApply
         :: slot
+        -> TipOf slot
         -> [Operation key value]
         -> m (Update m slot key value)
-    -- ^ Apply operations at the given slot, moving the tip forward
+    {- ^ Apply operations at the given slot with current chain tip,
+    moving the tip forward
+    -}
     , rollbackTipApply
         :: WithOrigin slot
         -> m (State m slot key value)
