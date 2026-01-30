@@ -14,10 +14,16 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Prisms (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Query
-    ( mkTransactionedQuery
+    ( clearBootstrapInProgress
+    , getBaseCheckpoint
+    , isBootstrapInProgress
+    , mkTransactionedQuery
+    , putBaseCheckpoint
+    , setBootstrapInProgress
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
+    , RunCSMTTransaction (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     ( mkUpdate
@@ -233,6 +239,40 @@ spec = do
             logOnFailure $ "Generated dumps: " ++ show ds
             let past = (Origin, d0) :| ds
             propertyForwardFinalityAfterFinalityReduceTheRollbackWindow past
+    describe "ConfigCol operations" $ do
+        it "stores and retrieves base checkpoint" $ do
+            withSystemTempDirectory "rocksdb-config-test" $ \dir ->
+                withRocksDB dir $ \(RunRocksDB r) -> do
+                    db <- r ask
+                    RunCSMTTransaction{txRunTransaction} <-
+                        newRunRocksDBCSMTTransaction db prisms csmtContext
+                    -- Initially no checkpoint
+                    result1 <- txRunTransaction getBaseCheckpoint
+                    result1 `shouldBe` Nothing
+                    -- Store checkpoint
+                    txRunTransaction $ putBaseCheckpoint (42 :: Int)
+                    -- Retrieve checkpoint
+                    result2 <- txRunTransaction getBaseCheckpoint
+                    result2 `shouldBe` Just 42
+        it "tracks bootstrap in progress marker" $ do
+            withSystemTempDirectory "rocksdb-bootstrap-test" $ \dir ->
+                withRocksDB dir $ \(RunRocksDB r) -> do
+                    db <- r ask
+                    RunCSMTTransaction{txRunTransaction} <-
+                        newRunRocksDBCSMTTransaction db prisms csmtContext
+                    -- Initially not in progress
+                    inProgress1 <- txRunTransaction isBootstrapInProgress
+                    inProgress1 `shouldBe` False
+                    -- Set marker
+                    txRunTransaction $ setBootstrapInProgress (100 :: Int)
+                    -- Now in progress
+                    inProgress2 <- txRunTransaction isBootstrapInProgress
+                    inProgress2 `shouldBe` True
+                    -- Clear marker
+                    txRunTransaction clearBootstrapInProgress
+                    -- No longer in progress
+                    inProgress3 <- txRunTransaction isBootstrapInProgress
+                    inProgress3 `shouldBe` False
 
 withRocksDB
     :: FilePath
@@ -245,6 +285,7 @@ withRocksDB path action = do
         [ ("kv", config)
         , ("csmt", config)
         , ("rollbacks", config)
+        , ("config", config)
         ]
         $ \db -> do
             action $ RunRocksDB $ flip runReaderT db
