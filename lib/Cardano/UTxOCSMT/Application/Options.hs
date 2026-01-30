@@ -114,6 +114,8 @@ data Options = Options
     , mithrilOptions :: MithrilOptions
     , syncThreshold :: Word64
     -- ^ Number of slots behind chain tip to consider synced (default: 100)
+    , skipNodeValidation :: Bool
+    -- ^ Skip node connection validation before Mithril bootstrap
     }
 
 -- | Get effective network magic from options
@@ -293,6 +295,19 @@ syncThresholdOption =
         , option
         ]
 
+skipNodeValidationSwitch :: Parser Bool
+skipNodeValidationSwitch =
+    setting
+        [ long "skip-node-validation"
+        , help
+            "Skip node connection validation before Mithril bootstrap. \
+            \By default, the application validates that the node is \
+            \reachable before starting the potentially long Mithril import."
+        , reader auto
+        , value False
+        , switch True
+        ]
+
 -- | Main options parser with YAML config file support
 optionsParser :: Parser Options
 optionsParser = withYamlConfig configFileOption optionsParserCore
@@ -313,6 +328,7 @@ optionsParserCore =
         <*> metricsSwitch
         <*> subConfig "mithril" mithrilOptionsParser'
         <*> syncThresholdOption
+        <*> skipNodeValidationSwitch
   where
     mkOptions
         net
@@ -326,7 +342,8 @@ optionsParserCore =
         apiDocs
         metrics
         mithril
-        threshold =
+        threshold
+        skipValidation =
             Options
                 { network = net
                 , nodeName = node
@@ -340,4 +357,5 @@ optionsParserCore =
                 , metricsOn = metrics
                 , mithrilOptions = mithril{mithrilNetwork = mithrilNetworkFor net}
                 , syncThreshold = threshold
+                , skipNodeValidation = skipValidation
                 }
