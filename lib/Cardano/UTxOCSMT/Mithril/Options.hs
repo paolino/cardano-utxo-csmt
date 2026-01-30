@@ -118,9 +118,9 @@ mithrilAggregatorOption :: Parser (Maybe String)
 mithrilAggregatorOption =
     optional
         $ setting
-            [ long "aggregator-endpoint"
-            , env "AGGREGATOR_ENDPOINT"
-            , conf "aggregator-endpoint"
+            [ long "mithril-aggregator-endpoint"
+            , env "MITHRIL_AGGREGATOR_ENDPOINT"
+            , conf "mithril-aggregator-endpoint"
             , help
                 "Mithril aggregator endpoint URL. \
                 \Required for Mithril bootstrap. Uses network default if not set. \
@@ -135,9 +135,9 @@ mithrilGenesisVkOption :: Parser (Maybe Text)
 mithrilGenesisVkOption =
     optional
         $ setting
-            [ long "genesis-verification-key"
-            , env "GENESIS_VERIFICATION_KEY"
-            , conf "genesis-verification-key"
+            [ long "mithril-genesis-verification-key"
+            , env "MITHRIL_GENESIS_VERIFICATION_KEY"
+            , conf "mithril-genesis-verification-key"
             , help
                 "Genesis verification key for mithril-client CLI (JSON-hex format). \
                 \Required when using mithril-client binary for STM verification. \
@@ -182,9 +182,9 @@ mithrilAncillaryVkOption :: Parser (Maybe Text)
 mithrilAncillaryVkOption =
     optional
         $ setting
-            [ long "ancillary-verification-key"
-            , env "ANCILLARY_VERIFICATION_KEY"
-            , conf "ancillary-verification-key"
+            [ long "mithril-ancillary-verification-key"
+            , env "MITHRIL_ANCILLARY_VERIFICATION_KEY"
+            , conf "mithril-ancillary-verification-key"
             , help
                 "Ed25519 ancillary verification key (JSON-hex format). \
                 \Required for Ed25519 verification of Mithril ancillary files. \

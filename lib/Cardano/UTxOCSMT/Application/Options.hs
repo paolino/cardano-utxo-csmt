@@ -140,7 +140,7 @@ configFileOption =
 dbPathOption :: Parser FilePath
 dbPathOption =
     setting
-        [ long "csmt-db-path"
+        [ long "db-path"
         , short 'd'
         , help "Path to the CSMT RocksDB database"
         , metavar "DIR"
@@ -198,9 +198,9 @@ nodeNameOption =
 portNumberOption :: Parser PortNumber
 portNumberOption =
     setting
-        [ long "port"
+        [ long "node-port"
         , short 'p'
-        , conf "port"
+        , conf "node-port"
         , help "Peer node port"
         , metavar "INT"
         , reader auto
