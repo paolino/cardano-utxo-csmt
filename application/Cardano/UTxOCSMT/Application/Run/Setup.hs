@@ -28,14 +28,20 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
 import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     ( clearBootstrapInProgress
     , getBaseCheckpoint
+    , getSkipSlot
     , isBootstrapInProgress
     , putBaseCheckpoint
     , setBootstrapInProgress
+    , setSkipSlot
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( RunCSMTTransaction (..)
     )
 import Cardano.UTxOCSMT.Application.Options (MithrilOptions (..))
+import Cardano.UTxOCSMT.Application.Run.Config
+    ( decodePoint
+    , encodePoint
+    )
 import Cardano.UTxOCSMT.Application.Run.Traces
     ( MainTraces (..)
     , NodeValidationTrace (..)
@@ -139,7 +145,7 @@ setupDB
     armageddonParams
     runner@RunCSMTTransaction{txRunTransaction} = do
         -- Check for incomplete bootstrap and clean up if needed
-        incomplete <- txRunTransaction isBootstrapInProgress
+        incomplete <- txRunTransaction $ isBootstrapInProgress decodePoint
         when incomplete $ do
             trace IncompleteBootstrapDetected
             cleanup (contra New) runner armageddonParams
@@ -160,7 +166,10 @@ setupDB
                             else regularSetup
                     else regularSetup
             else do
-                response <- txRunTransaction getBaseCheckpoint
+                (response, skipSlot) <- txRunTransaction $ do
+                    cp <- getBaseCheckpoint decodePoint
+                    ss <- getSkipSlot decodePoint
+                    pure (cp, ss)
                 case response of
                     Nothing ->
                         error
@@ -171,7 +180,7 @@ setupDB
                         return
                             SetupResult
                                 { setupStartingPoint = point
-                                , setupMithrilSlot = Nothing
+                                , setupMithrilSlot = skipSlot
                                 }
       where
         -- \| Validate node connection, returning True if OK or skipped
@@ -213,7 +222,8 @@ setupDB
 
         regularSetup = do
             setup (contra New) runner armageddonParams
-            txRunTransaction $ putBaseCheckpoint startingPoint
+            txRunTransaction
+                $ putBaseCheckpoint decodePoint encodePoint startingPoint
             return
                 SetupResult
                     { setupStartingPoint = startingPoint
@@ -273,7 +283,8 @@ setupDB
                                 }
 
                     -- Set bootstrap-in-progress marker before streaming
-                    txRunTransaction $ setBootstrapInProgress startingPoint
+                    txRunTransaction
+                        $ setBootstrapInProgress decodePoint encodePoint
 
                     result <-
                         importFromMithril
@@ -287,12 +298,16 @@ setupDB
                             -- Don't save checkpoint yet - it will be saved when
                             -- we reach the target slot during chain sync
                             setup (contra New) runner armageddonParams
-                            -- Save Origin as initial checkpoint (will be
-                            -- updated when we reach the Mithril slot)
+                            -- Save checkpoint and skip slot (will be cleared
+                            -- when we reach the Mithril slot during chain sync)
                             -- Also clear the bootstrap-in-progress marker
                             txRunTransaction $ do
-                                putBaseCheckpoint importCheckpoint
-                                clearBootstrapInProgress
+                                putBaseCheckpoint
+                                    decodePoint
+                                    encodePoint
+                                    importCheckpoint
+                                setSkipSlot decodePoint encodePoint importSlot
+                                clearBootstrapInProgress decodePoint encodePoint
                             return
                                 SetupResult
                                     { setupStartingPoint = importCheckpoint

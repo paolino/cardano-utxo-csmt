@@ -7,6 +7,8 @@ module Cardano.UTxOCSMT.Application.Run.Config
     , slotHash
     , mFinality
     , distance
+    , encodePoint
+    , decodePoint
     )
 where
 
@@ -42,7 +44,15 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     ( newFinality
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
-import Control.Lens (Prism', lazy, prism', strict, view)
+import Control.Lens
+    ( Prism'
+    , lazy
+    , preview
+    , prism'
+    , review
+    , strict
+    , view
+    )
 import Data.ByteString (StrictByteString)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.ByteString.Short (fromShort)
@@ -195,6 +205,14 @@ slotHash
 slotHash (Network.Point Origin) = error "slotHash: Origin has no hash"
 slotHash (Network.Point (At (Network.Block _ (OneEraHash h)))) =
     Hash $ fromShort h
+
+-- | Encode a Point to ByteString for config storage
+encodePoint :: Point -> StrictByteString
+encodePoint = review (slotP prisms)
+
+-- | Decode a ByteString to Point for config storage
+decodePoint :: StrictByteString -> Maybe Point
+decodePoint = preview (slotP prisms)
 
 {- | Compute the finality point based on slot distance.
 
