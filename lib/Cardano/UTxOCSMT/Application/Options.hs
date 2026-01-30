@@ -3,6 +3,7 @@ module Cardano.UTxOCSMT.Application.Options
     , Limit (..)
     , CardanoNetwork (..)
     , optionsParser
+    , optionsParserCore
 
       -- * Derived option accessors
     , networkMagic
@@ -14,6 +15,11 @@ module Cardano.UTxOCSMT.Application.Options
     , MithrilNetwork (..)
     )
 where
+
+import Autodocodec
+    ( HasCodec (..)
+    , shownBoundedEnumCodec
+    )
 
 import Cardano.UTxOCSMT.Application.BlockFetch
     ( EventQueueLength (..)
@@ -35,6 +41,8 @@ import Network.Socket (PortNumber)
 import OptEnvConf
     ( Parser
     , auto
+    , conf
+    , filePathSetting
     , help
     , long
     , maybeReader
@@ -45,8 +53,10 @@ import OptEnvConf
     , setting
     , short
     , str
+    , subConfig
     , switch
     , value
+    , withYamlConfig
     )
 import Ouroboros.Consensus.Byron.Ledger (ByronBlock)
 import Ouroboros.Consensus.Cardano.Block
@@ -60,6 +70,7 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import Ouroboros.Network.Point (WithOrigin (..))
 import Ouroboros.Network.Point qualified as Network
 import Ouroboros.Network.Point qualified as Network.Point
+import Path (Abs, File, Path)
 import Text.Read (readMaybe)
 
 -- | A limit on the number of blocks to sync
@@ -71,7 +82,10 @@ data CardanoNetwork
     = Mainnet
     | Preprod
     | Preview
-    deriving stock (Show, Eq, Ord)
+    deriving stock (Show, Read, Eq, Ord, Enum, Bounded)
+
+instance HasCodec CardanoNetwork where
+    codec = shownBoundedEnumCodec
 
 -- | Get network magic for a Cardano network
 networkMagicFor :: CardanoNetwork -> NetworkMagic
@@ -129,6 +143,17 @@ portNumber opts = case portNumberOverride opts of
     Just port -> port
     Nothing -> defaultPortFor (network opts)
 
+-- | Option to specify a YAML configuration file
+configFileOption :: Parser (Maybe (Path Abs File))
+configFileOption =
+    optional
+        $ filePathSetting
+            [ long "config-file"
+            , short 'c'
+            , help "Path to YAML configuration file"
+            , metavar "FILE"
+            ]
+
 dbPathOption :: Parser FilePath
 dbPathOption =
     setting
@@ -165,6 +190,7 @@ networkOption =
     setting
         [ long "network"
         , short 'n'
+        , conf "network"
         , help
             "Cardano network (mainnet, preprod, preview). \
             \Sets network magic, default peer node, and Mithril network."
@@ -293,8 +319,13 @@ syncThresholdOption =
         , option
         ]
 
+-- | Main options parser with YAML config file support
 optionsParser :: Parser Options
-optionsParser =
+optionsParser = withYamlConfig configFileOption optionsParserCore
+
+-- | Core options parser (used by withYamlConfig)
+optionsParserCore :: Parser Options
+optionsParserCore =
     mkOptions
         <$> networkOption
         <*> nodeNameOption
@@ -306,7 +337,7 @@ optionsParser =
         <*> apiPortOption
         <*> apiDocsPortOption
         <*> metricsSwitch
-        <*> mithrilOptionsParser'
+        <*> subConfig "mithril" mithrilOptionsParser'
         <*> syncThresholdOption
   where
     mkOptions

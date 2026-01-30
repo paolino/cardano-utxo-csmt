@@ -89,15 +89,6 @@ data MithrilNetwork
     | MithrilPreview
     deriving stock (Show, Eq, Ord)
 
--- | Get default aggregator URL for a network
-defaultAggregatorUrl :: MithrilNetwork -> String
-defaultAggregatorUrl MithrilMainnet =
-    "https://aggregator.release-mainnet.api.mithril.network/aggregator"
-defaultAggregatorUrl MithrilPreprod =
-    "https://aggregator.release-preprod.api.mithril.network/aggregator"
-defaultAggregatorUrl MithrilPreview =
-    "https://aggregator.pre-release-preview.api.mithril.network/aggregator"
-
 -- | Configuration for Mithril client operations
 data MithrilConfig = MithrilConfig
     { mithrilNetwork :: MithrilNetwork
@@ -118,11 +109,17 @@ data MithrilConfig = MithrilConfig
 
 -- | Create default configuration for a network
 defaultMithrilConfig
-    :: Manager -> MithrilNetwork -> FilePath -> MithrilConfig
-defaultMithrilConfig manager network downloadDir =
+    :: Manager
+    -> MithrilNetwork
+    -> String
+    -- ^ Aggregator URL
+    -> FilePath
+    -- ^ Download directory
+    -> MithrilConfig
+defaultMithrilConfig manager network aggregatorUrl downloadDir =
     MithrilConfig
         { mithrilNetwork = network
-        , mithrilAggregatorUrl = defaultAggregatorUrl network
+        , mithrilAggregatorUrl = aggregatorUrl
         , mithrilGenesisVk = Nothing
         , mithrilClientPath = "mithril-client"
         , mithrilDownloadDir = downloadDir
@@ -194,6 +191,8 @@ data MithrilError
       MithrilVerificationFailed AncillaryVerificationError
     | -- | Missing genesis verification key for mithril-client CLI
       MithrilMissingGenesisVk
+    | -- | Missing aggregator URL (not provided via CLI, env, or config)
+      MithrilMissingAggregatorUrl
     deriving stock (Show)
 
 instance Exception MithrilError
@@ -225,6 +224,9 @@ renderMithrilError (MithrilVerificationFailed err) =
     "Ancillary verification failed: " <> show err
 renderMithrilError MithrilMissingGenesisVk =
     "Missing GENESIS_VERIFICATION_KEY for mithril-client CLI"
+renderMithrilError MithrilMissingAggregatorUrl =
+    "Missing aggregator URL. Provide via --aggregator-endpoint, \
+    \AGGREGATOR_ENDPOINT env var, or config file."
 
 -- | Trace events for Mithril operations
 data MithrilTrace

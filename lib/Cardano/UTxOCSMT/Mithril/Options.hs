@@ -25,6 +25,7 @@ import Data.Text qualified as T
 import OptEnvConf
     ( Parser
     , auto
+    , conf
     , env
     , help
     , long
@@ -112,13 +113,14 @@ mithrilNetworkOption =
         , option
         ]
 
--- | Option for aggregator URL (from env or CLI)
+-- | Option for aggregator URL (from env or CLI or config)
 mithrilAggregatorOption :: Parser (Maybe String)
 mithrilAggregatorOption =
     optional
         $ setting
             [ long "aggregator-endpoint"
             , env "AGGREGATOR_ENDPOINT"
+            , conf "aggregator-endpoint"
             , help
                 "Mithril aggregator endpoint URL. \
                 \Required for Mithril bootstrap. Uses network default if not set. \
@@ -128,13 +130,14 @@ mithrilAggregatorOption =
             , option
             ]
 
--- | Option for genesis verification key (from env or CLI)
+-- | Option for genesis verification key (from env or CLI or config)
 mithrilGenesisVkOption :: Parser (Maybe Text)
 mithrilGenesisVkOption =
     optional
         $ setting
             [ long "genesis-verification-key"
             , env "GENESIS_VERIFICATION_KEY"
+            , conf "genesis-verification-key"
             , help
                 "Genesis verification key for mithril-client CLI (JSON-hex format). \
                 \Required when using mithril-client binary for STM verification. \
@@ -149,6 +152,7 @@ mithrilClientPathOption :: Parser FilePath
 mithrilClientPathOption =
     setting
         [ long "mithril-client-path"
+        , conf "client-path"
         , help
             "Path to mithril-client binary. \
             \The mithril-client CLI handles snapshot download and verification."
@@ -164,6 +168,7 @@ mithrilDownloadDirOption =
     optional
         $ setting
             [ long "mithril-download-dir"
+            , conf "download-dir"
             , help
                 "Directory for Mithril snapshot downloads. \
                 \Uses a temporary directory if not specified."
@@ -172,13 +177,14 @@ mithrilDownloadDirOption =
             , option
             ]
 
--- | Option for ancillary verification key (from env or CLI)
+-- | Option for ancillary verification key (from env or CLI or config)
 mithrilAncillaryVkOption :: Parser (Maybe Text)
 mithrilAncillaryVkOption =
     optional
         $ setting
             [ long "ancillary-verification-key"
             , env "ANCILLARY_VERIFICATION_KEY"
+            , conf "ancillary-verification-key"
             , help
                 "Ed25519 ancillary verification key (JSON-hex format). \
                 \Required for Ed25519 verification of Mithril ancillary files. \

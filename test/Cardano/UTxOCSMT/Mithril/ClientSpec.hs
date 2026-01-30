@@ -44,6 +44,15 @@ import Test.Hspec
     , shouldSatisfy
     )
 
+-- | Get default aggregator URL for a network
+defaultAggregatorUrl :: MithrilNetwork -> String
+defaultAggregatorUrl MithrilMainnet =
+    "https://aggregator.release-mainnet.api.mithril.network/aggregator"
+defaultAggregatorUrl MithrilPreprod =
+    "https://aggregator.release-preprod.api.mithril.network/aggregator"
+defaultAggregatorUrl MithrilPreview =
+    "https://aggregator.pre-release-preview.api.mithril.network/aggregator"
+
 spec :: Spec
 spec = describe "Mithril Client E2E" $ do
     describe "fetchLatestSnapshot" $ do
@@ -66,7 +75,8 @@ testDownloadAndVerify :: MithrilNetwork -> IO ()
 testDownloadAndVerify network = do
     manager <- newManager tlsManagerSettings
     withSystemTempDirectory "mithril-test" $ \tmpDir -> do
-        let config = defaultMithrilConfig manager network tmpDir
+        let aggregatorUrl = defaultAggregatorUrl network
+            config = defaultMithrilConfig manager network aggregatorUrl tmpDir
         -- Fetch snapshot metadata
         fetchResult <- fetchLatestSnapshot config
         case fetchResult of
@@ -150,7 +160,8 @@ verifyTxInDecoding samples = go 0 0
 testFetchSnapshot :: MithrilNetwork -> IO ()
 testFetchSnapshot network = do
     manager <- newManager tlsManagerSettings
-    let config = defaultMithrilConfig manager network "/tmp"
+    let aggregatorUrl = defaultAggregatorUrl network
+        config = defaultMithrilConfig manager network aggregatorUrl "/tmp"
     result <- fetchLatestSnapshot config
     case result of
         Left err -> fail $ "Failed to fetch snapshot: " ++ show err

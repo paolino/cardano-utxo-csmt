@@ -45,7 +45,7 @@ import Cardano.UTxOCSMT.Mithril.Options qualified as Mithril
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
 import Control.Tracer (Contravariant (..), Tracer)
 import Data.ByteString.Lazy (LazyByteString)
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (isNothing)
 import Data.Text (unpack)
 import Data.Tracer.TraceWith
     ( contra
@@ -154,67 +154,76 @@ setupDB
                     withSystemTempDirectory "mithril-snapshot" $ \tempDir ->
                         runMithrilBootstrap manager tempDir
 
-        runMithrilBootstrap manager downloadDir = do
-            let baseConfig =
-                    defaultMithrilConfig
-                        manager
-                        (Mithril.mithrilNetwork mithrilOpts)
-                        downloadDir
-                -- Determine ancillary verification key
-                ancillaryVk
-                    | Mithril.mithrilSkipAncillaryVerification mithrilOpts =
-                        Nothing
-                    | Just keyHex <- Mithril.mithrilAncillaryVk mithrilOpts =
-                        either
-                            (const Nothing)
-                            Just
-                            (parseVerificationKey keyHex)
-                    | otherwise =
-                        Nothing
-                mithrilConfig =
-                    baseConfig
-                        { MithrilClient.mithrilAggregatorUrl =
-                            fromMaybe
-                                (MithrilClient.mithrilAggregatorUrl baseConfig)
-                                (Mithril.mithrilAggregatorUrl mithrilOpts)
-                        , MithrilClient.mithrilGenesisVk =
-                            unpack <$> Mithril.mithrilGenesisVk mithrilOpts
-                        , MithrilClient.mithrilClientPath =
-                            Mithril.mithrilClientPath mithrilOpts
-                        , MithrilClient.mithrilAncillaryVk = ancillaryVk
-                        }
+        runMithrilBootstrap manager downloadDir =
+            case Mithril.mithrilAggregatorUrl mithrilOpts of
+                Nothing -> do
+                    -- No aggregator URL provided - fail with clear error
+                    trace
+                        $ Mithril
+                        $ ImportError MithrilClient.MithrilMissingAggregatorUrl
+                    regularSetup
+                Just aggregatorUrl -> do
+                    let baseConfig =
+                            defaultMithrilConfig
+                                manager
+                                (Mithril.mithrilNetwork mithrilOpts)
+                                aggregatorUrl
+                                downloadDir
+                        -- Determine ancillary verification key
+                        ancillaryVk
+                            | Mithril.mithrilSkipAncillaryVerification
+                                mithrilOpts =
+                                Nothing
+                            | Just keyHex <-
+                                Mithril.mithrilAncillaryVk mithrilOpts =
+                                either
+                                    (const Nothing)
+                                    Just
+                                    (parseVerificationKey keyHex)
+                            | otherwise =
+                                Nothing
+                        mithrilConfig =
+                            baseConfig
+                                { MithrilClient.mithrilGenesisVk =
+                                    unpack
+                                        <$> Mithril.mithrilGenesisVk mithrilOpts
+                                , MithrilClient.mithrilClientPath =
+                                    Mithril.mithrilClientPath mithrilOpts
+                                , MithrilClient.mithrilAncillaryVk = ancillaryVk
+                                }
 
-            result <-
-                importFromMithril
-                    (contramap Mithril tracer)
-                    mithrilConfig
-                    runner
+                    result <-
+                        importFromMithril
+                            (contramap Mithril tracer)
+                            mithrilConfig
+                            runner
 
-            case result of
-                ImportSuccess{importCheckpoint, importSlot} -> do
-                    -- Mithril import succeeded, UTxOs already imported
-                    -- Don't save checkpoint yet - it will be saved when
-                    -- we reach the target slot during chain sync
-                    setup (contra New) runner armageddonParams
-                    -- Save Origin as initial checkpoint (will be updated
-                    -- when we reach the Mithril slot)
-                    txRunTransaction $ putBaseCheckpoint importCheckpoint
-                    return
-                        SetupResult
-                            { setupStartingPoint = importCheckpoint
-                            , setupMithrilSlot = Just importSlot
-                            }
-                ImportFailed err -> do
-                    -- Fall back to regular setup if Mithril fails
-                    trace $ Mithril $ ImportError err
-                    regularSetup
-                ImportExtractionFailed err -> do
-                    -- Fall back to regular setup if extraction fails
-                    trace $ Mithril $ ImportExtractionError err
-                    regularSetup
-                ImportSkipped _reason -> do
-                    -- Fall back to regular setup
-                    regularSetup
+                    case result of
+                        ImportSuccess{importCheckpoint, importSlot} -> do
+                            -- Mithril import succeeded, UTxOs already imported
+                            -- Don't save checkpoint yet - it will be saved when
+                            -- we reach the target slot during chain sync
+                            setup (contra New) runner armageddonParams
+                            -- Save Origin as initial checkpoint (will be
+                            -- updated when we reach the Mithril slot)
+                            txRunTransaction
+                                $ putBaseCheckpoint importCheckpoint
+                            return
+                                SetupResult
+                                    { setupStartingPoint = importCheckpoint
+                                    , setupMithrilSlot = Just importSlot
+                                    }
+                        ImportFailed err -> do
+                            -- Fall back to regular setup if Mithril fails
+                            trace $ Mithril $ ImportError err
+                            regularSetup
+                        ImportExtractionFailed err -> do
+                            -- Fall back to regular setup if extraction fails
+                            trace $ Mithril $ ImportExtractionError err
+                            regularSetup
+                        ImportSkipped _reason -> do
+                            -- Fall back to regular setup
+                            regularSetup
 
 {- | Check if the rollbacks column family is empty.
 

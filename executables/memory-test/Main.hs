@@ -26,6 +26,7 @@ import Cardano.UTxOCSMT.Mithril.Extraction
     )
 import Control.Monad (when)
 import Control.Tracer (Tracer, contramap, stdoutTracer)
+import Data.Maybe (fromMaybe)
 import Data.Time (diffUTCTime, getCurrentTime)
 import Data.Word (Word64)
 import Network.HTTP.Client (newManager)
@@ -37,6 +38,7 @@ import OptEnvConf
     , maybeReader
     , metavar
     , option
+    , optional
     , reader
     , runParser
     , setting
@@ -49,6 +51,7 @@ import System.IO (hFlush, stdout)
 
 data Options = Options
     { optNetwork :: MithrilNetwork
+    , optAggregatorUrl :: String
     , optTmpDir :: FilePath
     }
 
@@ -58,9 +61,18 @@ readNetwork "preprod" = Just MithrilPreprod
 readNetwork "preview" = Just MithrilPreview
 readNetwork _ = Nothing
 
+-- | Get default aggregator URL for a network
+defaultAggregatorUrl :: MithrilNetwork -> String
+defaultAggregatorUrl MithrilMainnet =
+    "https://aggregator.release-mainnet.api.mithril.network/aggregator"
+defaultAggregatorUrl MithrilPreprod =
+    "https://aggregator.release-preprod.api.mithril.network/aggregator"
+defaultAggregatorUrl MithrilPreview =
+    "https://aggregator.pre-release-preview.api.mithril.network/aggregator"
+
 optionsParser :: Parser Options
 optionsParser =
-    Options
+    mkOptions
         <$> setting
             [ long "network"
             , help "Mithril network: mainnet, preprod, preview"
@@ -69,6 +81,15 @@ optionsParser =
             , value MithrilPreprod
             , option
             ]
+        <*> optional
+            ( setting
+                [ long "aggregator-endpoint"
+                , help "Mithril aggregator endpoint URL"
+                , metavar "URL"
+                , reader str
+                , option
+                ]
+            )
         <*> setting
             [ long "tmp-dir"
             , help "Temporary directory for snapshot"
@@ -77,6 +98,13 @@ optionsParser =
             , value "/tmp/mithril-memory-test"
             , option
             ]
+  where
+    mkOptions net maybeUrl tmpDir =
+        Options
+            { optNetwork = net
+            , optAggregatorUrl = fromMaybe (defaultAggregatorUrl net) maybeUrl
+            , optTmpDir = tmpDir
+            }
 
 tracer :: Tracer IO ExtractionTrace
 tracer = contramap renderExtractionTrace stdoutTracer
@@ -86,7 +114,7 @@ mithrilTracer = contramap renderMithrilTrace stdoutTracer
 
 main :: IO ()
 main = do
-    Options{optNetwork, optTmpDir} <-
+    Options{optNetwork, optAggregatorUrl, optTmpDir} <-
         runParser version "Memory test for streaming extraction" optionsParser
 
     putStrLn $ "Network: " ++ show optNetwork
@@ -94,7 +122,8 @@ main = do
     putStrLn ""
 
     manager <- newManager tlsManagerSettings
-    let config = defaultMithrilConfig manager optNetwork optTmpDir
+    let config =
+            defaultMithrilConfig manager optNetwork optAggregatorUrl optTmpDir
 
     -- Fetch snapshot metadata
     putStrLn "Fetching snapshot metadata..."
