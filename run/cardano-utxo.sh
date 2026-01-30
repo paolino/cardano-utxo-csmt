@@ -68,8 +68,8 @@ echo "  Docs: http://localhost:$API_DOCS_PORT"
 args=(
     --config-file "$CONFIG_FILE"
     --node-name localhost
-    --port "$NODE_PORT"
-    --csmt-db-path "$DB_PATH"
+    --node-port "$NODE_PORT"
+    --db-path "$DB_PATH"
     --log-path "$LOG_PATH"
     --api-port "$API_PORT"
     --api-docs-port "$API_DOCS_PORT"

@@ -118,21 +118,26 @@ spec = describe "Application.Options" $ do
             mithrilClientPath (mithrilOptions opts)
                 `shouldBe` "/usr/bin/mithril"
 
-    describe "--aggregator-endpoint option" $ do
+    describe "--mithril-aggregator-endpoint option" $ do
         it "accepts aggregator URL" $ do
             let url = "https://aggregator.example.com"
             opts <-
                 expectSuccess
-                    $ runParser ["-d", "/tmp/db", "--aggregator-endpoint", url]
+                    $ runParser
+                        ["-d", "/tmp/db", "--mithril-aggregator-endpoint", url]
             mithrilAggregatorUrl (mithrilOptions opts) `shouldBe` Just url
 
-    describe "--genesis-verification-key option" $ do
+    describe "--mithril-genesis-verification-key option" $ do
         it "accepts genesis verification key" $ do
             let key = "5b313233343536373839305d"
             opts <-
                 expectSuccess
                     $ runParser
-                        ["-d", "/tmp/db", "--genesis-verification-key", key]
+                        [ "-d"
+                        , "/tmp/db"
+                        , "--mithril-genesis-verification-key"
+                        , key
+                        ]
             mithrilGenesisVk (mithrilOptions opts) `shouldBe` Just (T.pack key)
 
     describe "--mithril-download-dir option" $ do
@@ -144,13 +149,17 @@ spec = describe "Application.Options" $ do
             mithrilDownloadDir (mithrilOptions opts)
                 `shouldBe` Just "/tmp/mithril"
 
-    describe "--ancillary-verification-key option" $ do
+    describe "--mithril-ancillary-verification-key option" $ do
         it "accepts ancillary verification key" $ do
             let key = "5b393837363534333231305d"
             opts <-
                 expectSuccess
                     $ runParser
-                        ["-d", "/tmp/db", "--ancillary-verification-key", key]
+                        [ "-d"
+                        , "/tmp/db"
+                        , "--mithril-ancillary-verification-key"
+                        , key
+                        ]
             mithrilAncillaryVk (mithrilOptions opts) `shouldBe` Just (T.pack key)
 
     describe "--mithril-skip-ancillary-verification flag" $ do
@@ -163,33 +172,41 @@ spec = describe "Application.Options" $ do
                 `shouldBe` True
 
     describe "environment variables" $ do
-        it "reads AGGREGATOR_ENDPOINT from environment" $ do
+        it "reads MITHRIL_AGGREGATOR_ENDPOINT from environment" $ do
             let env =
-                    Map.singleton "AGGREGATOR_ENDPOINT" "https://env.example.com"
+                    Map.singleton
+                        "MITHRIL_AGGREGATOR_ENDPOINT"
+                        "https://env.example.com"
             opts <- expectSuccess $ runParserWithEnv ["-d", "/tmp/db"] env
             mithrilAggregatorUrl (mithrilOptions opts)
                 `shouldBe` Just "https://env.example.com"
 
-        it "reads GENESIS_VERIFICATION_KEY from environment" $ do
-            let env = Map.singleton "GENESIS_VERIFICATION_KEY" "envkey123"
+        it "reads MITHRIL_GENESIS_VERIFICATION_KEY from environment" $ do
+            let env =
+                    Map.singleton "MITHRIL_GENESIS_VERIFICATION_KEY" "envkey123"
             opts <- expectSuccess $ runParserWithEnv ["-d", "/tmp/db"] env
             mithrilGenesisVk (mithrilOptions opts) `shouldBe` Just "envkey123"
 
-        it "reads ANCILLARY_VERIFICATION_KEY from environment" $ do
-            let env = Map.singleton "ANCILLARY_VERIFICATION_KEY" "ancillarykey"
+        it "reads MITHRIL_ANCILLARY_VERIFICATION_KEY from environment" $ do
+            let env =
+                    Map.singleton
+                        "MITHRIL_ANCILLARY_VERIFICATION_KEY"
+                        "ancillarykey"
             opts <- expectSuccess $ runParserWithEnv ["-d", "/tmp/db"] env
             mithrilAncillaryVk (mithrilOptions opts)
                 `shouldBe` Just "ancillarykey"
 
         it "CLI option overrides environment variable" $ do
             let env =
-                    Map.singleton "AGGREGATOR_ENDPOINT" "https://env.example.com"
+                    Map.singleton
+                        "MITHRIL_AGGREGATOR_ENDPOINT"
+                        "https://env.example.com"
             opts <-
                 expectSuccess
                     $ runParserWithEnv
                         [ "-d"
                         , "/tmp/db"
-                        , "--aggregator-endpoint"
+                        , "--mithril-aggregator-endpoint"
                         , "https://cli.example.com"
                         ]
                         env
@@ -208,7 +225,7 @@ spec = describe "Application.Options" $ do
                         , "--mithril-bootstrap"
                         , "--mithril-client-path"
                         , "/custom/path"
-                        , "--aggregator-endpoint"
+                        , "--mithril-aggregator-endpoint"
                         , "https://example.com"
                         ]
             network opts `shouldBe` Preprod
@@ -224,7 +241,7 @@ spec = describe "Application.Options" $ do
                 parseYamlObject
                     "network: Preview\n\
                     \node-name: test.example.com\n\
-                    \port: 3001\n\
+                    \node-port: 3001\n\
                     \mithril: {}\n"
             opts <-
                 expectSuccess
@@ -234,11 +251,11 @@ spec = describe "Application.Options" $ do
                         configObj
             network opts `shouldBe` Preview
 
-        it "reads node-name and port from config file" $ do
+        it "reads node-name and node-port from config file" $ do
             configObj <-
                 parseYamlObject
                     "node-name: custom-node.example.com\n\
-                    \port: 9999\n\
+                    \node-port: 9999\n\
                     \mithril: {}\n"
             opts <-
                 expectSuccess
@@ -254,9 +271,9 @@ spec = describe "Application.Options" $ do
                 parseYamlObject
                     "network: Preprod\n\
                     \node-name: test.example.com\n\
-                    \port: 3001\n\
+                    \node-port: 3001\n\
                     \mithril:\n\
-                    \  aggregator-endpoint: https://config.example.com\n"
+                    \  mithril-aggregator-endpoint: https://config.example.com\n"
             opts <-
                 expectSuccess
                     $ runParserWithConfig
@@ -271,15 +288,15 @@ spec = describe "Application.Options" $ do
                 parseYamlObject
                     "network: Preview\n\
                     \node-name: test.example.com\n\
-                    \port: 3001\n\
+                    \node-port: 3001\n\
                     \mithril:\n\
-                    \  aggregator-endpoint: https://config.example.com\n"
+                    \  mithril-aggregator-endpoint: https://config.example.com\n"
             opts <-
                 expectSuccess
                     $ runParserWithConfig
                         [ "-d"
                         , "/tmp/db"
-                        , "--aggregator-endpoint"
+                        , "--mithril-aggregator-endpoint"
                         , "https://cli.example.com"
                         ]
                         Map.empty
@@ -292,12 +309,12 @@ spec = describe "Application.Options" $ do
                 parseYamlObject
                     "network: Preview\n\
                     \node-name: test.example.com\n\
-                    \port: 3001\n\
+                    \node-port: 3001\n\
                     \mithril:\n\
-                    \  aggregator-endpoint: https://config.example.com\n"
+                    \  mithril-aggregator-endpoint: https://config.example.com\n"
             let env =
                     Map.singleton
-                        "AGGREGATOR_ENDPOINT"
+                        "MITHRIL_AGGREGATOR_ENDPOINT"
                         "https://env.example.com"
             opts <-
                 expectSuccess
@@ -326,13 +343,13 @@ runParserWithEnv args env =
         (Just defaultTestConfig)
 
 {- | Default config object for tests
-Includes required node-name, port, and empty mithril section
+Includes required node-name, node-port, and empty mithril section
 -}
 defaultTestConfig :: Object
 defaultTestConfig =
     KeyMap.fromList
         [ ("node-name", String "test-node.example.com")
-        , ("port", Number 3001)
+        , ("node-port", Number 3001)
         , ("mithril", Object mempty)
         ]
 
