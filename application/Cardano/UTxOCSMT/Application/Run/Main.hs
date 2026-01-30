@@ -177,6 +177,10 @@ main = withUtf8 $ do
                     tracer
                     startingPoint
                     mithrilOptions
+                    (networkMagic options)
+                    (nodeName options)
+                    (portNumber options)
+                    (skipNodeValidation options)
                     armageddonParams
                     runner
 

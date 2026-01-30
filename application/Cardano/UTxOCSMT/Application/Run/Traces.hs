@@ -1,5 +1,6 @@
 module Cardano.UTxOCSMT.Application.Run.Traces
     ( MainTraces (..)
+    , NodeValidationTrace (..)
     , renderMainTraces
     , renderThrottledMainTraces
     , stealMetricsEvent
@@ -49,10 +50,24 @@ import Cardano.UTxOCSMT.Mithril.Import
     ( ImportTrace (..)
     , renderImportTrace
     )
+import Cardano.UTxOCSMT.Ouroboros.Connection
+    ( NodeConnectionError (..)
+    )
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.Tracer.Throttle (Throttled (..))
 import Data.Tracer.Timestamp (Timestamped (..))
+import Data.Word (Word16)
+
+-- | Trace events for node connection validation.
+data NodeValidationTrace
+    = -- | Starting validation of node connection
+      ValidatingNodeConnection String Word16
+    | -- | Node connection validation succeeded
+      NodeValidationSuccess
+    | -- | Node connection validation failed
+      NodeValidationFailed NodeConnectionError
+    deriving stock (Show)
 
 {- | Main application trace types for logging various events during
 the application lifecycle.
@@ -80,6 +95,8 @@ data MainTraces
       HTTPServiceError String
     | -- | Application is connecting to the node
       ApplicationStarting
+    | -- | Node connection validation event
+      NodeValidation NodeValidationTrace
     deriving (Show)
 
 -- | Render a 'MainTraces' value to a human-readable log string.
@@ -109,6 +126,30 @@ renderMainTraces (HTTPServiceError err) =
     "ERROR: HTTP service failed to start: " ++ err
 renderMainTraces ApplicationStarting =
     "Starting Ouroboros node connection and chain sync application..."
+renderMainTraces (NodeValidation nvt) =
+    "Node validation: " ++ renderNodeValidationTrace nvt
+
+-- | Render a 'NodeValidationTrace' value to a human-readable log string.
+renderNodeValidationTrace :: NodeValidationTrace -> String
+renderNodeValidationTrace (ValidatingNodeConnection host port) =
+    "Validating connection to node at "
+        ++ host
+        ++ ":"
+        ++ show port
+        ++ "..."
+renderNodeValidationTrace NodeValidationSuccess =
+    "Node connection validated successfully"
+renderNodeValidationTrace (NodeValidationFailed err) =
+    "Node connection validation failed: " ++ renderNodeConnectionError err
+
+-- | Render a 'NodeConnectionError' to a human-readable string.
+renderNodeConnectionError :: NodeConnectionError -> String
+renderNodeConnectionError (NodeResolutionFailed msg) =
+    "Failed to resolve hostname: " ++ msg
+renderNodeConnectionError (NodeConnectionFailed msg) =
+    "Failed to connect: " ++ msg
+renderNodeConnectionError NodeConnectionTimeout =
+    "Connection timed out"
 
 {- | Extract metrics events from main traces for interception.
 

@@ -118,6 +118,7 @@ library application
     , lens
     , memory
     , mtl
+    , network
     , opt-env-conf
     , ouroboros-consensus
     , ouroboros-network-api

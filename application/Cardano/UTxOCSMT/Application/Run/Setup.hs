@@ -1,3 +1,5 @@
+{-# LANGUAGE NumericUnderscores #-}
+
 module Cardano.UTxOCSMT.Application.Run.Setup
     ( SetupResult (..)
     , setupDB
@@ -30,7 +32,10 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( RunCSMTTransaction (..)
     )
 import Cardano.UTxOCSMT.Application.Options (MithrilOptions (..))
-import Cardano.UTxOCSMT.Application.Run.Traces (MainTraces (..))
+import Cardano.UTxOCSMT.Application.Run.Traces
+    ( MainTraces (..)
+    , NodeValidationTrace (..)
+    )
 import Cardano.UTxOCSMT.Mithril.AncillaryVerifier
     ( parseVerificationKey
     )
@@ -42,6 +47,10 @@ import Cardano.UTxOCSMT.Mithril.Import
     , importFromMithril
     )
 import Cardano.UTxOCSMT.Mithril.Options qualified as Mithril
+import Cardano.UTxOCSMT.Ouroboros.Connection
+    ( NodeConnectionError (..)
+    , validateNodeConnection
+    )
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
 import Control.Tracer (Contravariant (..), Tracer)
 import Data.ByteString.Lazy (LazyByteString)
@@ -53,12 +62,14 @@ import Data.Tracer.TraceWith
     , tracer
     , pattern TraceWith
     )
-import Data.Word (Word64)
+import Data.Word (Word16, Word64)
 import Database.KV.Cursor (firstEntry)
 import Database.KV.Transaction (iterating)
 import Database.RocksDB (BatchOp, ColumnFamily)
 import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
+import Network.Socket (PortNumber)
+import Ouroboros.Network.Magic (NetworkMagic)
 import System.IO.Temp (withSystemTempDirectory)
 
 {- | Result of database setup containing the starting point for chain sync
@@ -80,6 +91,9 @@ This function handles three scenarios:
   3. New database without Mithril: Initializes empty database
 
 If Mithril bootstrap fails, falls back to regular setup.
+
+When Mithril bootstrap is enabled, validates the node connection first
+to fail fast if the node is unreachable (rather than after a long import).
 -}
 setupDB
     :: Tracer IO MainTraces
@@ -88,6 +102,14 @@ setupDB
     -- ^ Default starting point (used if not bootstrapping)
     -> MithrilOptions
     -- ^ Mithril configuration options
+    -> NetworkMagic
+    -- ^ Network magic for node connection
+    -> String
+    -- ^ Node hostname
+    -> PortNumber
+    -- ^ Node port
+    -> Bool
+    -- ^ Skip node validation
     -> ArmageddonParams hash
     -- ^ Parameters for database initialization
     -> RunCSMTTransaction
@@ -105,6 +127,10 @@ setupDB
     TraceWith{tracer, trace, contra}
     startingPoint
     mithrilOpts
+    networkMagic
+    nodeName
+    nodePort
+    skipValidation
     armageddonParams
     runner@RunCSMTTransaction{txRunTransaction} = do
         new <- checkEmptyRollbacks runner
@@ -114,7 +140,12 @@ setupDB
                 -- --mithril-bootstrap-only implies --mithril-bootstrap
                 if mithrilEnabled mithrilOpts
                     || Mithril.mithrilBootstrapOnly mithrilOpts
-                    then bootstrapFromMithril
+                    then do
+                        -- Validate node connection before expensive Mithril import
+                        validationOk <- validateNode
+                        if validationOk
+                            then bootstrapFromMithril
+                            else regularSetup
                     else regularSetup
             else do
                 response <- txRunTransaction getBaseCheckpoint
@@ -131,6 +162,43 @@ setupDB
                                 , setupMithrilSlot = Nothing
                                 }
       where
+        -- \| Validate node connection, returning True if OK or skipped
+        validateNode :: IO Bool
+        validateNode
+            | skipValidation = pure True
+            | otherwise = do
+                let portNum = fromIntegral nodePort :: Word16
+                trace
+                    $ NodeValidation
+                    $ ValidatingNodeConnection nodeName portNum
+                -- 30 second timeout (in microseconds)
+                result <-
+                    validateNodeConnection
+                        networkMagic
+                        nodeName
+                        nodePort
+                        30_000_000
+                case result of
+                    Right () -> do
+                        trace $ NodeValidation NodeValidationSuccess
+                        pure True
+                    Left err -> do
+                        trace $ NodeValidation $ NodeValidationFailed err
+                        error
+                            $ "Node connection validation failed: "
+                                ++ renderConnectionError err
+                                ++ "\n\nCheck your --node-name and --node-port "
+                                ++ "settings, or use --skip-node-validation "
+                                ++ "to bypass this check."
+
+        renderConnectionError :: NodeConnectionError -> String
+        renderConnectionError (NodeResolutionFailed msg) =
+            "Failed to resolve hostname: " ++ msg
+        renderConnectionError (NodeConnectionFailed msg) =
+            "Connection failed: " ++ msg
+        renderConnectionError NodeConnectionTimeout =
+            "Connection timed out after 30 seconds"
+
         regularSetup = do
             setup (contra New) runner armageddonParams
             txRunTransaction $ putBaseCheckpoint startingPoint

@@ -8,6 +8,8 @@ connection for running ChainSync, BlockFetch, and KeepAlive protocols.
 -}
 module Cardano.UTxOCSMT.Ouroboros.Connection
     ( runNodeApplication
+    , validateNodeConnection
+    , NodeConnectionError (..)
     , ChainSyncApplication
     , BlockFetchApplication
     )
@@ -21,7 +23,7 @@ import Cardano.UTxOCSMT.Ouroboros.Application
     ( mkOuroborosApplication
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (ChainSyncApplication)
-import Control.Exception (SomeException)
+import Control.Exception (SomeException, catch, displayException)
 import Data.List.NonEmpty qualified as NE
 import Data.Void (Void)
 import Network.Socket
@@ -29,8 +31,11 @@ import Network.Socket
     , AddrInfoFlag (AI_PASSIVE)
     , PortNumber
     , SocketType (Stream)
+    , close
+    , connect
     , defaultHints
     , getAddrInfo
+    , socket
     )
 import Ouroboros.Consensus.Protocol.Praos.Header ()
 import Ouroboros.Consensus.Shelley.Ledger.NetworkProtocolVersion ()
@@ -66,6 +71,7 @@ import Ouroboros.Network.Socket
     , connectToNode
     , nullNetworkConnectTracers
     )
+import System.Timeout (timeout)
 
 -- | Connect to a node-to-node chain sync server and run the given application
 runNodeApplication
@@ -132,3 +138,57 @@ resolve peerName peerPort = do
                 }
     NE.head
         <$> getAddrInfo (Just hints) (Just peerName) (Just $ show peerPort)
+
+-- | Errors that can occur when validating a node connection.
+data NodeConnectionError
+    = -- | Failed to resolve the hostname
+      NodeResolutionFailed String
+    | -- | Failed to connect to the node (connection refused, etc.)
+      NodeConnectionFailed String
+    | -- | Connection attempt timed out
+      NodeConnectionTimeout
+    deriving stock (Show, Eq)
+
+{- | Validate that a node is reachable before starting expensive operations.
+
+Attempts a TCP connection to the node with a timeout. This is a lightweight
+check that verifies network reachability without performing a full protocol
+handshake.
+-}
+validateNodeConnection
+    :: NetworkMagic
+    -- ^ Network magic (unused, for future handshake validation)
+    -> String
+    -- ^ Hostname
+    -> PortNumber
+    -- ^ Port
+    -> Int
+    -- ^ Timeout in microseconds
+    -> IO (Either NodeConnectionError ())
+validateNodeConnection _magic hostName portNum timeoutUs = do
+    result <- timeout timeoutUs tryConnect
+    case result of
+        Nothing -> pure $ Left NodeConnectionTimeout
+        Just (Left err) -> pure $ Left err
+        Just (Right ()) -> pure $ Right ()
+  where
+    tryConnect :: IO (Either NodeConnectionError ())
+    tryConnect = do
+        addrResult <-
+            (Right <$> resolve hostName portNum)
+                `catch` \(e :: SomeException) ->
+                    pure $ Left $ NodeResolutionFailed $ displayException e
+        case addrResult of
+            Left err -> pure $ Left err
+            Right AddrInfo{addrFamily, addrSocketType, addrProtocol, addrAddress} ->
+                ( do
+                    sock <- socket addrFamily addrSocketType addrProtocol
+                    connect sock addrAddress
+                        `catch` \(e :: SomeException) -> do
+                            close sock
+                            ioError $ userError $ displayException e
+                    close sock
+                    pure $ Right ()
+                )
+                    `catch` \(e :: SomeException) ->
+                        pure $ Left $ NodeConnectionFailed $ displayException e
