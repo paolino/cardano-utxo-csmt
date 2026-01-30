@@ -25,23 +25,19 @@ import Database.KV.Transaction
     , fromList
     )
 
--- | Keys for the configuration column
-data ConfigKey
-    = BaseCheckpointKey
-    | BootstrapInProgressKey
+-- | Single key for application configuration
+data ConfigKey = AppConfigKey
     deriving (Eq, Ord, Show)
 
 configKeyPrism :: Prism' ByteString ConfigKey
 configKeyPrism = prism' encode decode
   where
     encode :: ConfigKey -> ByteString
-    encode BaseCheckpointKey = "base_checkpoint"
-    encode BootstrapInProgressKey = "bootstrap_in_progress"
+    encode AppConfigKey = "app_config"
 
     decode :: ByteString -> Maybe ConfigKey
     decode bs
-        | bs == "base_checkpoint" = Just BaseCheckpointKey
-        | bs == "bootstrap_in_progress" = Just BootstrapInProgressKey
+        | bs == "app_config" = Just AppConfigKey
         | otherwise = Nothing
 
 -- | Structure of the database used by this application
@@ -54,8 +50,8 @@ data Columns slot hash key value x where
         :: Columns slot hash key value (RollbackPointKV slot hash key value)
         -- ^ Column for storing rollback points
     ConfigCol
-        :: Columns slot hash key value (KV ConfigKey slot)
-        -- ^ Column for storing configuration (e.g., base checkpoint)
+        :: Columns slot hash key value (KV ConfigKey ByteString)
+        -- ^ Column for storing serialized application configuration
 
 instance GEq (Columns slot hash key value) where
     geq KVCol KVCol = Just Refl
@@ -100,6 +96,6 @@ codecs Prisms{keyP, hashP, slotP, valueP} =
         , ConfigCol
             :=> Codecs
                 { keyCodec = configKeyPrism
-                , valueCodec = slotP
+                , valueCodec = prism' id Just
                 }
         ]

@@ -7,7 +7,8 @@ module Cardano.UTxOCSMT.Application.Run.Main
 where
 
 import Cardano.UTxOCSMT.Application.Database.Implementation.Query
-    ( putBaseCheckpoint
+    ( clearSkipSlot
+    , putBaseCheckpoint
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( RunCSMTTransaction (..)
@@ -35,6 +36,8 @@ import Cardano.UTxOCSMT.Application.Run.Application
 import Cardano.UTxOCSMT.Application.Run.Config
     ( armageddonParams
     , context
+    , decodePoint
+    , encodePoint
     , mFinality
     , prisms
     , slotHash
@@ -199,7 +202,9 @@ main = withUtf8 $ do
 
             -- Create checkpoint action and skip configuration
             let setCheckpoint point =
-                    txRunTransaction runner $ putBaseCheckpoint point
+                    txRunTransaction runner $ do
+                        putBaseCheckpoint decodePoint encodePoint point
+                        clearSkipSlot decodePoint encodePoint
                 mSkipTargetSlot = SlotNo <$> setupMithrilSlot
 
             -- Log before starting the application

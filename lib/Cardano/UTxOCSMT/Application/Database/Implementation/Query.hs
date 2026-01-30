@@ -2,14 +2,26 @@ module Cardano.UTxOCSMT.Application.Database.Implementation.Query
     ( mkQuery
     , mkTransactionedQuery
     , getAllMerkleRoots
+    , getAppConfig
+    , putAppConfig
+    , modifyAppConfig
     , putBaseCheckpoint
     , getBaseCheckpoint
     , isBootstrapInProgress
     , setBootstrapInProgress
     , clearBootstrapInProgress
+    , getSkipSlot
+    , setSkipSlot
+    , clearSkipSlot
     )
 where
 
+import Cardano.UTxOCSMT.Application.Database.Implementation.AppConfig
+    ( AppConfig (..)
+    , decodeAppConfig
+    , defaultAppConfig
+    , encodeAppConfig
+    )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
     , ConfigKey (..)
@@ -25,8 +37,9 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     , hoistQuery
     )
 import Control.Monad.Trans (lift)
+import Data.ByteString (ByteString)
 import Data.Function (fix)
-import Data.Maybe (isJust)
+import Data.Word (Word64)
 import Database.KV.Cursor
     ( Entry (..)
     , firstEntry
@@ -35,7 +48,6 @@ import Database.KV.Cursor
     )
 import Database.KV.Transaction
     ( Transaction
-    , delete
     , insert
     , iterating
     , query
@@ -97,28 +109,129 @@ getAllMerkleRoots =
                     rest <- prevEntry >>= go
                     pure $ (entryKey, rbpHash, rpbMerkleRoot) : rest
 
-getBaseCheckpoint
-    :: Transaction m cf (Columns slot hash key value) op (Maybe slot)
-getBaseCheckpoint = query ConfigCol BaseCheckpointKey
+-- | Get the application configuration
+getAppConfig
+    :: Monad m
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> Transaction m cf (Columns slot hash key value) op (AppConfig slot)
+getAppConfig decodeSlot = do
+    mBs <- query ConfigCol AppConfigKey
+    pure $ case mBs of
+        Nothing -> defaultAppConfig
+        Just bs -> case decodeAppConfig decodeSlot bs of
+            Nothing -> defaultAppConfig
+            Just cfg -> cfg
 
-putBaseCheckpoint
-    :: slot
+-- | Store the application configuration
+putAppConfig
+    :: (slot -> ByteString)
+    -- ^ Slot encoder
+    -> AppConfig slot
     -> Transaction m cf (Columns slot hash key value) op ()
-putBaseCheckpoint = insert ConfigCol BaseCheckpointKey
+putAppConfig encodeSlot cfg =
+    insert ConfigCol AppConfigKey (encodeAppConfig encodeSlot cfg)
+
+-- | Modify the application configuration
+modifyAppConfig
+    :: Monad m
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> (slot -> ByteString)
+    -- ^ Slot encoder
+    -> (AppConfig slot -> AppConfig slot)
+    -- ^ Modification function
+    -> Transaction m cf (Columns slot hash key value) op ()
+modifyAppConfig decodeSlot encodeSlot f = do
+    cfg <- getAppConfig decodeSlot
+    putAppConfig encodeSlot (f cfg)
+
+-- | Get the base checkpoint from configuration
+getBaseCheckpoint
+    :: Monad m
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> Transaction m cf (Columns slot hash key value) op (Maybe slot)
+getBaseCheckpoint decodeSlot =
+    configBaseCheckpoint <$> getAppConfig decodeSlot
+
+-- | Set the base checkpoint in configuration
+putBaseCheckpoint
+    :: Monad m
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> (slot -> ByteString)
+    -- ^ Slot encoder
+    -> slot
+    -> Transaction m cf (Columns slot hash key value) op ()
+putBaseCheckpoint decodeSlot encodeSlot checkpoint =
+    modifyAppConfig decodeSlot encodeSlot $ \cfg ->
+        cfg{configBaseCheckpoint = Just checkpoint}
 
 -- | Check if bootstrap is in progress (incomplete)
 isBootstrapInProgress
     :: Monad m
-    => Transaction m cf (Columns slot hash key value) op Bool
-isBootstrapInProgress = isJust <$> query ConfigCol BootstrapInProgressKey
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> Transaction m cf (Columns slot hash key value) op Bool
+isBootstrapInProgress decodeSlot =
+    configBootstrapInProgress <$> getAppConfig decodeSlot
 
--- | Mark bootstrap as in progress (stores target slot for reference)
+-- | Mark bootstrap as in progress
 setBootstrapInProgress
-    :: slot
+    :: Monad m
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> (slot -> ByteString)
+    -- ^ Slot encoder
     -> Transaction m cf (Columns slot hash key value) op ()
-setBootstrapInProgress = insert ConfigCol BootstrapInProgressKey
+setBootstrapInProgress decodeSlot encodeSlot =
+    modifyAppConfig decodeSlot encodeSlot $ \cfg ->
+        cfg{configBootstrapInProgress = True}
 
 -- | Clear bootstrap in progress marker
 clearBootstrapInProgress
-    :: Transaction m cf (Columns slot hash key value) op ()
-clearBootstrapInProgress = delete ConfigCol BootstrapInProgressKey
+    :: Monad m
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> (slot -> ByteString)
+    -- ^ Slot encoder
+    -> Transaction m cf (Columns slot hash key value) op ()
+clearBootstrapInProgress decodeSlot encodeSlot =
+    modifyAppConfig decodeSlot encodeSlot $ \cfg ->
+        cfg{configBootstrapInProgress = False}
+
+-- | Get the skip slot (target slot for skip mode after Mithril bootstrap)
+getSkipSlot
+    :: Monad m
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> Transaction m cf (Columns slot hash key value) op (Maybe Word64)
+getSkipSlot decodeSlot =
+    configSkipSlot <$> getAppConfig decodeSlot
+
+-- | Set the skip slot (target for skip mode after Mithril bootstrap)
+setSkipSlot
+    :: Monad m
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> (slot -> ByteString)
+    -- ^ Slot encoder
+    -> Word64
+    -- ^ Target slot number
+    -> Transaction m cf (Columns slot hash key value) op ()
+setSkipSlot decodeSlot encodeSlot slot =
+    modifyAppConfig decodeSlot encodeSlot $ \cfg ->
+        cfg{configSkipSlot = Just slot}
+
+-- | Clear the skip slot (called when skip mode completes)
+clearSkipSlot
+    :: Monad m
+    => (ByteString -> Maybe slot)
+    -- ^ Slot decoder
+    -> (slot -> ByteString)
+    -- ^ Slot encoder
+    -> Transaction m cf (Columns slot hash key value) op ()
+clearSkipSlot decodeSlot encodeSlot =
+    modifyAppConfig decodeSlot encodeSlot $ \cfg ->
+        cfg{configSkipSlot = Nothing}

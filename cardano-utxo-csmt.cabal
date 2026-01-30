@@ -140,6 +140,7 @@ library library
   exposed-modules:
     Cardano.UTxOCSMT.Application.BlockFetch
     Cardano.UTxOCSMT.Application.ChainSync
+    Cardano.UTxOCSMT.Application.Database.Implementation.AppConfig
     Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     Cardano.UTxOCSMT.Application.Database.Implementation.Query
