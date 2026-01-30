@@ -55,20 +55,6 @@ Bootstrap time depends on three phases:
 - Mainnet estimates are projections based on preview/preprod measurements
 - Remote nodes will have slower header sync due to network latency
 
-### Comparison with Full Sync
-
-| Network | Mithril Bootstrap | Full Sync from Genesis |
-|---------|-------------------|------------------------|
-| Preview | ~2.5 hours | ~6-8 hours |
-| Preprod | ~3.5 hours | ~12-18 hours |
-| Mainnet | ~10-12 hours | ~3-5 days |
-
-Mithril bootstrap is significantly faster because:
-
-1. UTxO extraction streams directly from ledger state (no block replay)
-2. Header sync skips block fetching until reaching Mithril slot
-3. Only processes blocks after the Mithril snapshot point
-
 ## What Is a Mithril Snapshot?
 
 A Mithril snapshot captures the **ledger state** at a slot deep in the immutable
@@ -495,5 +481,4 @@ on restart, this is normal behavior. The service will:
 1. Clean up partial data from the previous attempt
 2. Automatically retry the bootstrap from scratch
 
-No manual intervention is required. The cleanup may take a minute if significant
-data was already imported before the interruption.
+No manual intervention is required.
