@@ -90,7 +90,8 @@ data ProgressOrRewind h
 
 -- | An event representing a roll forward or roll backward in the chain
 data Follower h = Follower
-    { rollForward :: h -> IO (Follower h)
+    { rollForward :: h -> Network.SlotNo -> IO (Follower h)
+    -- ^ Roll forward with header/block and current chain tip slot
     , rollBackward :: Point -> IO (ProgressOrRewind h)
     }
 

@@ -43,6 +43,7 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     ( Operation (..)
     , Query (..)
     , State (..)
+    , TipOf
     , Update (..)
     )
 import Control.Monad (forM, forM_, when)
@@ -99,12 +100,15 @@ newState
     :: (Ord key, Ord slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)
     -> (slot -> hash)
+    -> (slot -> TipOf slot -> m ())
+    -- ^ Called after each forward; use to check if at tip and emit Synced
     -> ArmageddonParams hash
     -> RunCSMTTransaction cf op slot hash key value m
     -> m (Update m slot key value, [slot])
 newState
     TraceWith{tracer, trace}
     slotHash
+    onForward
     armageddonParams
     runTransaction@RunCSMTTransaction{txRunTransaction} = do
         cps <-
@@ -115,6 +119,7 @@ newState
             $ mkUpdate
                 tracer
                 slotHash
+                onForward
                 armageddonParams
                 runTransaction
 
@@ -264,6 +269,8 @@ mkUpdate
     :: (Ord key, Ord slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)
     -> (slot -> hash)
+    -> (slot -> TipOf slot -> m ())
+    -- ^ Called after each forward; use to check if at tip and emit Synced
     -> ArmageddonParams hash
     -- ^ Armageddon parameters, in case rollback is impossible
     -> RunCSMTTransaction cf op slot hash key value m
@@ -272,12 +279,14 @@ mkUpdate
 mkUpdate
     TraceWith{tracer, contra}
     slotHash
+    onForward
     armageddonParams
     runTransaction@RunCSMTTransaction{txRunTransaction} =
         fix $ \cont ->
             Update
-                { forwardTipApply = \slot ops -> txRunTransaction $ do
-                    forwardTip tracer (slotHash slot) slot ops
+                { forwardTipApply = \slot chainTip ops -> do
+                    txRunTransaction $ forwardTip tracer (slotHash slot) slot ops
+                    onForward slot chainTip
                     pure cont
                 , rollbackTipApply = \case
                     At slot -> do

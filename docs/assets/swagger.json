@@ -1,12 +1,13 @@
 {
     "definitions": {
         "BootstrapPhase": {
-            "description": "Current bootstrap phase: extracting, syncing_headers, or synced",
+            "description": "Current bootstrap phase: downloading, counting, extracting, syncing_headers, rolling_back, or synced",
             "enum": [
                 "downloading",
                 "counting",
                 "extracting",
                 "syncing_headers",
+                "rolling_back",
                 "synced"
             ],
             "type": "string"
