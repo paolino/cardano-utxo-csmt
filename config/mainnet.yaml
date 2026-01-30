@@ -1,3 +1,5 @@
 network: Mainnet
+node-name: "backbone.cardano.iog.io"
+port: 3001
 mithril:
   aggregator-endpoint: "https://aggregator.release-mainnet.api.mithril.network/aggregator"

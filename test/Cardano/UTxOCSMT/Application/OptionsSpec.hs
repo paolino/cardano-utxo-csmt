@@ -223,6 +223,8 @@ spec = describe "Application.Options" $ do
             configObj <-
                 parseYamlObject
                     "network: Preview\n\
+                    \node-name: test.example.com\n\
+                    \port: 3001\n\
                     \mithril: {}\n"
             opts <-
                 expectSuccess
@@ -232,10 +234,27 @@ spec = describe "Application.Options" $ do
                         configObj
             network opts `shouldBe` Preview
 
+        it "reads node-name and port from config file" $ do
+            configObj <-
+                parseYamlObject
+                    "node-name: custom-node.example.com\n\
+                    \port: 9999\n\
+                    \mithril: {}\n"
+            opts <-
+                expectSuccess
+                    $ runParserWithConfig
+                        ["-d", "/tmp/db"]
+                        Map.empty
+                        configObj
+            nodeName opts `shouldBe` "custom-node.example.com"
+            portNumber opts `shouldBe` 9999
+
         it "reads mithril options nested under mithril key" $ do
             configObj <-
                 parseYamlObject
                     "network: Preprod\n\
+                    \node-name: test.example.com\n\
+                    \port: 3001\n\
                     \mithril:\n\
                     \  aggregator-endpoint: https://config.example.com\n"
             opts <-
@@ -251,6 +270,8 @@ spec = describe "Application.Options" $ do
             configObj <-
                 parseYamlObject
                     "network: Preview\n\
+                    \node-name: test.example.com\n\
+                    \port: 3001\n\
                     \mithril:\n\
                     \  aggregator-endpoint: https://config.example.com\n"
             opts <-
@@ -270,6 +291,8 @@ spec = describe "Application.Options" $ do
             configObj <-
                 parseYamlObject
                     "network: Preview\n\
+                    \node-name: test.example.com\n\
+                    \port: 3001\n\
                     \mithril:\n\
                     \  aggregator-endpoint: https://config.example.com\n"
             let env =
@@ -300,13 +323,18 @@ runParserWithEnv args env =
         optionsParserCore
         (parseArgs args)
         (EnvMap env)
-        (Just emptyObject) -- Empty config object
+        (Just defaultTestConfig)
 
-{- | Empty JSON object for tests without config file
-Includes empty mithril section for subConfig "mithril" to find
+{- | Default config object for tests
+Includes required node-name, port, and empty mithril section
 -}
-emptyObject :: Object
-emptyObject = KeyMap.singleton "mithril" (Object mempty)
+defaultTestConfig :: Object
+defaultTestConfig =
+    KeyMap.fromList
+        [ ("node-name", String "test-node.example.com")
+        , ("port", Number 3001)
+        , ("mithril", Object mempty)
+        ]
 
 -- | Run the parser with config object
 runParserWithConfig

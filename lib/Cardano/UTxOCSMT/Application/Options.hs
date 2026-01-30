@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module Cardano.UTxOCSMT.Application.Options
     ( Options (..)
     , Limit (..)
@@ -7,8 +9,6 @@ module Cardano.UTxOCSMT.Application.Options
 
       -- * Derived option accessors
     , networkMagic
-    , nodeName
-    , portNumber
 
       -- * Re-exports for Mithril
     , MithrilOptions (..)
@@ -18,6 +18,7 @@ where
 
 import Autodocodec
     ( HasCodec (..)
+    , dimapCodec
     , shownBoundedEnumCodec
     )
 
@@ -36,7 +37,7 @@ import Data.ByteArray.Encoding
     )
 import Data.ByteString.Char8 qualified as B
 import Data.ByteString.Short qualified as SBS
-import Data.Word (Word32, Word64)
+import Data.Word (Word16, Word32, Word64)
 import Network.Socket (PortNumber)
 import OptEnvConf
     ( Parser
@@ -87,6 +88,11 @@ data CardanoNetwork
 instance HasCodec CardanoNetwork where
     codec = shownBoundedEnumCodec
 
+-- | Orphan instance for PortNumber (Word16 underneath)
+instance HasCodec PortNumber where
+    codec =
+        dimapCodec fromIntegral (fromIntegral :: PortNumber -> Word16) codec
+
 -- | Get network magic for a Cardano network
 networkMagicFor :: CardanoNetwork -> NetworkMagic
 networkMagicFor Mainnet = NetworkMagic 764824073
@@ -99,22 +105,10 @@ mithrilNetworkFor Mainnet = MithrilMainnet
 mithrilNetworkFor Preprod = MithrilPreprod
 mithrilNetworkFor Preview = MithrilPreview
 
--- | Get default peer node for a Cardano network
-defaultNodeFor :: CardanoNetwork -> String
-defaultNodeFor Mainnet = "backbone.cardano.iog.io"
-defaultNodeFor Preprod = "preprod-node.world.dev.cardano.org"
-defaultNodeFor Preview = "preview-node.world.dev.cardano.org"
-
--- | Get default port for a Cardano network
-defaultPortFor :: CardanoNetwork -> PortNumber
-defaultPortFor Mainnet = 3001
-defaultPortFor Preprod = 30000
-defaultPortFor Preview = 30002
-
 data Options = Options
     { network :: CardanoNetwork
-    , nodeNameOverride :: Maybe String
-    , portNumberOverride :: Maybe PortNumber
+    , nodeName :: String
+    , portNumber :: PortNumber
     , startingPoint :: Point
     , headersQueueSize :: EventQueueLength
     , dbPath :: FilePath
@@ -131,18 +125,6 @@ data Options = Options
 networkMagic :: Options -> NetworkMagic
 networkMagic = networkMagicFor . network
 
--- | Get effective node name from options
-nodeName :: Options -> String
-nodeName opts = case nodeNameOverride opts of
-    Just name -> name
-    Nothing -> defaultNodeFor (network opts)
-
--- | Get effective port number from options
-portNumber :: Options -> PortNumber
-portNumber opts = case portNumberOverride opts of
-    Just port -> port
-    Nothing -> defaultPortFor (network opts)
-
 -- | Option to specify a YAML configuration file
 configFileOption :: Parser (Maybe (Path Abs File))
 configFileOption =
@@ -152,6 +134,7 @@ configFileOption =
             , short 'c'
             , help "Path to YAML configuration file"
             , metavar "FILE"
+            , option
             ]
 
 dbPathOption :: Parser FilePath
@@ -200,33 +183,29 @@ networkOption =
         , option
         ]
 
-nodeNameOption :: Parser (Maybe String)
+nodeNameOption :: Parser String
 nodeNameOption =
-    optional
-        $ setting
-            [ long "node-name"
-            , short 's'
-            , help
-                "Override peer node hostname \
-                \(uses network default if not specified)"
-            , metavar "HOSTNAME"
-            , reader str
-            , option
-            ]
+    setting
+        [ long "node-name"
+        , short 's'
+        , conf "node-name"
+        , help "Peer node hostname"
+        , metavar "HOSTNAME"
+        , reader str
+        , option
+        ]
 
-portNumberOption :: Parser (Maybe PortNumber)
+portNumberOption :: Parser PortNumber
 portNumberOption =
-    optional
-        $ setting
-            [ long "port"
-            , short 'p'
-            , help
-                "Override peer node port \
-                \(uses network default if not specified)"
-            , metavar "INT"
-            , reader auto
-            , option
-            ]
+    setting
+        [ long "port"
+        , short 'p'
+        , conf "port"
+        , help "Peer node port"
+        , metavar "INT"
+        , reader auto
+        , option
+        ]
 
 startingPointOption :: Parser Point
 startingPointOption =
@@ -342,8 +321,8 @@ optionsParserCore =
   where
     mkOptions
         net
-        nodeName'
-        port'
+        node
+        port
         start
         queue
         db
@@ -355,8 +334,8 @@ optionsParserCore =
         threshold =
             Options
                 { network = net
-                , nodeNameOverride = nodeName'
-                , portNumberOverride = port'
+                , nodeName = node
+                , portNumber = port
                 , startingPoint = start
                 , headersQueueSize = queue
                 , dbPath = db
