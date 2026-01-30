@@ -20,8 +20,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
-    ( PartialHistory (..)
-    , mkUpdate
+    ( mkUpdate
     )
 import Cardano.UTxOCSMT.Application.Database.Properties
     ( findValue
@@ -156,7 +155,7 @@ runRocksDBProperties prop =
     txRunner db = newRunRocksDBCSMTTransaction db prisms csmtContext
     armageddonParams = ArmageddonParams 1000 (mkHash "")
     query db = mkTransactionedQuery <$> newRunRocksDBTransaction db prisms
-    update = mkUpdate nullTracer Complete (const $ mkHash "") armageddonParams
+    update = mkUpdate nullTracer (const $ mkHash "") armageddonParams
 
 test
     :: PropertyWithExpected

@@ -31,8 +31,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     , queryMerkleRoot
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
-    ( PartialHistory (..)
-    , mkUpdate
+    ( mkUpdate
     )
 import Cardano.UTxOCSMT.Application.Database.Interface
     ( Operation (..)
@@ -224,7 +223,6 @@ withTestDB action =
             action runner
                 $ mkUpdate
                     nullTracer
-                    Complete
                     testSlotHash
                     testArmageddonParams
                     runner

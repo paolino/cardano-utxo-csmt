@@ -7,6 +7,24 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Function to wait for sync completion
+# Usage: API_PORT=8081 wait_for_sync
+wait_for_sync() {
+    local api_url="http://localhost:${API_PORT:-8081}/ready"
+    echo "Waiting for sync to complete..."
+    while true; do
+        response=$(curl -s "$api_url" 2>/dev/null || echo '{"ready":false}')
+        ready=$(echo "$response" | jq -r '.ready // false')
+        if [ "$ready" = "true" ]; then
+            echo "Service is synced!"
+            break
+        fi
+        slots_behind=$(echo "$response" | jq -r '.slotsBehind // "unknown"')
+        echo "Still syncing... slots behind: $slots_behind"
+        sleep 10
+    done
+}
+
 if [[ $# -lt 1 ]]; then
     echo "Usage: $0 <network> [extra-args...]"
     echo "  network: preview, preprod, or mainnet"
