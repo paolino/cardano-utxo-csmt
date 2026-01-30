@@ -85,6 +85,8 @@ data BootstrapPhase
       Extracting
     | -- | Syncing headers after Mithril import
       SyncingHeaders
+    | -- | Rolling back due to chain reorganization
+      RollingBack
     | -- | Fully synced with chain tip
       Synced
     deriving (Show, Eq)
@@ -95,6 +97,7 @@ instance ToJSON BootstrapPhase where
         Counting -> "counting"
         Extracting -> "extracting"
         SyncingHeaders -> "syncing_headers"
+        RollingBack -> "rolling_back"
         Synced -> "synced"
 
 instance ToSchema BootstrapPhase where
@@ -108,11 +111,12 @@ instance ToSchema BootstrapPhase where
                    , "counting"
                    , "extracting"
                    , "syncing_headers"
+                   , "rolling_back"
                    , "synced"
                    ]
             & description
-                ?~ "Current bootstrap phase: extracting, syncing_headers, \
-                   \or synced"
+                ?~ "Current bootstrap phase: downloading, counting, \
+                   \extracting, syncing_headers, rolling_back, or synced"
 
 -- | The signal we receive to update the metrics
 data MetricsEvent

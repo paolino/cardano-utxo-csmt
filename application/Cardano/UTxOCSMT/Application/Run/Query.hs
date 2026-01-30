@@ -32,7 +32,10 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( RunCSMTTransaction (..)
     , queryMerkleRoot
     )
-import Cardano.UTxOCSMT.Application.Metrics (Metrics (..))
+import Cardano.UTxOCSMT.Application.Metrics
+    ( BootstrapPhase (..)
+    , Metrics (..)
+    )
 import Cardano.UTxOCSMT.Application.UTxOs (unsafeMkTxIn)
 import Cardano.UTxOCSMT.HTTP.API
     ( InclusionProofResponse (..)
@@ -138,9 +141,13 @@ queryInclusionProof (RunCSMTTransaction runCSMT) txIdText txIx = do
 
 {- | Create a 'ReadyResponse' based on current metrics and sync threshold.
 
-The service is considered ready when the number of slots behind the
-chain tip is less than or equal to the configured threshold. If no
-metrics are available yet, the service reports as not ready.
+The service is considered ready when:
+
+1. The bootstrap phase is 'Synced'
+2. The number of slots behind the chain tip is less than or equal to the
+   configured threshold
+
+If no metrics are available yet, the service reports as not ready.
 -}
 mkReadyResponse
     :: Word64
@@ -158,16 +165,18 @@ mkReadyResponse threshold mMetrics =
                 , processedSlot = Nothing
                 , slotsBehind = Nothing
                 }
-        Just Metrics{chainTipSlot, lastBlockPoint} ->
+        Just Metrics{chainTipSlot, lastBlockPoint, bootstrapPhase} ->
             let tip = unSlotNo <$> chainTipSlot
                 processed = getProcessedSlot lastBlockPoint
                 -- Handle case where processed > tip due to protocol timing
                 -- (headers can arrive before tip is updated). When this
                 -- happens, we're synced so slotsBehind is 0.
                 behind = safeSub <$> tip <*> processed
-                isReady = case behind of
-                    Just b -> b <= threshold
-                    Nothing -> False
+                isSynced = bootstrapPhase == Just Synced
+                isReady =
+                    isSynced && case behind of
+                        Just b -> b <= threshold
+                        Nothing -> False
             in  ReadyResponse
                     { ready = isReady
                     , tipSlot = tip
