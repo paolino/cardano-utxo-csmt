@@ -248,6 +248,28 @@ but before reaching the target slot), the skip mode state is lost. See issue #76
 | Syncing Headers | Complete Mithril UTxOs | Yes (but `/ready` returns false) |
 | Synced | Up-to-date UTxOs | Yes |
 
+### Interrupted Bootstrap Recovery
+
+If the process is terminated during bootstrap (e.g., during UTxO extraction), partial
+data may remain in the database. On restart, the service detects this and automatically
+recovers:
+
+1. **Detection**: A bootstrap-in-progress marker is set before streaming UTxOs
+2. **On restart**: If the marker exists, incomplete bootstrap is detected
+3. **Cleanup**: All database tables are wiped (including partial UTxO data)
+4. **Retry**: Bootstrap restarts from the beginning
+
+You'll see these log messages when recovery occurs:
+
+```
+Incomplete bootstrap detected, cleaning up partial data...
+Armageddon cleanup started.
+Armageddon cleanup completed.
+Incomplete bootstrap cleanup completed, retrying bootstrap...
+```
+
+This ensures the database is never left in an inconsistent state after an interruption.
+
 The `/ready` endpoint returns `ready: true` only when:
 - `bootstrapPhase` is `synced`
 - `chainTipSlot - processedSlot <= syncThreshold` (default: 100 slots)
@@ -464,3 +486,14 @@ If extraction fails with "TablesNotFound":
 If extraction fails with "TablesDecodeFailed":
 - The tvar file format may have changed
 - Check for updates to ouroboros-consensus
+
+### Bootstrap Interrupted
+
+If the process was killed during bootstrap and you see "Incomplete bootstrap detected"
+on restart, this is normal behavior. The service will:
+
+1. Clean up partial data from the previous attempt
+2. Automatically retry the bootstrap from scratch
+
+No manual intervention is required. The cleanup may take a minute if significant
+data was already imported before the interruption.
