@@ -1,3 +1,5 @@
 network: Preview
+node-name: "preview-node.world.dev.cardano.org"
+port: 30002
 mithril:
   aggregator-endpoint: "https://aggregator.pre-release-preview.api.mithril.network/aggregator"
