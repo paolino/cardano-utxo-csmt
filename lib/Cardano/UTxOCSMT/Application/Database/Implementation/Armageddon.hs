@@ -2,6 +2,7 @@ module Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     ( ArmageddonParams (..)
     , ArmageddonTrace (..)
     , armageddon
+    , cleanup
     , setup
     , renderArmageddonTrace
     )
@@ -74,8 +75,28 @@ cleanUpBatch
                         go (next, count + 1)
             when r batch
 
+{- | Clean up all database columns by deleting all entries in batches.
+Does not initialize the database afterwards - use 'armageddon' for
+cleanup + setup, or call 'setup' separately after 'cleanup'.
+THIS IS NOT GOING TO RUN ATOMICALLY
+-}
+cleanup
+    :: (Ord key, Ord slot, Monad m)
+    => Tracer m ArmageddonTrace
+    -> RunCSMTTransaction cf op slot hash key value m
+    -> ArmageddonParams hash
+    -> m ()
+cleanup (traceWith -> trace) runTransaction armageddonParams = do
+    trace ArmageddonStarted
+    cleanUpBatch runTransaction KVCol armageddonParams
+    cleanUpBatch runTransaction CSMTCol armageddonParams
+    cleanUpBatch runTransaction RollbackPoints armageddonParams
+    cleanUpBatch runTransaction ConfigCol armageddonParams
+    trace ArmageddonCompleted
+
 {- | Perform an "armageddon" cleanup of the database
-by deleting all entries in all columns in batches
+by deleting all entries in all columns in batches,
+then initialize with Origin in RollbackPoints.
 THIS IS NOT GOING TO RUN ATOMICALLY
 -}
 armageddon
@@ -84,13 +105,9 @@ armageddon
     -> RunCSMTTransaction cf op slot hash key value m
     -> ArmageddonParams hash
     -> m ()
-armageddon tracer@(traceWith -> trace) runTransaction armageddonParams = do
-    trace ArmageddonStarted
-    cleanUpBatch runTransaction KVCol armageddonParams
-    cleanUpBatch runTransaction CSMTCol armageddonParams
-    cleanUpBatch runTransaction RollbackPoints armageddonParams
+armageddon tracer runTransaction armageddonParams = do
+    cleanup tracer runTransaction armageddonParams
     setup tracer runTransaction armageddonParams
-    trace ArmageddonCompleted
 
 setup
     :: (Ord slot, Monad m)

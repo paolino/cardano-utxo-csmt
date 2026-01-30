@@ -19,7 +19,7 @@ where
 
 import Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     ( ArmageddonParams
-    , armageddon
+    , cleanup
     , setup
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
@@ -142,8 +142,7 @@ setupDB
         incomplete <- txRunTransaction isBootstrapInProgress
         when incomplete $ do
             trace IncompleteBootstrapDetected
-            armageddon (contra New) runner armageddonParams
-            txRunTransaction clearBootstrapInProgress
+            cleanup (contra New) runner armageddonParams
             trace IncompleteBootstrapCleaned
 
         new <- checkEmptyRollbacks runner
