@@ -2,7 +2,6 @@
 
 module Cardano.UTxOCSMT.Application.Options
     ( Options (..)
-    , Limit (..)
     , CardanoNetwork (..)
     , optionsParser
     , optionsParserCore
@@ -37,7 +36,7 @@ import Data.ByteArray.Encoding
     )
 import Data.ByteString.Char8 qualified as B
 import Data.ByteString.Short qualified as SBS
-import Data.Word (Word16, Word32, Word64)
+import Data.Word (Word16, Word64)
 import Network.Socket (PortNumber)
 import OptEnvConf
     ( Parser
@@ -73,10 +72,6 @@ import Ouroboros.Network.Point qualified as Network
 import Ouroboros.Network.Point qualified as Network.Point
 import Path (Abs, File, Path)
 import Text.Read (readMaybe)
-
--- | A limit on the number of blocks to sync
-newtype Limit = Limit {limit :: Word32}
-    deriving newtype (Show, Read, Eq, Ord, Enum)
 
 -- | Cardano network selection
 data CardanoNetwork

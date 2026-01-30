@@ -33,8 +33,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     , RunTransaction (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
-    ( PartialHistory
-    , UpdateTrace
+    ( UpdateTrace
     , newState
     )
 import Cardano.UTxOCSMT.Application.Database.Interface
@@ -114,23 +113,21 @@ newRocksDBState
     -> DB
     -> Prisms slot hash key value
     -> CSMTContext hash key value
-    -> PartialHistory
     -> (slot -> hash)
     -> ArmageddonParams hash
     -> m
         ( (Update m slot key value, [slot])
         , RunCSMTTransaction ColumnFamily BatchOp slot hash key value m
         )
-newRocksDBState tracer db prisms csmtContext partiality slotHash armageddonParams = do
+newRocksDBState tracer db prisms csmtContext slotHash armageddonParams = do
     runner <- newRunRocksDBCSMTTransaction db prisms csmtContext
     (,runner)
-        <$> newState tracer partiality slotHash armageddonParams runner
+        <$> newState tracer slotHash armageddonParams runner
 
 -- | Create Update state from an existing runner
 createUpdateState
     :: (MonadFail m, Ord key, Ord slot)
     => Tracer m (UpdateTrace slot hash)
-    -> PartialHistory
     -> (slot -> hash)
     -> ArmageddonParams hash
     -> RunCSMTTransaction ColumnFamily BatchOp slot hash key value m

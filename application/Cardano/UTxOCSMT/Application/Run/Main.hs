@@ -12,9 +12,6 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( RunCSMTTransaction (..)
     )
-import Cardano.UTxOCSMT.Application.Database.Implementation.Update
-    ( PartialHistory (..)
-    )
 import Cardano.UTxOCSMT.Application.Database.RocksDB
     ( createUpdateState
     , newRunRocksDBCSMTTransaction
@@ -187,7 +184,6 @@ main = withUtf8 $ do
             (state, slots) <-
                 createUpdateState
                     (contra Update)
-                    Partial
                     slotHash
                     armageddonParams
                     runner

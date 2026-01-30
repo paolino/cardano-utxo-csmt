@@ -1,6 +1,5 @@
 module Cardano.UTxOCSMT.Application.Database.Implementation.Update
     ( mkUpdate
-    , PartialHistory (..)
 
       -- * Tracing
     , UpdateTrace (..)
@@ -77,8 +76,6 @@ import Database.KV.Transaction
     )
 import Ouroboros.Network.Point (WithOrigin (..))
 
-data PartialHistory = Complete | Partial
-
 data UpdateTrace slot hash
     = UpdateArmageddon ArmageddonTrace
     | UpdateForwardTip slot Int Int (Maybe hash)
@@ -101,14 +98,12 @@ renderUpdateTrace (UpdateNewState slots) =
 newState
     :: (Ord key, Ord slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)
-    -> PartialHistory
     -> (slot -> hash)
     -> ArmageddonParams hash
     -> RunCSMTTransaction cf op slot hash key value m
     -> m (Update m slot key value, [slot])
 newState
     TraceWith{tracer, trace}
-    partiality
     slotHash
     armageddonParams
     runTransaction@RunCSMTTransaction{txRunTransaction} = do
@@ -119,7 +114,6 @@ newState
             $ (,cps)
             $ mkUpdate
                 tracer
-                partiality
                 slotHash
                 armageddonParams
                 runTransaction
@@ -130,7 +124,6 @@ We compose csmt transactions for each operation with an updateRollbackPoint one
 forwardTip
     :: (Ord key, Ord slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)
-    -> PartialHistory
     -> hash
     -> slot
     -- ^ slot at which operations happen
@@ -139,7 +132,6 @@ forwardTip
     -> CSMTTransaction m cf op slot hash key value ()
 forwardTip
     TraceWith{trace}
-    partiality
     hash
     slot
     ops = do
@@ -154,11 +146,8 @@ forwardTip
                     deleteCSMT k
                     case mx of
                         Nothing ->
-                            case partiality of
-                                Partial -> pure (Sum 0, Sum 1, [])
-                                Complete ->
-                                    error
-                                        "forwardTip: cannot invert Delete operation, key not found"
+                            error
+                                "forwardTip: cannot invert Delete operation, key not found"
                         Just x -> pure (Sum 0, Sum 1, [Insert k x])
             let (Sum nInserts, Sum nDeletes, invs) = mconcat result
             merkleRoot <- updateRollbackPoint hash slot $ reverse invs
@@ -274,7 +263,6 @@ of continuations and so always propose itself as the next continuation
 mkUpdate
     :: (Ord key, Ord slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)
-    -> PartialHistory
     -> (slot -> hash)
     -> ArmageddonParams hash
     -- ^ Armageddon parameters, in case rollback is impossible
@@ -283,14 +271,13 @@ mkUpdate
     -> Update m slot key value
 mkUpdate
     TraceWith{tracer, contra}
-    partiality
     slotHash
     armageddonParams
     runTransaction@RunCSMTTransaction{txRunTransaction} =
         fix $ \cont ->
             Update
                 { forwardTipApply = \slot ops -> txRunTransaction $ do
-                    forwardTip tracer partiality (slotHash slot) slot ops
+                    forwardTip tracer (slotHash slot) slot ops
                     pure cont
                 , rollbackTipApply = \case
                     At slot -> do
