@@ -161,7 +161,10 @@ mkReadyResponse threshold mMetrics =
         Just Metrics{chainTipSlot, lastBlockPoint} ->
             let tip = unSlotNo <$> chainTipSlot
                 processed = getProcessedSlot lastBlockPoint
-                behind = (-) <$> tip <*> processed
+                -- Handle case where processed > tip due to protocol timing
+                -- (headers can arrive before tip is updated). When this
+                -- happens, we're synced so slotsBehind is 0.
+                behind = safeSub <$> tip <*> processed
                 isReady = case behind of
                     Just b -> b <= threshold
                     Nothing -> False
@@ -172,6 +175,12 @@ mkReadyResponse threshold mMetrics =
                     , slotsBehind = behind
                     }
   where
+    -- | Safe subtraction that returns 0 instead of underflowing
+    safeSub :: Word64 -> Word64 -> Word64
+    safeSub a b
+        | a >= b = a - b
+        | otherwise = 0
+
     getProcessedSlot
         :: Maybe (a, Header) -> Maybe Word64
     getProcessedSlot Nothing = Nothing
