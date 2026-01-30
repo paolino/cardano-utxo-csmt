@@ -165,6 +165,124 @@ Source: [Mithril Network Configurations](https://mithril.network/doc/manual/gett
 | Preprod | `https://aggregator.release-preprod.api.mithril.network/aggregator` | ✅ Ed25519 |
 | Preview | `https://aggregator.pre-release-preview.api.mithril.network/aggregator` | ✅ Ed25519 |
 
+## Bootstrap Design
+
+This section describes the complete bootstrap flow and the design decisions behind it.
+
+### Bootstrap Phases
+
+The bootstrap process consists of five phases, tracked via the `/metrics` endpoint:
+
+```
+┌─────────────┐    ┌──────────┐    ┌────────────┐    ┌─────────────────┐    ┌────────┐
+│ Downloading │───▶│ Counting │───▶│ Extracting │───▶│ Syncing Headers │───▶│ Synced │
+└─────────────┘    └──────────┘    └────────────┘    └─────────────────┘    └────────┘
+```
+
+| Phase | Description | Progress Tracking |
+|-------|-------------|-------------------|
+| `downloading` | Fetching Mithril snapshot from CDN | `downloadedBytes` |
+| `counting` | Counting UTxOs in snapshot | `countingProgress` |
+| `extracting` | Importing UTxOs into CSMT | `extractionProgress` (current, total, rate, eta) |
+| `syncing_headers` | Syncing headers to reach Mithril slot | `headerSyncProgress` (currentSlot, targetSlot) |
+| `synced` | Ready to serve queries | `ready: true` |
+
+### Skip Mode (Header-Only Sync)
+
+After Mithril import, the database contains UTxOs at slot X (the Mithril snapshot slot).
+We cannot construct a proper chain sync checkpoint because Mithril doesn't provide the
+block hash for that slot.
+
+**The Problem:**
+
+- Chain sync requires `Point(slot, blockHash)` for intersection
+- Mithril provides only the slot number, not the block hash
+- Without a valid Point, we must intersect at Origin
+
+**The Solution: Skip Mode**
+
+Instead of replaying all blocks from genesis (which would be slow and redundant),
+we use "skip mode":
+
+1. **Intersect at Origin** - Start chain sync from genesis
+2. **Skip block fetching** - Receive headers but don't fetch/process blocks
+3. **Track target slot** - The Mithril snapshot slot is the target
+4. **Save checkpoint on arrival** - When we reach the target slot, we have the block hash
+5. **Resume normal sync** - Continue with block fetching from that point
+
+```
+Genesis ──────────────────────────────────────── Mithril Slot ──── Tip
+   │                                                   │            │
+   │◀──────────── Skip Mode (headers only) ───────────▶│            │
+   │              No block fetching                    │            │
+   │                                                   │◀── Normal ─▶│
+   │                                                   │   Sync      │
+```
+
+During skip mode:
+- Headers are received from the node at ~15,000-20,000 slots/second
+- Blocks are NOT fetched or processed
+- Progress is shown via `headerSyncProgress`
+- The database remains unchanged (already has Mithril UTxOs)
+
+### Checkpoint Management
+
+The base checkpoint tracks where chain sync should resume after restart:
+
+| State | Checkpoint | Behavior |
+|-------|------------|----------|
+| Fresh database | None | Start Mithril bootstrap |
+| After Mithril import | Origin | Start skip mode from genesis |
+| After skip mode completes | `Point(mithrilSlot, blockHash)` | Resume normal sync |
+| During normal operation | Updated periodically | Resume from last saved point |
+
+**Current Limitation:** If the service restarts during skip mode (after Mithril import
+but before reaching the target slot), the skip mode state is lost. See issue #76.
+
+### Database State During Bootstrap
+
+| Phase | Database Contents | Queryable? |
+|-------|-------------------|------------|
+| Downloading | Empty | No |
+| Extracting | Partially populated | No |
+| Syncing Headers | Complete Mithril UTxOs | Yes (but `/ready` returns false) |
+| Synced | Up-to-date UTxOs | Yes |
+
+The `/ready` endpoint returns `ready: true` only when:
+- `bootstrapPhase` is `synced`
+- `chainTipSlot - processedSlot <= syncThreshold` (default: 100 slots)
+
+### API Availability During Bootstrap
+
+| Endpoint | Downloading | Extracting | Syncing Headers | Synced |
+|----------|-------------|------------|-----------------|--------|
+| `/metrics` | ✅ | ✅ | ✅ | ✅ |
+| `/ready` | ✅ (false) | ✅ (false) | ✅ (false) | ✅ (true) |
+| `/merkle-roots` | ❌ 503 | ❌ 503 | ❌ 503 | ✅ |
+| `/proof/{txId}/{txIx}` | ❌ 503 | ❌ 503 | ❌ 503 | ✅ |
+
+Data endpoints return 503 Service Unavailable until the service is fully synced.
+
+### Monitoring Bootstrap Progress
+
+Use the `/metrics` endpoint to monitor progress:
+
+```bash
+# Check current phase
+curl -s http://localhost:8081/metrics | jq '.bootstrapPhase'
+
+# During extraction
+curl -s http://localhost:8081/metrics | jq '.extractionProgress'
+# {"current": 1500000, "total": 2900000, "percent": 51.7, "rate": 850.5, "eta": 1647.2}
+
+# During header sync
+curl -s http://localhost:8081/metrics | jq '.headerSyncProgress'
+# {"currentSlot": 50000000, "targetSlot": 103000000}
+
+# Check if ready
+curl -s http://localhost:8081/ready | jq '.ready'
+```
+
 ## How It Works
 
 ### 1. Fetch Snapshot Metadata
