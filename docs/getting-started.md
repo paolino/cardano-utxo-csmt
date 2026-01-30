@@ -14,25 +14,25 @@ Mithril bootstrap requires environment variables for verification. Download and 
 === "Preprod"
 
     ```bash
-    export AGGREGATOR_ENDPOINT=https://aggregator.release-preprod.api.mithril.network/aggregator
-    export GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/genesis.vkey)
-    export ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/ancillary.vkey)
+    export MITHRIL_AGGREGATOR_ENDPOINT=https://aggregator.release-preprod.api.mithril.network/aggregator
+    export MITHRIL_GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/genesis.vkey)
+    export MITHRIL_ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/ancillary.vkey)
     ```
 
 === "Preview"
 
     ```bash
-    export AGGREGATOR_ENDPOINT=https://aggregator.pre-release-preview.api.mithril.network/aggregator
-    export GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/genesis.vkey)
-    export ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/ancillary.vkey)
+    export MITHRIL_AGGREGATOR_ENDPOINT=https://aggregator.pre-release-preview.api.mithril.network/aggregator
+    export MITHRIL_GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/genesis.vkey)
+    export MITHRIL_ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/ancillary.vkey)
     ```
 
 === "Mainnet"
 
     ```bash
-    export AGGREGATOR_ENDPOINT=https://aggregator.release-mainnet.api.mithril.network/aggregator
-    export GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/genesis.vkey)
-    export ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/ancillary.vkey)
+    export MITHRIL_AGGREGATOR_ENDPOINT=https://aggregator.release-mainnet.api.mithril.network/aggregator
+    export MITHRIL_GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/genesis.vkey)
+    export MITHRIL_ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/ancillary.vkey)
     ```
 
 Source: [Mithril Network Configurations](https://mithril.network/doc/manual/getting-started/network-configurations)
@@ -49,7 +49,7 @@ nix shell nixpkgs#cachix -c cachix use paolino
 nix run github:paolino/cardano-utxo-csmt -- \
   --network preprod \
   --mithril-bootstrap \
-  --csmt-db-path /tmp/csmt-db \
+  --db-path /tmp/csmt-db \
   --api-port 8080
 ```
 
@@ -73,14 +73,14 @@ This will:
 |--------|-------------|
 | `--network` | Network: `mainnet`, `preprod`, `preview` (default: mainnet) |
 | `--node-name` | Override peer node hostname |
-| `--port` | Override peer node port |
-| `--csmt-db-path` | RocksDB database path (required) |
+| `--node-port` | Override peer node port |
+| `--db-path` | RocksDB database path (required) |
 | `--api-port` | HTTP API port for REST endpoints |
 | `--api-docs-port` | HTTP port for Swagger UI documentation |
 | `--mithril-bootstrap` | Bootstrap from Mithril snapshot |
-| `--ancillary-verification-key` | Ed25519 key for ancillary verification |
-| `--genesis-verification-key` | Genesis key for mithril-client CLI |
-| `--aggregator-endpoint` | Mithril aggregator URL |
+| `--mithril-ancillary-verification-key` | Ed25519 key for ancillary verification |
+| `--mithril-genesis-verification-key` | Genesis key for mithril-client CLI |
+| `--mithril-aggregator-endpoint` | Mithril aggregator URL |
 | `--mithril-skip-ancillary-verification` | Skip Ed25519 verification (not recommended) |
 
 ## Verifying the Service
