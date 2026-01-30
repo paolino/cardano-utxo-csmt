@@ -19,6 +19,7 @@ import Cardano.UTxOCSMT.Mithril.Streaming (convertToCBOR)
 import Codec.Serialise (serialise)
 import Control.Tracer (nullTracer)
 import Data.ByteString.Lazy qualified as LBS
+import Data.Maybe (fromMaybe)
 import Data.Word (Word64)
 import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
@@ -30,6 +31,7 @@ import OptEnvConf
     , maybeReader
     , metavar
     , option
+    , optional
     , reader
     , runParser
     , setting
@@ -42,6 +44,7 @@ import System.IO.Temp (withSystemTempDirectory)
 
 data Options = Options
     { optNetwork :: MithrilNetwork
+    , optAggregatorUrl :: String
     , optOutput :: FilePath
     , optCount :: Word64
     }
@@ -52,9 +55,18 @@ readNetwork "preprod" = Just MithrilPreprod
 readNetwork "preview" = Just MithrilPreview
 readNetwork _ = Nothing
 
+-- | Get default aggregator URL for a network
+defaultAggregatorUrl :: MithrilNetwork -> String
+defaultAggregatorUrl MithrilMainnet =
+    "https://aggregator.release-mainnet.api.mithril.network/aggregator"
+defaultAggregatorUrl MithrilPreprod =
+    "https://aggregator.release-preprod.api.mithril.network/aggregator"
+defaultAggregatorUrl MithrilPreview =
+    "https://aggregator.pre-release-preview.api.mithril.network/aggregator"
+
 optionsParser :: Parser Options
 optionsParser =
-    Options
+    mkOptions
         <$> setting
             [ long "network"
             , help "Mithril network: mainnet, preprod, preview"
@@ -63,6 +75,15 @@ optionsParser =
             , value MithrilPreview
             , option
             ]
+        <*> optional
+            ( setting
+                [ long "aggregator-endpoint"
+                , help "Mithril aggregator endpoint URL"
+                , metavar "URL"
+                , reader str
+                , option
+                ]
+            )
         <*> setting
             [ long "output"
             , help "Output file path"
@@ -79,10 +100,18 @@ optionsParser =
             , value 1000
             , option
             ]
+  where
+    mkOptions net maybeUrl output count =
+        Options
+            { optNetwork = net
+            , optAggregatorUrl = fromMaybe (defaultAggregatorUrl net) maybeUrl
+            , optOutput = output
+            , optCount = count
+            }
 
 main :: IO ()
 main = do
-    Options{optNetwork, optOutput, optCount} <-
+    Options{optNetwork, optAggregatorUrl, optOutput, optCount} <-
         runParser version "Extract UTxOs from Mithril snapshot" optionsParser
 
     putStrLn
@@ -92,7 +121,8 @@ main = do
     manager <- newManager tlsManagerSettings
 
     withSystemTempDirectory "mithril-extract" $ \tmpDir -> do
-        let config = defaultMithrilConfig manager optNetwork tmpDir
+        let config =
+                defaultMithrilConfig manager optNetwork optAggregatorUrl tmpDir
 
         -- Fetch snapshot metadata
         putStrLn "Fetching snapshot metadata..."

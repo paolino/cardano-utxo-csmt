@@ -5,6 +5,8 @@ set -euo pipefail
 # Usage: ./run/cardano-utxo.sh <network> [extra-args...]
 #   network: preview, preprod, or mainnet
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 if [[ $# -lt 1 ]]; then
     echo "Usage: $0 <network> [extra-args...]"
     echo "  network: preview, preprod, or mainnet"
@@ -45,6 +47,7 @@ API_PORT=${API_PORT:-$DEFAULT_API_PORT}
 API_DOCS_PORT=${API_DOCS_PORT:-$DEFAULT_DOCS_PORT}
 CLEAN=${CLEAN:-false}
 RUN_WITH=${RUN_WITH:-$DEFAULT_RUNNER}
+CONFIG_FILE=${CONFIG_FILE:-$SCRIPT_DIR/config/$NETWORK.yaml}
 
 if [[ "$CLEAN" == "true" ]]; then
     echo "Removing existing database: $DB_PATH"
@@ -55,6 +58,7 @@ mkdir -p "$DB_PATH"
 
 echo "Starting cardano-utxo on $NETWORK network..."
 echo "  Runner: $RUN_WITH"
+echo "  Config: $CONFIG_FILE"
 echo "  Node: localhost:$NODE_PORT"
 echo "  Database: $DB_PATH"
 echo "  Log: $LOG_PATH"
@@ -62,7 +66,7 @@ echo "  API: http://localhost:$API_PORT"
 echo "  Docs: http://localhost:$API_DOCS_PORT"
 
 args=(
-    --network "$NETWORK"
+    --config-file "$CONFIG_FILE"
     --node-name localhost
     --port "$NODE_PORT"
     --csmt-db-path "$DB_PATH"

@@ -171,6 +171,7 @@ library library
   build-depends:
     , aeson
     , async
+    , autodocodec
     , base
     , base16-bytestring
     , bytestring
@@ -210,6 +211,7 @@ library library
     , ouroboros-network-api
     , ouroboros-network-framework
     , ouroboros-network-protocols
+    , path
     , profunctors
     , QuickCheck
     , rocksdb-haskell-jprupp
@@ -318,6 +320,7 @@ test-suite unit-tests
     , mempack
     , opt-env-conf
     , ouroboros-network-api
+    , path
     , QuickCheck
     , rocksdb-haskell-jprupp
     , rocksdb-kv-transactions:kv-transactions
@@ -329,6 +332,7 @@ test-suite unit-tests
     , transformers
     , wai
     , wai-extra
+    , yaml
 
   build-tool-depends: hspec-discover:hspec-discover
   type:               exitcode-stdio-1.0

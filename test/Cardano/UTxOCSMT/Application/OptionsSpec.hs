@@ -7,6 +7,7 @@ Tests for the OptEnvConf-based CLI options parser, verifying:
 - Option parsing works with various argument combinations
 - Network selection parses correctly and derives Mithril network
 - Ancillary verification options work as expected
+- Config file support works correctly
 -}
 module Cardano.UTxOCSMT.Application.OptionsSpec
     ( spec
@@ -18,12 +19,16 @@ import Cardano.UTxOCSMT.Application.Options
     , MithrilNetwork (..)
     , MithrilOptions (..)
     , Options (..)
-    , optionsParser
+    , optionsParserCore
     )
+import Data.Aeson (Object, Value (..))
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
+import Data.Yaml qualified as Yaml
 import OptEnvConf.Args (parseArgs)
 import OptEnvConf.Capability (Capabilities (..))
 import OptEnvConf.EnvMap (EnvMap (..))
@@ -213,6 +218,70 @@ spec = describe "Application.Options" $ do
             mithrilAggregatorUrl (mithrilOptions opts)
                 `shouldBe` Just "https://example.com"
 
+    describe "config file support" $ do
+        it "reads network from config file" $ do
+            configObj <-
+                parseYamlObject
+                    "network: Preview\n\
+                    \mithril: {}\n"
+            opts <-
+                expectSuccess
+                    $ runParserWithConfig
+                        ["-d", "/tmp/db"]
+                        Map.empty
+                        configObj
+            network opts `shouldBe` Preview
+
+        it "reads mithril options nested under mithril key" $ do
+            configObj <-
+                parseYamlObject
+                    "network: Preprod\n\
+                    \mithril:\n\
+                    \  aggregator-endpoint: https://config.example.com\n"
+            opts <-
+                expectSuccess
+                    $ runParserWithConfig
+                        ["-d", "/tmp/db"]
+                        Map.empty
+                        configObj
+            mithrilAggregatorUrl (mithrilOptions opts)
+                `shouldBe` Just "https://config.example.com"
+
+        it "CLI overrides config file" $ do
+            configObj <-
+                parseYamlObject
+                    "network: Preview\n\
+                    \mithril:\n\
+                    \  aggregator-endpoint: https://config.example.com\n"
+            opts <-
+                expectSuccess
+                    $ runParserWithConfig
+                        [ "-d"
+                        , "/tmp/db"
+                        , "--aggregator-endpoint"
+                        , "https://cli.example.com"
+                        ]
+                        Map.empty
+                        configObj
+            mithrilAggregatorUrl (mithrilOptions opts)
+                `shouldBe` Just "https://cli.example.com"
+
+        it "environment variable overrides config file" $ do
+            configObj <-
+                parseYamlObject
+                    "network: Preview\n\
+                    \mithril:\n\
+                    \  aggregator-endpoint: https://config.example.com\n"
+            let env =
+                    Map.singleton
+                        "AGGREGATOR_ENDPOINT"
+                        "https://env.example.com"
+            opts <-
+                expectSuccess
+                    $ runParserWithConfig ["-d", "/tmp/db"] env configObj
+            mithrilAggregatorUrl (mithrilOptions opts)
+                `shouldBe` Just "https://env.example.com"
+
 -- | Run the parser with given arguments and empty environment
 runParser
     :: [String]
@@ -228,10 +297,40 @@ runParserWithEnv args env =
     runParserOn
         (Capabilities Set.empty) -- No special capabilities needed
         Nothing -- No terminal capabilities
-        optionsParser
+        optionsParserCore
         (parseArgs args)
         (EnvMap env)
-        Nothing -- No config file
+        (Just emptyObject) -- Empty config object
+
+{- | Empty JSON object for tests without config file
+Includes empty mithril section for subConfig "mithril" to find
+-}
+emptyObject :: Object
+emptyObject = KeyMap.singleton "mithril" (Object mempty)
+
+-- | Run the parser with config object
+runParserWithConfig
+    :: [String]
+    -> Map.Map String String
+    -> Object
+    -> IO (Either (NonEmpty ParseError) Options)
+runParserWithConfig args env configObj =
+    runParserOn
+        (Capabilities Set.empty)
+        Nothing
+        optionsParserCore
+        (parseArgs args)
+        (EnvMap env)
+        (Just configObj)
+
+-- | Parse a YAML string into an Object
+parseYamlObject :: String -> IO Object
+parseYamlObject yamlStr =
+    case Yaml.decodeEither' (encodeUtf8 yamlStr) of
+        Left err -> fail $ "Failed to parse YAML: " <> show err
+        Right obj -> pure obj
+  where
+    encodeUtf8 = T.encodeUtf8 . T.pack
 
 -- | Expect parser to succeed, fail test otherwise
 expectSuccess
