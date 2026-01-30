@@ -97,6 +97,10 @@ data MainTraces
       ApplicationStarting
     | -- | Node connection validation event
       NodeValidation NodeValidationTrace
+    | -- | Incomplete bootstrap detected on startup
+      IncompleteBootstrapDetected
+    | -- | Incomplete bootstrap cleanup completed
+      IncompleteBootstrapCleaned
     deriving (Show)
 
 -- | Render a 'MainTraces' value to a human-readable log string.
@@ -128,6 +132,10 @@ renderMainTraces ApplicationStarting =
     "Starting Ouroboros node connection and chain sync application..."
 renderMainTraces (NodeValidation nvt) =
     "Node validation: " ++ renderNodeValidationTrace nvt
+renderMainTraces IncompleteBootstrapDetected =
+    "Incomplete bootstrap detected, cleaning up partial data..."
+renderMainTraces IncompleteBootstrapCleaned =
+    "Incomplete bootstrap cleanup completed, retrying bootstrap..."
 
 -- | Render a 'NodeValidationTrace' value to a human-readable log string.
 renderNodeValidationTrace :: NodeValidationTrace -> String
