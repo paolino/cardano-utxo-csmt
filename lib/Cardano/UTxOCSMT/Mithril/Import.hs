@@ -73,8 +73,6 @@ data ImportResult
       ImportFailed MithrilError
     | -- | Import failed during extraction
       ImportExtractionFailed ExtractionError
-    | -- | Import was skipped (e.g., no snapshots available)
-      ImportSkipped String
 
 -- | Trace events during import
 data ImportTrace
