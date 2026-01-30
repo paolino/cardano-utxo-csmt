@@ -4,6 +4,9 @@ module Cardano.UTxOCSMT.Application.Database.Implementation.Query
     , getAllMerkleRoots
     , putBaseCheckpoint
     , getBaseCheckpoint
+    , isBootstrapInProgress
+    , setBootstrapInProgress
+    , clearBootstrapInProgress
     )
 where
 
@@ -23,6 +26,7 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     )
 import Control.Monad.Trans (lift)
 import Data.Function (fix)
+import Data.Maybe (isJust)
 import Database.KV.Cursor
     ( Entry (..)
     , firstEntry
@@ -31,6 +35,7 @@ import Database.KV.Cursor
     )
 import Database.KV.Transaction
     ( Transaction
+    , delete
     , insert
     , iterating
     , query
@@ -100,3 +105,20 @@ putBaseCheckpoint
     :: slot
     -> Transaction m cf (Columns slot hash key value) op ()
 putBaseCheckpoint = insert ConfigCol BaseCheckpointKey
+
+-- | Check if bootstrap is in progress (incomplete)
+isBootstrapInProgress
+    :: Monad m
+    => Transaction m cf (Columns slot hash key value) op Bool
+isBootstrapInProgress = isJust <$> query ConfigCol BootstrapInProgressKey
+
+-- | Mark bootstrap as in progress (stores target slot for reference)
+setBootstrapInProgress
+    :: slot
+    -> Transaction m cf (Columns slot hash key value) op ()
+setBootstrapInProgress = insert ConfigCol BootstrapInProgressKey
+
+-- | Clear bootstrap in progress marker
+clearBootstrapInProgress
+    :: Transaction m cf (Columns slot hash key value) op ()
+clearBootstrapInProgress = delete ConfigCol BootstrapInProgressKey

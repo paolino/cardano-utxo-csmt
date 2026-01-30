@@ -19,14 +19,18 @@ where
 
 import Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     ( ArmageddonParams
+    , armageddon
     , setup
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Query
-    ( getBaseCheckpoint
+    ( clearBootstrapInProgress
+    , getBaseCheckpoint
+    , isBootstrapInProgress
     , putBaseCheckpoint
+    , setBootstrapInProgress
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( RunCSMTTransaction (..)
@@ -52,6 +56,7 @@ import Cardano.UTxOCSMT.Ouroboros.Connection
     , validateNodeConnection
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
+import Control.Monad (when)
 import Control.Tracer (Contravariant (..), Tracer)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.Maybe (isNothing)
@@ -133,6 +138,14 @@ setupDB
     skipValidation
     armageddonParams
     runner@RunCSMTTransaction{txRunTransaction} = do
+        -- Check for incomplete bootstrap and clean up if needed
+        incomplete <- txRunTransaction isBootstrapInProgress
+        when incomplete $ do
+            trace IncompleteBootstrapDetected
+            armageddon (contra New) runner armageddonParams
+            txRunTransaction clearBootstrapInProgress
+            trace IncompleteBootstrapCleaned
+
         new <- checkEmptyRollbacks runner
         if new
             then do
@@ -260,6 +273,9 @@ setupDB
                                 , MithrilClient.mithrilAncillaryVk = ancillaryVk
                                 }
 
+                    -- Set bootstrap-in-progress marker before streaming
+                    txRunTransaction $ setBootstrapInProgress startingPoint
+
                     result <-
                         importFromMithril
                             (contramap Mithril tracer)
@@ -274,8 +290,10 @@ setupDB
                             setup (contra New) runner armageddonParams
                             -- Save Origin as initial checkpoint (will be
                             -- updated when we reach the Mithril slot)
-                            txRunTransaction
-                                $ putBaseCheckpoint importCheckpoint
+                            -- Also clear the bootstrap-in-progress marker
+                            txRunTransaction $ do
+                                putBaseCheckpoint importCheckpoint
+                                clearBootstrapInProgress
                             return
                                 SetupResult
                                     { setupStartingPoint = importCheckpoint
@@ -284,13 +302,16 @@ setupDB
                         ImportFailed err -> do
                             -- Fall back to regular setup if Mithril fails
                             trace $ Mithril $ ImportError err
+                            txRunTransaction clearBootstrapInProgress
                             regularSetup
                         ImportExtractionFailed err -> do
                             -- Fall back to regular setup if extraction fails
                             trace $ Mithril $ ImportExtractionError err
+                            txRunTransaction clearBootstrapInProgress
                             regularSetup
                         ImportSkipped _reason -> do
                             -- Fall back to regular setup
+                            txRunTransaction clearBootstrapInProgress
                             regularSetup
 
 {- | Check if the rollbacks column family is empty.

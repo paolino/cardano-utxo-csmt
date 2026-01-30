@@ -26,7 +26,9 @@ import Database.KV.Transaction
     )
 
 -- | Keys for the configuration column
-data ConfigKey = BaseCheckpointKey
+data ConfigKey
+    = BaseCheckpointKey
+    | BootstrapInProgressKey
     deriving (Eq, Ord, Show)
 
 configKeyPrism :: Prism' ByteString ConfigKey
@@ -34,10 +36,12 @@ configKeyPrism = prism' encode decode
   where
     encode :: ConfigKey -> ByteString
     encode BaseCheckpointKey = "base_checkpoint"
+    encode BootstrapInProgressKey = "bootstrap_in_progress"
 
     decode :: ByteString -> Maybe ConfigKey
     decode bs
         | bs == "base_checkpoint" = Just BaseCheckpointKey
+        | bs == "bootstrap_in_progress" = Just BootstrapInProgressKey
         | otherwise = Nothing
 
 -- | Structure of the database used by this application
