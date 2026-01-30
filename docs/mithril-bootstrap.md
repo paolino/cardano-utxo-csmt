@@ -57,7 +57,7 @@ Enable Mithril bootstrap with the `--mithril-bootstrap` flag:
 cardano-utxo \
     --network preview \
     --mithril-bootstrap \
-    --csmt-db-path /path/to/db
+    --db-path /path/to/db
 ```
 
 The `--network` option sets both the Cardano network (magic, default peer) and
@@ -70,25 +70,25 @@ Set up environment variables for your network before running:
 === "Preprod"
 
     ```bash
-    export AGGREGATOR_ENDPOINT=https://aggregator.release-preprod.api.mithril.network/aggregator
-    export GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/genesis.vkey)
-    export ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/ancillary.vkey)
+    export MITHRIL_AGGREGATOR_ENDPOINT=https://aggregator.release-preprod.api.mithril.network/aggregator
+    export MITHRIL_GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/genesis.vkey)
+    export MITHRIL_ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/ancillary.vkey)
     ```
 
 === "Preview"
 
     ```bash
-    export AGGREGATOR_ENDPOINT=https://aggregator.pre-release-preview.api.mithril.network/aggregator
-    export GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/genesis.vkey)
-    export ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/ancillary.vkey)
+    export MITHRIL_AGGREGATOR_ENDPOINT=https://aggregator.pre-release-preview.api.mithril.network/aggregator
+    export MITHRIL_GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/genesis.vkey)
+    export MITHRIL_ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/ancillary.vkey)
     ```
 
 === "Mainnet"
 
     ```bash
-    export AGGREGATOR_ENDPOINT=https://aggregator.release-mainnet.api.mithril.network/aggregator
-    export GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/genesis.vkey)
-    export ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/ancillary.vkey)
+    export MITHRIL_AGGREGATOR_ENDPOINT=https://aggregator.release-mainnet.api.mithril.network/aggregator
+    export MITHRIL_GENESIS_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/genesis.vkey)
+    export MITHRIL_ANCILLARY_VERIFICATION_KEY=$(curl -s https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/ancillary.vkey)
     ```
 
 Source: [Mithril Network Configurations](https://mithril.network/doc/manual/getting-started/network-configurations)
@@ -102,9 +102,9 @@ Source: [Mithril Network Configurations](https://mithril.network/doc/manual/gett
 | `--network NETWORK` | Network: `mainnet`, `preprod`, `preview` | `mainnet` |
 | `--mithril-bootstrap` | Enable Mithril bootstrapping | `false` |
 | `--mithril-bootstrap-only` | Exit after bootstrap (skip chain sync) | `false` |
-| `--aggregator-endpoint URL` | Override aggregator URL | From env var |
-| `--genesis-verification-key KEY` | Genesis verification key (JSON-hex) | From env var |
-| `--ancillary-verification-key KEY` | Ancillary verification key (JSON-hex) | From env var |
+| `--mithril-aggregator-endpoint URL` | Override aggregator URL | From env var |
+| `--mithril-genesis-verification-key KEY` | Genesis verification key (JSON-hex) | From env var |
+| `--mithril-ancillary-verification-key KEY` | Ancillary verification key (JSON-hex) | From env var |
 | `--mithril-download-dir DIR` | Directory for downloads | Temp directory |
 | `--mithril-skip-ancillary-verification` | Skip Ed25519 verification (not recommended) | `false` |
 
@@ -112,9 +112,9 @@ Source: [Mithril Network Configurations](https://mithril.network/doc/manual/gett
 
 | Variable | Description |
 |----------|-------------|
-| `AGGREGATOR_ENDPOINT` | Mithril aggregator URL |
-| `GENESIS_VERIFICATION_KEY` | Genesis verification key for mithril-client CLI (JSON-hex) |
-| `ANCILLARY_VERIFICATION_KEY` | Ed25519 verification key for ancillary files (JSON-hex) |
+| `MITHRIL_AGGREGATOR_ENDPOINT` | Mithril aggregator URL |
+| `MITHRIL_GENESIS_VERIFICATION_KEY` | Genesis verification key for mithril-client CLI (JSON-hex) |
+| `MITHRIL_ANCILLARY_VERIFICATION_KEY` | Ed25519 verification key for ancillary files (JSON-hex) |
 
 ## Networks
 
@@ -249,9 +249,9 @@ Ancillary files (ledger state) are protected by Ed25519 signature verification:
 
 - **Manifest signature**: The `ancillary_manifest.json` is signed by IOG's Ed25519 key
 - **File integrity**: Each file's SHA256 hash is verified against the manifest
-- **Environment variables**: Verification keys are read from `ANCILLARY_VERIFICATION_KEY`
+- **Environment variables**: Verification keys are read from `MITHRIL_ANCILLARY_VERIFICATION_KEY`
 
-This verification runs automatically when `ANCILLARY_VERIFICATION_KEY` is set. To skip it (not recommended):
+This verification runs automatically when `MITHRIL_ANCILLARY_VERIFICATION_KEY` is set. To skip it (not recommended):
 
 ```bash
 cardano-utxo \
@@ -265,7 +265,7 @@ To use a custom verification key via CLI:
 ```bash
 cardano-utxo \
     --mithril-bootstrap \
-    --ancillary-verification-key "5b32332c37312c..." \
+    --mithril-ancillary-verification-key "5b32332c37312c..." \
     ...
 ```
 
