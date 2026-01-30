@@ -20,6 +20,7 @@ where
 import Cardano.UTxOCSMT.Application.Database.Interface
     ( Dump (..)
     , Operation (..)
+    , TipOf
     , emptyDump
     )
 import Cardano.UTxOCSMT.Application.Database.Properties.Expected
@@ -148,7 +149,10 @@ generateOperations = do
   with properties.
 -}
 populateWithSomeContent
-    :: (PropertyConstraints m slot key value, HasCallStack)
+    :: ( PropertyConstraints m slot key value
+       , HasCallStack
+       , TipOf slot ~ slot
+       )
     => PropertyWithExpected
         m
         slot
@@ -182,7 +186,7 @@ populateWithSomeContent = do
 forwarding must move the tip ahead
 -}
 propertyForwardBeforeTipIsNoOp
-    :: PropertyConstraints m slot key value
+    :: (PropertyConstraints m slot key value, TipOf slot ~ slot)
     => PropertyWithExpected m slot key value ()
 propertyForwardBeforeTipIsNoOp = do
     Generator{genSlot} <- asksGenerator
@@ -210,7 +214,7 @@ associations are updated by applying the changes
 old associations that were not deleted remain
 -}
 propertyForwardAfterTipAppliesChanges
-    :: PropertyConstraints m slot key value
+    :: (PropertyConstraints m slot key value, TipOf slot ~ slot)
     => PropertyWithExpected m slot key value ()
 propertyForwardAfterTipAppliesChanges = do
     Generator{genSlot} <- asksGenerator

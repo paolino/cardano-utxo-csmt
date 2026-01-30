@@ -87,7 +87,8 @@ import Data.Tracer.TraceWith
 import Main.Utf8 (withUtf8)
 import OptEnvConf (runParser)
 import Ouroboros.Consensus.Ledger.SupportsPeerSelection (PortNumber)
-import Ouroboros.Network.Block (SlotNo (..))
+import Ouroboros.Network.Block (SlotNo (..), pointSlot)
+import Ouroboros.Network.Point (WithOrigin (..))
 import Paths_cardano_utxo_csmt (version)
 import System.Exit (exitSuccess)
 import System.IO (BufferMode (..), hSetBuffering, stdout)
@@ -195,10 +196,17 @@ main = withUtf8 $ do
                     runner
 
             -- Now create the Update state (logs "New update state")
+            let onForward blockPoint chainTipSlot =
+                    case pointSlot blockPoint of
+                        At blockSlot
+                            | blockSlot >= chainTipSlot ->
+                                traceWith metricsEvent $ BootstrapPhaseEvent Synced
+                        _ -> pure ()
             (state, slots) <-
                 createUpdateState
                     (contra Update)
                     slotHash
+                    onForward
                     armageddonParams
                     runner
 
