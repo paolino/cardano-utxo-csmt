@@ -53,6 +53,77 @@ common warnings
     TypeOperators
     ViewPatterns
 
+-- | Abstract Mithril STM signature verification.
+--
+-- This sublibrary provides native Haskell verification of Mithril
+-- Stake-based Threshold Multisignature (STM) certificates.
+--
+-- Key features:
+--
+-- * Abstract over crypto primitives via function records (not typeclasses)
+-- * No external dependencies beyond base, bytestring, containers
+-- * Easy to test with mock implementations
+-- * Can be used with hsblst, cardano-crypto-class, or other BLS backends
+--
+-- See "Mithril.STM" for documentation and usage examples.
+library mithril-stm
+  import:           warnings
+  hs-source-dirs:   mithril-stm
+  default-language: Haskell2010
+  build-depends:
+    , base        >=4.14 && <5
+    , bytestring
+    , cereal
+    , containers
+    , crypton
+    , hsblst
+    , memory
+
+  exposed-modules:
+    Mithril.STM
+    Mithril.STM.Crypto
+    Mithril.STM.Crypto.Crypton
+    Mithril.STM.Crypto.Hsblst
+    Mithril.STM.Lottery
+    Mithril.STM.Merkle
+    Mithril.STM.Parameters
+    Mithril.STM.Serialization
+    Mithril.STM.Types
+    Mithril.STM.Verify
+
+-- | Test suite for mithril-stm library.
+--
+-- Tests use mock crypto implementations to verify:
+--
+-- * Lottery eligibility calculations
+-- * Merkle batch proof verification
+-- * Full verification flow
+test-suite mithril-stm-test
+  import:           warnings
+  default-language: Haskell2010
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   mithril-stm-test
+  main-is:          Main.hs
+  other-modules:
+    Mithril.STM.IntegrationSpec
+    Mithril.STM.LotterySpec
+    Mithril.STM.MerkleSpec
+    Mithril.STM.SerializationSpec
+    Mithril.STM.VerifySpec
+
+  build-depends:
+    , aeson
+    , base                           >=4.14 && <5
+    , bytestring
+    , cardano-utxo-csmt:mithril-stm
+    , cereal
+    , hspec
+    , http-client
+    , http-client-tls
+    , http-types
+    , QuickCheck
+    , vector
+
 library http
   import:           warnings
   hs-source-dirs:   http
