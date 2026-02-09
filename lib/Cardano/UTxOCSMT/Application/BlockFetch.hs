@@ -83,10 +83,12 @@ data HeaderSkipProgress = HeaderSkipProgress
     }
     deriving (Show)
 
--- | A fetched block along with its point
+-- | A fetched block along with its point and chain tip
 data Fetched = Fetched
     { fetchedPoint :: Point
     , fetchedBlock :: Block
+    , fetchedTip :: SlotNo
+    -- ^ Chain tip slot at the time the header was received
     }
 
 {- | Create a block fetch application and promote compute an header intersector
@@ -135,7 +137,7 @@ mkBlockFetchApplication
 
 headerFollower
     :: MVar (Follower Fetched)
-    -> Queue Point
+    -> Queue (Point, SlotNo)
     -> Tracer IO HeaderSkipProgress
     -- ^ Tracer for skip progress
     -> (Point -> IO ())
@@ -156,7 +158,7 @@ headerFollower
     mSkipTargetSlot
     skipActiveVar = fix $ \go ->
         Follower
-            { rollForward = \header -> do
+            { rollForward = \header tipSlot -> do
                 let headerSlot = blockSlot header
                     point = blockPoint header
 
@@ -170,7 +172,7 @@ headerFollower
                             setCheckpoint point
                             onSkipComplete
                             -- Now start normal operation
-                            pushQueue point
+                            pushQueue (point, tipSlot)
                         | otherwise ->
                             -- Still skipping: emit progress event
                             traceWith
@@ -181,7 +183,7 @@ headerFollower
                                     }
                     _ ->
                         -- Normal operation: push to queue
-                        pushQueue point
+                        pushQueue (point, tipSlot)
 
                 pure go
             , rollBackward = \point -> do
@@ -222,7 +224,7 @@ headerFollower
 
 mkHeaderIntersector
     :: MVar (Follower Fetched)
-    -> Queue Point
+    -> Queue (Point, SlotNo)
     -> Tracer IO HeaderSkipProgress
     -- ^ Tracer for skip progress
     -> (Point -> IO ())
@@ -263,12 +265,12 @@ mkHeaderIntersector
 
 blockFetchReceiver
     :: MVar (Follower Fetched)
-    -> NonEmpty Point
+    -> NonEmpty (Point, SlotNo)
     -> IO (BlockFetchReceiver Block IO)
-blockFetchReceiver blockFollowerVar points = do
+blockFetchReceiver blockFollowerVar pointsWithTips = do
     blockFollower <- takeMVar blockFollowerVar
     pure
-        $ ($ NE.toList points)
+        $ ($ NE.toList pointsWithTips)
         $ ($ blockFollower)
         $ fix
         $ \fetchOne bf ps ->
@@ -279,14 +281,16 @@ blockFetchReceiver blockFollowerVar points = do
                             error
                                 "mkBlockFetchApplication: \
                                 \more blocks fetched than requested"
-                        p : ps' -> do
+                        (p, tip) : ps' -> do
                             bf' <-
                                 rollForward
                                     bf
                                     Fetched
                                         { fetchedPoint = p
                                         , fetchedBlock = block
+                                        , fetchedTip = tip
                                         }
+                                    tip
                             pure $ fetchOne bf' ps'
                 , handleBatchDone = putMVar blockFollowerVar bf
                 }
@@ -294,17 +298,19 @@ blockFetchReceiver blockFollowerVar points = do
 blockFetchClient
     :: Tracer IO EventQueueLength
     -> MVar (Follower Fetched)
-    -> Queue Point
+    -> Queue (Point, SlotNo)
     -> BlockFetchClient Block Point IO ()
 blockFetchClient tracer blockFollowerVar Queue{flushQueue} = fix $ \go ->
     BlockFetchClient $ do
-        points <- flushQueue
-        traceWith tracer $ EventQueueLength $ length points
+        pointsWithTips <- flushQueue
+        traceWith tracer $ EventQueueLength $ length pointsWithTips
+        let points = fmap fst pointsWithTips
         pure
             $ SendMsgRequestRange
                 (mkRange points)
                 BlockFetchResponse
-                    { handleStartBatch = blockFetchReceiver blockFollowerVar points
+                    { handleStartBatch =
+                        blockFetchReceiver blockFollowerVar pointsWithTips
                     , handleNoBlocks = error "blockFetchClient: no blocks to fetch"
                     }
                 go

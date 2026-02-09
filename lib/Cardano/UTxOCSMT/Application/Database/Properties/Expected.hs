@@ -42,6 +42,7 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     , Operation (..)
     , Query
     , State (..)
+    , TipOf
     , Update (..)
     , dumpDatabase
     )
@@ -233,7 +234,10 @@ expectedForward old@Expected{expectedTip} slot ops
 -- | Proxy to database 'forward' that also updates expected state
 forwardTip
     :: forall m slot key value
-     . (PropertyConstraints m slot key value, HasCallStack)
+     . ( PropertyConstraints m slot key value
+       , HasCallStack
+       , TipOf slot ~ slot
+       )
     => slot
     -> [Operation key value]
     -> PropertyWithExpected m slot key value ()
@@ -241,7 +245,8 @@ forwardTip slot ops = lift . lift $ do
     (ex, databaseState) <- get
     case databaseState of
         Syncing update -> do
-            cont <- lift $ forwardTipApply update slot ops
+            -- Use slot as chain tip for testing (always "at tip")
+            cont <- lift $ forwardTipApply update slot slot ops
             put (expectedForward ex slot ops, Syncing cont)
         Intersecting _ _ ->
             error "forwardTip: cannot forward while intersecting"

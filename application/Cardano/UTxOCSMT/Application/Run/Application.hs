@@ -18,6 +18,7 @@ import Cardano.UTxOCSMT.Application.ChainSync
 import Cardano.UTxOCSMT.Application.Database.Interface
     ( Operation (..)
     , State (..)
+    , TipOf
     , Update (..)
     )
 import Cardano.UTxOCSMT.Application.Metrics
@@ -55,11 +56,15 @@ import Ouroboros.Network.Point
     )
 import System.IO (BufferMode (..), hSetBuffering, stdout)
 
+-- | The tip type for Point is SlotNo
+type instance TipOf Point = SlotNo
+
 -- | Events emitted by the application
 data ApplicationTrace
     = ApplicationIntersectionAt Point
     | ApplicationIntersectionFailed
-    | ApplicationRollingBack Point
+    | -- | Rollback starting to the given point
+      ApplicationRollingBack Point
     | -- | Block processed at slot with UTxO change count
       ApplicationBlockProcessed SlotNo Int
     | -- | Header sync progress during Mithril catch-up
@@ -141,7 +146,7 @@ follower
     newFinalityTarget
     db = ($ db) $ fix $ \go currentDB ->
         Follower
-            { rollForward = \Fetched{fetchedPoint, fetchedBlock} -> do
+            { rollForward = \Fetched{fetchedPoint, fetchedBlock} tipSlot -> do
                 let ops = changeToOperation <$> uTxOs fetchedBlock
                     opsCount = length ops
                 replicateM_ opsCount trUTxO
@@ -154,7 +159,8 @@ follower
                     _ -> pure ()
                 newDB <- case currentDB of
                     Syncing update -> do
-                        newUpdate <- forwardTipApply update fetchedPoint ops
+                        newUpdate <-
+                            forwardTipApply update fetchedPoint tipSlot ops
                         finality <- newFinalityTarget
                         Syncing <$> case finality of
                             Nothing -> pure newUpdate

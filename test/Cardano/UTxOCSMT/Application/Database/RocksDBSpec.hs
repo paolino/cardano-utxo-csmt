@@ -36,6 +36,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     ( mkUpdate
     )
+import Cardano.UTxOCSMT.Application.Database.Interface (TipOf)
 import Cardano.UTxOCSMT.Application.Database.Properties
     ( findValue
     , logOnFailure
@@ -85,6 +86,9 @@ import Test.QuickCheck
     , suchThat
     )
 import Test.QuickCheck.Monadic (monadic')
+
+-- | For testing, TipOf Int = Int (slot equals tip type)
+type instance TipOf Int = Int
 
 newtype GenSlot = GenSlot Int
     deriving (Show, Eq, Ord)
@@ -187,7 +191,12 @@ runRocksDBProperties prop =
     txRunner db = newRunRocksDBCSMTTransaction db prisms csmtContext
     armageddonParams = ArmageddonParams 1000 (mkHash "")
     query db = mkTransactionedQuery <$> newRunRocksDBTransaction db prisms
-    update = mkUpdate nullTracer (const $ mkHash "") armageddonParams
+    update =
+        mkUpdate
+            nullTracer
+            (const $ mkHash "")
+            (\_ _ -> pure ())
+            armageddonParams
 
 test
     :: PropertyWithExpected

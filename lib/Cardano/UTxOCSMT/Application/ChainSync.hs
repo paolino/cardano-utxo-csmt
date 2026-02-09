@@ -32,7 +32,7 @@ import Cardano.UTxOCSMT.Ouroboros.Types
 import Control.Tracer (Tracer, traceWith)
 import Data.Function (fix)
 import Ouroboros.Consensus.Cardano.Node ()
-import Ouroboros.Network.Block (SlotNo)
+import Ouroboros.Network.Block (SlotNo (..))
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Point (WithOrigin (Origin))
 import Ouroboros.Network.Protocol.ChainSync.Client
@@ -114,14 +114,14 @@ next tracer tipTracer follower = ($ follower)
                     { recvMsgRollForward = \header tip -> do
                         checkResult $ do
                             traceWith tracer header
-                            traceTipSlot tipTracer tip
-                            Progress <$> rollForward header
+                            let tipSlot = getTipSlot tip
+                            traceWith tipTracer tipSlot
+                            Progress <$> rollForward header tipSlot
                     , recvMsgRollBackward = \point _ ->
                         checkResult $ rollBackward point
                     }
 
--- | Extract and trace the slot from the chain tip
-traceTipSlot :: Tracer IO SlotNo -> Tip -> IO ()
-traceTipSlot tipTracer tip = case tip of
-    Network.TipGenesis -> pure ()
-    Network.Tip slot _ _ -> traceWith tipTracer slot
+-- | Extract the slot from the chain tip (defaults to 0 for genesis)
+getTipSlot :: Tip -> SlotNo
+getTipSlot Network.TipGenesis = SlotNo 0
+getTipSlot (Network.Tip slot _ _) = slot

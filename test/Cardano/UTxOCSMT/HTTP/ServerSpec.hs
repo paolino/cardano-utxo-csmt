@@ -35,6 +35,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     )
 import Cardano.UTxOCSMT.Application.Database.Interface
     ( Operation (..)
+    , TipOf
     , Update (..)
     )
 import Cardano.UTxOCSMT.Application.Database.RocksDB
@@ -84,6 +85,9 @@ import Network.Wai.Test
 import Ouroboros.Network.Block (SlotNo (..))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
+
+-- | For testing, TipOf SlotNo = SlotNo
+type instance TipOf SlotNo = SlotNo
 
 {- | Test prisms for serializing slots, hashes, keys, values
 Uses SlotNo for slots and ByteString for keys/values (matching RocksDBSpec.hs)
@@ -224,6 +228,7 @@ withTestDB action =
                 $ mkUpdate
                     nullTracer
                     testSlotHash
+                    (\_ _ -> pure ())
                     testArmageddonParams
                     runner
 
@@ -236,6 +241,7 @@ withRocksDB path =
         [ ("kv", testConfig)
         , ("csmt", testConfig)
         , ("rollbacks", testConfig)
+        , ("config", testConfig)
         ]
 
 -- | Sample metrics for testing
@@ -346,12 +352,12 @@ spec = do
                     -- Insert some data at slot 100
                     let key1 = mkTestKey "utxo1"
                         value1 = mkTestValue "output1"
-                    update1 <- forwardTipApply update 100 [Insert key1 value1]
+                    update1 <- forwardTipApply update 100 100 [Insert key1 value1]
 
                     -- Insert more data at slot 200
                     let key2 = mkTestKey "utxo2"
                         value2 = mkTestValue "output2"
-                    _ <- forwardTipApply update1 200 [Insert key2 value2]
+                    _ <- forwardTipApply update1 200 200 [Insert key2 value2]
 
                     session
                         (pure $ Just sampleMetrics)
@@ -413,7 +419,7 @@ spec = do
                         testTxIx = 0 :: Word16
 
                     -- Insert the UTxO
-                    _ <- forwardTipApply update 100 [Insert testKey testValue]
+                    _ <- forwardTipApply update 100 100 [Insert testKey testValue]
 
                     -- Create query function that looks up by our test key
                     let proofQuery txId txIx =
@@ -451,7 +457,7 @@ spec = do
                         testTxId = "6d65726b6c657465"
                         testTxIx = 0 :: Word16
 
-                    _ <- forwardTipApply update 100 [Insert testKey testValue]
+                    _ <- forwardTipApply update 100 100 [Insert testKey testValue]
 
                     let proofQuery txId txIx =
                             if txId == testTxId && txIx == testTxIx

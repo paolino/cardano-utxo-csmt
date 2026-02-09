@@ -38,6 +38,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     )
 import Cardano.UTxOCSMT.Application.Database.Interface
     ( Query
+    , TipOf
     , Update
     )
 import Control.Monad.Catch (MonadMask)
@@ -114,21 +115,32 @@ newRocksDBState
     -> Prisms slot hash key value
     -> CSMTContext hash key value
     -> (slot -> hash)
+    -> (slot -> TipOf slot -> m ())
+    -- ^ Called after each forward; use to check if at tip and emit Synced
     -> ArmageddonParams hash
     -> m
         ( (Update m slot key value, [slot])
         , RunCSMTTransaction ColumnFamily BatchOp slot hash key value m
         )
-newRocksDBState tracer db prisms csmtContext slotHash armageddonParams = do
-    runner <- newRunRocksDBCSMTTransaction db prisms csmtContext
-    (,runner)
-        <$> newState tracer slotHash armageddonParams runner
+newRocksDBState
+    tracer
+    db
+    prisms
+    csmtContext
+    slotHash
+    onForward
+    armageddonParams = do
+        runner <- newRunRocksDBCSMTTransaction db prisms csmtContext
+        (,runner)
+            <$> newState tracer slotHash onForward armageddonParams runner
 
 -- | Create Update state from an existing runner
 createUpdateState
     :: (MonadFail m, Ord key, Ord slot)
     => Tracer m (UpdateTrace slot hash)
     -> (slot -> hash)
+    -> (slot -> TipOf slot -> m ())
+    -- ^ Called after each forward; use to check if at tip and emit Synced
     -> ArmageddonParams hash
     -> RunCSMTTransaction ColumnFamily BatchOp slot hash key value m
     -> m (Update m slot key value, [slot])
