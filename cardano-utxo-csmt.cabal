@@ -297,7 +297,8 @@ test-suite unit-tests
   import:             warnings
 
   -- Work around GHC false positive for unused packages
-  ghc-options:        -Wno-unused-packages
+  -- Test-only TipOf instances (TipOf Int, TipOf SlotNo) are necessarily orphans
+  ghc-options:        -Wno-unused-packages -Wno-orphans
   default-language:   Haskell2010
   hs-source-dirs:     test
   build-depends:
