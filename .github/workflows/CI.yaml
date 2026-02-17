@@ -89,7 +89,9 @@ jobs:
           path: output-docker-image
       - name: Load and tag docker image
         run: |
-          docker load < output-docker-image/*.tar.gz
+          ls -la output-docker-image/
+          image_file=$(find output-docker-image -type f | head -1)
+          docker load < "$image_file"
           # Tag whatever was loaded as cardano-utxo:e2e
           loaded=$(docker images --format '{{.Repository}}:{{.Tag}}' | head -1)
           docker image tag "$loaded" cardano-utxo:e2e
