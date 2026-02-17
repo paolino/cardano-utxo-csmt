@@ -4,7 +4,14 @@ module Cardano.UTxOCSMT.Application.Database.RocksDBSpec
 where
 
 import CSMT.Backend.RocksDB (RunRocksDB (..))
-import CSMT.Hashes (Hash, fromKVHashes, hashHashing, isoHash, mkHash)
+import CSMT.Hashes
+    ( Hash
+    , fromKVHashes
+    , hashHashing
+    , isoHash
+    , keyToByteString
+    , mkHash
+    )
 import Cardano.Slotting.Slot (WithOrigin (..))
 import Cardano.UTxOCSMT.Application.Database.Implementation.AppConfig
     ( AppConfig (..)
@@ -190,7 +197,7 @@ runRocksDBProperties prop =
   where
     txRunner db = newRunRocksDBCSMTTransaction db prisms csmtContext
     armageddonParams = ArmageddonParams 1000 (mkHash "")
-    query db = mkTransactionedQuery <$> newRunRocksDBTransaction db prisms
+    query db = mkTransactionedQuery keyToByteString <$> newRunRocksDBTransaction db prisms
     update =
         mkUpdate
             nullTracer

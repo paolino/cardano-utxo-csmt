@@ -1,6 +1,7 @@
 module Cardano.UTxOCSMT.Application.Run.Query
     ( queryMerkleRoots
     , queryInclusionProof
+    , queryUTxOsByAddress
     , mkReadyResponse
     )
 where
@@ -15,11 +16,11 @@ where
 -- including merkle root queries, inclusion proof generation, and
 -- readiness checks based on sync status.
 
-import CSMT (FromKV (..))
 import CSMT.Hashes
     ( Hash
-    , fromKVHashes
+    , byteStringToKey
     , generateInclusionProof
+    , keyToByteString
     , renderHash
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
@@ -29,31 +30,36 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     ( getAllMerkleRoots
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
-    ( RunCSMTTransaction (..)
+    ( CSMTContext (..)
+    , RunCSMTTransaction (..)
+    , queryByAddress
     , queryMerkleRoot
     )
 import Cardano.UTxOCSMT.Application.Metrics
     ( BootstrapPhase (..)
     , Metrics (..)
     )
+import Cardano.UTxOCSMT.Application.Run.Config (context)
 import Cardano.UTxOCSMT.Application.UTxOs (unsafeMkTxIn)
 import Cardano.UTxOCSMT.HTTP.API
     ( InclusionProofResponse (..)
     , MerkleRootEntry (..)
     , ReadyResponse (..)
+    , UTxOByAddressEntry (..)
     )
 import Cardano.UTxOCSMT.HTTP.Base16
-    ( encodeBase16Text
+    ( decodeBase16Text
+    , encodeBase16Text
     , unsafeDecodeBase16Text
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (Header, Point)
-import Control.Lens (strict, view)
 import Data.ByteArray.Encoding
     ( Base (..)
     , convertToBase
     )
 import Data.ByteString (toStrict)
 import Data.ByteString.Lazy (LazyByteString)
+import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Short (toShort)
 import Data.Text (Text)
 import Data.Text.Encoding qualified as Text
@@ -113,7 +119,8 @@ queryInclusionProof
     -- ^ Inclusion proof response, if the UTxO exists
 queryInclusionProof (RunCSMTTransaction runCSMT) txIdText txIx = do
     runCSMT $ do
-        result <- generateInclusionProof fromKVLazy KVCol CSMTCol txIn
+        let CSMTContext{fromKV} = context
+        result <- generateInclusionProof fromKV KVCol CSMTCol txIn
         merkle <- queryMerkleRoot
         pure $ do
             (out, proof') <- result
@@ -131,13 +138,36 @@ queryInclusionProof (RunCSMTTransaction runCSMT) txIdText txIx = do
                     , proofMerkleRoot = merkleText
                     }
   where
-    fromKVLazy =
-        FromKV
-            { fromK = fromK fromKVHashes . view strict
-            , fromV = fromV fromKVHashes . view strict
-            }
-
     txIn = unsafeMkTxIn (toShort $ unsafeDecodeBase16Text txIdText) txIx
+
+-- | Query all UTxOs at a given address.
+queryUTxOsByAddress
+    :: RunCSMTTransaction
+        ColumnFamily
+        BatchOp
+        Point
+        Hash
+        LazyByteString
+        LazyByteString
+        IO
+    -- ^ Database transaction runner
+    -> Text
+    -- ^ Address in base16 encoding
+    -> IO (Either String [UTxOByAddressEntry])
+queryUTxOsByAddress (RunCSMTTransaction runCSMT) addressHex =
+    case decodeBase16Text addressHex of
+        Left err -> pure $ Left $ "Invalid base16 address: " <> err
+        Right addressBytes -> do
+            let addressKey = byteStringToKey addressBytes
+                toKey = BL.fromStrict . keyToByteString
+            results <- runCSMT $ queryByAddress toKey addressKey
+            pure $ Right $ fmap toEntry results
+  where
+    toEntry (txIn, txOut) =
+        UTxOByAddressEntry
+            { utxoTxIn = encodeBase16Text $ toStrict txIn
+            , utxoTxOut = encodeBase16Text $ toStrict txOut
+            }
 
 {- | Create a 'ReadyResponse' based on current metrics and sync threshold.
 

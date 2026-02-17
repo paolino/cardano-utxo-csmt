@@ -6,10 +6,12 @@ where
 import CSMT (FromKV (..))
 import CSMT.Hashes
     ( Hash
+    , byteStringToKey
     , fromKVHashes
     , generateInclusionProof
     , hashHashing
     , isoHash
+    , keyToByteString
     , mkHash
     , renderHash
     )
@@ -28,6 +30,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
     , RunCSMTTransaction (..)
+    , queryByAddress
     , queryMerkleRoot
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
@@ -46,6 +49,7 @@ import Cardano.UTxOCSMT.HTTP.API
     ( InclusionProofResponse (..)
     , MerkleRootEntry (..)
     , ReadyResponse (..)
+    , UTxOByAddressEntry (..)
     )
 import Cardano.UTxOCSMT.HTTP.Base16
     ( encodeBase16Text
@@ -55,7 +59,7 @@ import Control.Lens (lazy, prism', strict, view)
 import Control.Monad.IO.Class (liftIO)
 import Control.Tracer (nullTracer)
 import Data.Aeson (eitherDecode, encode)
-import Data.ByteArray.Encoding (Base (..), convertToBase)
+import Data.ByteArray.Encoding (Base (..), convertFromBase, convertToBase)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BC
 import Data.ByteString.Lazy qualified as BL
@@ -104,7 +108,7 @@ testPrisms =
         , valueP = lazy
         }
 
--- | Test CSMT context for hashing
+-- | Test CSMT context for hashing (no address prefix)
 testCSMTContext :: CSMTContext Hash BL.ByteString BL.ByteString
 testCSMTContext =
     CSMTContext
@@ -116,7 +120,21 @@ testCSMTContext =
         FromKV
             { fromK = fromK fromKVHashes . view strict
             , fromV = fromV fromKVHashes . view strict
+            , treePrefix = const []
             }
+
+-- | CSMT context with address prefix (first 4 bytes of value used as address)
+prefixedCSMTContext :: CSMTContext Hash BL.ByteString BL.ByteString
+prefixedCSMTContext =
+    CSMTContext
+        { fromKV =
+            FromKV
+                { fromK = fromK fromKVHashes . view strict
+                , fromV = fromV fromKVHashes . view strict
+                , treePrefix = byteStringToKey . BC.take 4 . BL.toStrict
+                }
+        , hashing = hashHashing
+        }
 
 -- | Test armageddon params
 testArmageddonParams :: ArmageddonParams Hash
@@ -205,6 +223,31 @@ queryTestInclusionProof (RunCSMTTransaction runCSMT) actualKey txIdText txIx =
                     , proofMerkleRoot = merkleText
                     }
 
+-- | Query UTxOs by address for testing
+queryTestByAddress
+    :: RunCSMTTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
+    -> Text
+    -> IO (Either String [UTxOByAddressEntry])
+queryTestByAddress (RunCSMTTransaction runCSMT) addressHex =
+    case decodeBase16 addressHex of
+        Nothing -> pure $ Left "Invalid base16 address"
+        Just addressBytes -> do
+            let addressKey = byteStringToKey addressBytes
+                toKey = BL.fromStrict . keyToByteString
+            results <- runCSMT $ queryByAddress toKey addressKey
+            pure $ Right $ fmap toEntry results
+  where
+    decodeBase16 :: Text -> Maybe ByteString
+    decodeBase16 t =
+        case convertFromBase Base16 (TE.encodeUtf8 t) of
+            Left (_ :: String) -> Nothing
+            Right bs -> Just bs
+    toEntry (txIn, txOut) =
+        UTxOByAddressEntry
+            { utxoTxIn = encodeBase16 $ BL.toStrict txIn
+            , utxoTxOut = encodeBase16 $ BL.toStrict txOut
+            }
+
 -- | Run tests with a fresh RocksDB database and HTTP app
 withTestDB
     :: ( RunCSMTTransaction
@@ -223,6 +266,33 @@ withTestDB action =
     withSystemTempDirectory "http-test" $ \dir ->
         withRocksDB dir $ \db -> do
             runner <- newRunRocksDBCSMTTransaction db testPrisms testCSMTContext
+            setup nullTracer runner testArmageddonParams
+            action runner
+                $ mkUpdate
+                    nullTracer
+                    testSlotHash
+                    (\_ _ -> pure ())
+                    testArmageddonParams
+                    runner
+
+-- | Run tests with a fresh RocksDB database using address-prefixed CSMT
+withTestDBPrefixed
+    :: ( RunCSMTTransaction
+            ColumnFamily
+            BatchOp
+            SlotNo
+            Hash
+            BL.ByteString
+            BL.ByteString
+            IO
+         -> Update IO SlotNo BL.ByteString BL.ByteString
+         -> IO a
+       )
+    -> IO a
+withTestDBPrefixed action =
+    withSystemTempDirectory "http-test-prefixed" $ \dir ->
+        withRocksDB dir $ \db -> do
+            runner <- newRunRocksDBCSMTTransaction db testPrisms prefixedCSMTContext
             setup nullTracer runner testArmageddonParams
             action runner
                 $ mkUpdate
@@ -289,10 +359,15 @@ session
     :: IO (Maybe Metrics)
     -> IO [MerkleRootEntry]
     -> (Text -> Word16 -> IO (Maybe InclusionProofResponse))
+    -> (Text -> IO (Either String [UTxOByAddressEntry]))
     -> IO ReadyResponse
     -> Session a
     -> IO a
-session a b c d = flip runSession $ apiApp a b c d
+session a b c d e = flip runSession $ apiApp a b c d e
+
+-- | Default by-address handler that returns empty results
+noByAddress :: Text -> IO (Either String [UTxOByAddressEntry])
+noByAddress = const $ pure $ Right []
 
 spec :: Spec
 spec = do
@@ -303,6 +378,7 @@ spec = do
                     (pure Nothing)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    noByAddress
                     (pure syncedResponse)
                     $ do
                         resp <-
@@ -317,6 +393,7 @@ spec = do
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    noByAddress
                     (pure syncedResponse)
                     $ do
                         resp <-
@@ -334,6 +411,7 @@ spec = do
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    noByAddress
                     (pure syncedResponse)
                     $ do
                         resp <-
@@ -363,6 +441,7 @@ spec = do
                         (pure $ Just sampleMetrics)
                         (queryTestMerkleRoots runner)
                         (\_ _ -> pure Nothing)
+                        noByAddress
                         (pure syncedResponse)
                         $ do
                             resp <-
@@ -386,6 +465,7 @@ spec = do
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    noByAddress
                     (pure notSyncedResponse)
                     $ do
                         resp <-
@@ -401,6 +481,7 @@ spec = do
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    noByAddress
                     (pure syncedResponse)
                     $ do
                         resp <-
@@ -430,6 +511,7 @@ spec = do
                         (pure $ Just sampleMetrics)
                         (queryTestMerkleRoots runner)
                         proofQuery
+                        noByAddress
                         (pure syncedResponse)
                         $ do
                             resp <-
@@ -467,6 +549,7 @@ spec = do
                         (pure $ Just sampleMetrics)
                         (queryTestMerkleRoots runner)
                         proofQuery
+                        noByAddress
                         (pure syncedResponse)
                         $ do
                             resp <-
@@ -490,6 +573,7 @@ spec = do
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    noByAddress
                     (pure notSyncedResponse)
                     $ do
                         resp <-
@@ -505,6 +589,7 @@ spec = do
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    noByAddress
                     (pure syncedResponse)
                     $ do
                         resp <-
@@ -527,6 +612,7 @@ spec = do
                     (pure $ Just sampleMetrics)
                     (queryTestMerkleRoots runner)
                     (\_ _ -> pure Nothing)
+                    noByAddress
                     (pure notSyncedResponse)
                     $ do
                         resp <-
@@ -541,3 +627,104 @@ spec = do
                             Right response -> do
                                 ready response `shouldBe` False
                                 slotsBehind response `shouldBe` Just 500
+
+        describe "GET /utxos-by-address/:address" $ do
+            it "returns empty list for unknown address" $ do
+                withTestDBPrefixed $ \runner _update -> do
+                    let byAddress = queryTestByAddress runner
+                    session
+                        (pure $ Just sampleMetrics)
+                        (queryTestMerkleRoots runner)
+                        (\_ _ -> pure Nothing)
+                        byAddress
+                        (pure syncedResponse)
+                        $ do
+                            resp <-
+                                request
+                                    $ setPath
+                                        defaultRequest{requestMethod = methodGet}
+                                        "/utxos-by-address/deadbeef"
+                            liftIO $ simpleStatus resp `shouldBe` status200
+                            let decoded =
+                                    eitherDecode $ simpleBody resp
+                                        :: Either String [UTxOByAddressEntry]
+                            liftIO $ decoded `shouldBe` Right []
+
+            it "returns UTxOs matching the address prefix" $ do
+                withTestDBPrefixed $ \runner update -> do
+                    -- Values start with 4-byte "address" prefix
+                    -- "AAAA" prefix for addr1 entries
+                    let key1 = mkTestKey "utxo1"
+                        value1 = BL.fromStrict $ "AAAA" <> "output1-data"
+                        key2 = mkTestKey "utxo2"
+                        value2 = BL.fromStrict $ "AAAA" <> "output2-data"
+                    -- "BBBB" prefix for addr2 entries
+                    let key3 = mkTestKey "utxo3"
+                        value3 = BL.fromStrict $ "BBBB" <> "output3-data"
+
+                    update1 <- forwardTipApply update 100 100
+                        [Insert key1 value1, Insert key2 value2, Insert key3 value3]
+                    _ <- pure update1
+
+                    let byAddress = queryTestByAddress runner
+                        -- "AAAA" in hex = "41414141"
+                        addr1Hex = "41414141"
+                        -- "BBBB" in hex = "42424242"
+                        addr2Hex = "42424242"
+
+                    -- Query addr1: should return 2 entries
+                    session
+                        (pure $ Just sampleMetrics)
+                        (queryTestMerkleRoots runner)
+                        (\_ _ -> pure Nothing)
+                        byAddress
+                        (pure syncedResponse)
+                        $ do
+                            resp <-
+                                request
+                                    $ setPath
+                                        defaultRequest{requestMethod = methodGet}
+                                        ("/utxos-by-address/" <> addr1Hex)
+                            liftIO $ simpleStatus resp `shouldBe` status200
+                            let decoded =
+                                    eitherDecode $ simpleBody resp
+                                        :: Either String [UTxOByAddressEntry]
+                            liftIO $ case decoded of
+                                Left err -> fail $ "JSON decode error: " ++ err
+                                Right entries -> length entries `shouldBe` 2
+
+                    -- Query addr2: should return 1 entry
+                    session
+                        (pure $ Just sampleMetrics)
+                        (queryTestMerkleRoots runner)
+                        (\_ _ -> pure Nothing)
+                        byAddress
+                        (pure syncedResponse)
+                        $ do
+                            resp <-
+                                request
+                                    $ setPath
+                                        defaultRequest{requestMethod = methodGet}
+                                        ("/utxos-by-address/" <> addr2Hex)
+                            liftIO $ simpleStatus resp `shouldBe` status200
+                            let decoded =
+                                    eitherDecode $ simpleBody resp
+                                        :: Either String [UTxOByAddressEntry]
+                            liftIO $ case decoded of
+                                Left err -> fail $ "JSON decode error: " ++ err
+                                Right entries -> length entries `shouldBe` 1
+
+            it "returns 503 when not synced" $ do
+                withTestDBPrefixed $ \runner _update -> session
+                    (pure $ Just sampleMetrics)
+                    (queryTestMerkleRoots runner)
+                    (\_ _ -> pure Nothing)
+                    noByAddress
+                    (pure notSyncedResponse)
+                    $ do
+                        resp <-
+                            request
+                                $ setPath
+                                    defaultRequest{requestMethod = methodGet}
+                                    "/utxos-by-address/deadbeef"
+                        liftIO $ simpleStatus resp `shouldBe` status503

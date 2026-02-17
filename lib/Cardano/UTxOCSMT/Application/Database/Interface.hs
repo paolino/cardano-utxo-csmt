@@ -33,6 +33,7 @@ module Cardano.UTxOCSMT.Application.Database.Interface
 where
 
 import Cardano.UTxOCSMT.Ouroboros.Types (TipOf)
+import Data.ByteString (ByteString)
 import Data.List (sortOn)
 import Ouroboros.Network.Point (WithOrigin (..))
 import Prelude hiding (truncate)
@@ -89,6 +90,8 @@ data Query m slot key value = Query
     -- ^ Get the current tip slot (latest applied)
     , getFinality :: m (WithOrigin slot)
     -- ^ Get the finality slot (immutable point)
+    , getByAddress :: ByteString -> m [(key, value)]
+    -- ^ Get all UTxOs at a given address (raw address bytes)
     }
 
 -- | Let a transaction runner apply to all queries
@@ -96,11 +99,12 @@ hoistQuery
     :: (forall a. m a -> n a)
     -> Query m slot key value
     -> Query n slot key value
-hoistQuery nat Query{getValue, getTip, getFinality} =
+hoistQuery nat Query{getValue, getTip, getFinality, getByAddress} =
     Query
         { getValue = nat . getValue
         , getTip = nat getTip
         , getFinality = nat getFinality
+        , getByAddress = nat . getByAddress
         }
 
 {- | Get the inverse of an operation, needs access to the database to retrieve

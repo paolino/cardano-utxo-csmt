@@ -25,9 +25,6 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
     )
-import Cardano.UTxOCSMT.Application.Database.Implementation.Query
-    ( mkQuery
-    )
 import Cardano.UTxOCSMT.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
     , RollbackPointKV
@@ -41,7 +38,6 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     )
 import Cardano.UTxOCSMT.Application.Database.Interface
     ( Operation (..)
-    , Query (..)
     , State (..)
     , TipOf
     , Update (..)
@@ -76,6 +72,17 @@ import Database.KV.Transaction
     , query
     )
 import Ouroboros.Network.Point (WithOrigin (..))
+
+-- | Query the current tip directly from rollback points.
+queryTip
+    :: MonadFail m
+    => CSMTTransaction m cf op slot hash key value (WithOrigin slot)
+queryTip =
+    iterating RollbackPoints $ do
+        ml <- lastEntry
+        case ml of
+            Nothing -> lift . lift $ fail "No tip in rollback points"
+            Just e -> pure $ entryKey e
 
 data UpdateTrace slot hash
     = UpdateArmageddon ArmageddonTrace
@@ -140,7 +147,7 @@ forwardTip
     hash
     slot
     ops = do
-        tip <- getTip mkQuery
+        tip <- queryTip
         when (At slot > tip) $ do
             result <- forM ops $ \case
                 Insert k v -> do
@@ -224,7 +231,7 @@ rollbackTip
     -- ^ Slot to rollback to
     -> CSMTTransaction m cf op slot hash key value RollbackResult
 rollbackTip slot = do
-    tip <- getTip mkQuery
+    tip <- queryTip
     if At slot > tip
         then pure RollbackSucceeded
         else iterating RollbackPoints $ do
@@ -313,11 +320,11 @@ mkUpdate
 
 -- | Determines whether a new finality point can be set
 newFinality
-    :: (Ord key, MonadFail m)
+    :: MonadFail m
     => (WithOrigin slot -> WithOrigin slot -> Bool)
     -> CSMTTransaction m cf op slot hash key value (Maybe slot)
 newFinality isFinal = do
-    tip <- getTip mkQuery
+    tip <- queryTip
     iterating RollbackPoints $ do
         me <- firstEntry
         flip ($ me) Origin $ fix $ \go current finality ->
