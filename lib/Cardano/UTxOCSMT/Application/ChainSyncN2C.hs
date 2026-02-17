@@ -145,6 +145,7 @@ mkN2CChainSyncApplication
                                 let slot = blockSlot block
                                     point =
                                         uncoercePoint (blockPoint block)
+                                    tipSlot = tipToSlot tip
                                     processBlock target = checkResult target
                                         $ do
                                             traceWith blockTracer block
@@ -153,7 +154,9 @@ mkN2CChainSyncApplication
                                                     Fetched
                                                         { fetchedPoint = point
                                                         , fetchedBlock = block
+                                                        , fetchedTip = tipSlot
                                                         }
+                                                    tipSlot
                                 in  ChainSyncClient $ do
                                         traceTipSlot tip
                                         case mTarget of
@@ -195,6 +198,10 @@ mkN2CChainSyncApplication
         traceTipSlot tip = case tip of
             Network.TipGenesis -> pure ()
             Network.Tip slot _ _ -> traceWith tipTracer slot
+
+        tipToSlot :: Network.Tip Block -> SlotNo
+        tipToSlot Network.TipGenesis = 0
+        tipToSlot (Network.Tip slot _ _) = slot
 
 -- | Coerce Point Header to Point Block (same HeaderHash)
 coercePoints :: [Point] -> [Network.Point Block]
