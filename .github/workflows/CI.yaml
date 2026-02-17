@@ -102,6 +102,32 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker compose -f e2e/docker-compose.yml down -v
+  e2e-n2n:
+    name: N2N E2E test
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: cardano-utxo-image
+          path: output-docker-image
+      - name: Load and tag docker image
+        run: |
+          image_file=$(find output-docker-image -type f | head -1)
+          loaded=$(docker load < "$image_file" | grep 'Loaded image:' | sed 's/Loaded image: //')
+          echo "Loaded: $loaded"
+          docker image tag "$loaded" cardano-utxo:e2e
+          docker images
+      - name: Run N2N E2E test
+        run: |
+          docker compose -f e2e/docker-compose.n2n.yml up \
+            --abort-on-container-exit \
+            --exit-code-from e2e-test
+      - name: Cleanup
+        if: always()
+        run: docker compose -f e2e/docker-compose.n2n.yml down -v
   swagger:
     # check that the swagger file is up to date
     name: Check Swagger documentation
