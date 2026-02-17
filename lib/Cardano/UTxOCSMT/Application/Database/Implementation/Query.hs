@@ -23,8 +23,8 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.AppConfig
     , encodeAppConfig
     )
 import CSMT.Hashes (byteStringToKey)
-import CSMT.Interface (Key)
 import CSMT.Proof.Completeness (collectValues)
+import Control.Lens (Iso', review)
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
     , ConfigKey (..)
@@ -39,7 +39,7 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     ( Query (..)
     , hoistQuery
     )
-import CSMT.Interface (Indirect (..))
+import CSMT.Interface (Indirect (..), Key)
 import Control.Monad.Trans (lift)
 import Data.ByteString (ByteString)
 import Data.Function (fix)
@@ -62,14 +62,14 @@ import Ouroboros.Network.Point (WithOrigin (..))
 -- | Create a query interface
 mkQuery
     :: (Ord key, MonadFail m)
-    => (Key -> key)
-    -- ^ Inverse of fromK: convert tree key suffix back to KV key
+    => Iso' key Key
+    -- ^ Bidirectional conversion between external keys and tree paths
     -> Query
         (Transaction m cf (Columns slot hash key value) op)
         slot
         key
         value
-mkQuery toKey =
+mkQuery isoK =
     Query
         { getValue = query KVCol
         , getTip =
@@ -91,7 +91,7 @@ mkQuery toKey =
         }
   where
     lookupKV indirect = do
-        let k = toKey (jump indirect)
+        let k = review isoK (jump indirect)
         mv <- query KVCol k
         pure $ fmap (k,) mv
 
@@ -100,12 +100,12 @@ Useful for property testing
 -}
 mkTransactionedQuery
     :: (Ord key, MonadFail m)
-    => (Key -> key)
-    -- ^ Inverse of fromK: convert tree key suffix back to KV key
+    => Iso' key Key
+    -- ^ Bidirectional conversion between external keys and tree paths
     -> RunTransaction cf op slot hash key value m
     -> Query m slot key value
-mkTransactionedQuery toKey (RunTransaction runTx) =
-    hoistQuery runTx (mkQuery toKey)
+mkTransactionedQuery isoK (RunTransaction runTx) =
+    hoistQuery runTx (mkQuery isoK)
 
 {- | Get all merkle roots by iterating in reverse over the RollbackPoints table
 Returns a list of (slot, blockHash, merkleRoot) tuples in reverse order (newest first)

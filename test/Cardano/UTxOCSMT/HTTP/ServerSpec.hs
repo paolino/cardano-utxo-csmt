@@ -11,7 +11,6 @@ import CSMT.Hashes
     , generateInclusionProof
     , hashHashing
     , isoHash
-    , keyToByteString
     , mkHash
     , renderHash
     )
@@ -118,7 +117,7 @@ testCSMTContext =
   where
     fromKVLazy =
         FromKV
-            { fromK = fromK fromKVHashes . view strict
+            { isoK = strict . isoK fromKVHashes
             , fromV = fromV fromKVHashes . view strict
             , treePrefix = const []
             }
@@ -129,7 +128,7 @@ prefixedCSMTContext =
     CSMTContext
         { fromKV =
             FromKV
-                { fromK = fromK fromKVHashes . view strict
+                { isoK = strict . isoK fromKVHashes
                 , fromV = fromV fromKVHashes . view strict
                 , treePrefix = byteStringToKey . BC.take 4 . BL.toStrict
                 }
@@ -233,8 +232,7 @@ queryTestByAddress (RunCSMTTransaction runCSMT) addressHex =
         Nothing -> pure $ Left "Invalid base16 address"
         Just addressBytes -> do
             let addressKey = byteStringToKey addressBytes
-                toKey = BL.fromStrict . keyToByteString
-            results <- runCSMT $ queryByAddress toKey addressKey
+            results <- runCSMT $ queryByAddress addressKey
             pure $ Right $ fmap toEntry results
   where
     decodeBase16 :: Text -> Maybe ByteString

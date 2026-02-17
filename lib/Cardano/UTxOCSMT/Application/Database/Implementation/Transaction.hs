@@ -10,10 +10,11 @@ module Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     )
 where
 
-import CSMT (FromKV, Hashing, inserting)
+import CSMT (FromKV (..), Hashing, inserting)
 import CSMT.Deletion (deleting)
 import CSMT.Interface (Indirect (..), Key, root)
 import CSMT.Proof.Completeness (collectValues)
+import Control.Lens (review)
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
     )
@@ -77,19 +78,19 @@ queryMerkleRoot = do
 
 -- | Query all UTxOs under a given address prefix.
 -- Uses 'collectValues' to navigate the address-prefixed CSMT,
--- then reconstructs KV keys from leaf paths and looks up values.
+-- then reconstructs KV keys from leaf paths via the 'isoK' iso
+-- in 'CSMTContext' and looks up values.
 queryByAddress
     :: (Monad m, Ord key)
-    => (Key -> key)
-    -- ^ Inverse of fromK: convert tree key suffix back to KV key
-    -> Key
+    => Key
     -- ^ Address prefix as CSMT Key
     -> CSMTTransaction m cf op slot hash key value [(key, value)]
-queryByAddress toKey addressKey = do
+queryByAddress addressKey = do
+    CSMTContext{fromKV = FromKV{isoK}} <- lift . lift $ ask
     indirects <- collectValues CSMTCol addressKey
-    fmap catMaybes $ traverse lookupKV indirects
+    fmap catMaybes $ traverse (lookupKV isoK) indirects
   where
-    lookupKV Indirect{jump} = do
-        let k = toKey jump
+    lookupKV isoK' Indirect{jump} = do
+        let k = review isoK' jump
         mv <- query KVCol k
         pure $ fmap (k,) mv
