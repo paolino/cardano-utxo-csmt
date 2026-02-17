@@ -76,6 +76,32 @@ jobs:
           cachix-auth-token: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Check Formatting
         run: nix develop --quiet -c just format
+  e2e:
+    name: N2C E2E test
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: cardano-utxo-image
+          path: output-docker-image
+      - name: Load and tag docker image
+        run: |
+          docker load < output-docker-image/*.tar.gz
+          # Tag whatever was loaded as cardano-utxo:e2e
+          loaded=$(docker images --format '{{.Repository}}:{{.Tag}}' | head -1)
+          docker image tag "$loaded" cardano-utxo:e2e
+          docker images
+      - name: Run E2E test
+        run: |
+          docker compose -f e2e/docker-compose.yml up \
+            --abort-on-container-exit \
+            --exit-code-from e2e-test
+      - name: Cleanup
+        if: always()
+        run: docker compose -f e2e/docker-compose.yml down -v
   swagger:
     # check that the swagger file is up to date
     name: Check Swagger documentation
