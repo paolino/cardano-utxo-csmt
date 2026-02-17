@@ -55,13 +55,19 @@ import Cardano.UTxOCSMT.HTTP.Base16
     )
 import Cardano.UTxOCSMT.HTTP.Server (apiApp)
 import Control.Lens (lazy, prism', strict, view)
+import Control.Monad (foldM, foldM_)
 import Control.Monad.IO.Class (liftIO)
 import Control.Tracer (nullTracer)
 import Data.Aeson (eitherDecode, encode)
-import Data.ByteArray.Encoding (Base (..), convertFromBase, convertToBase)
+import Data.ByteArray.Encoding
+    ( Base (..)
+    , convertFromBase
+    , convertToBase
+    )
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BC
 import Data.ByteString.Lazy qualified as BL
+import Data.List (nub, sort)
 import Data.Serialize (getWord64be, putWord64be)
 import Data.Serialize.Extra (evalGetM, evalPutM)
 import Data.Text (Text)
@@ -88,6 +94,15 @@ import Network.Wai.Test
 import Ouroboros.Network.Block (SlotNo (..))
 import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
+import Test.QuickCheck
+    ( Gen
+    , choose
+    , elements
+    , ioProperty
+    , property
+    , shuffle
+    , vectorOf
+    )
 
 -- | For testing, TipOf SlotNo = SlotNo
 type instance TipOf SlotNo = SlotNo
@@ -246,6 +261,14 @@ queryTestByAddress (RunCSMTTransaction runCSMT) addressHex =
             , utxoTxOut = encodeBase16 $ BL.toStrict txOut
             }
 
+-- | Query UTxOs by raw address bytes (no hex encoding)
+queryRawByAddress
+    :: RunCSMTTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
+    -> ByteString
+    -> IO [(BL.ByteString, BL.ByteString)]
+queryRawByAddress (RunCSMTTransaction runCSMT) addressBytes =
+    runCSMT $ queryByAddress $ byteStringToKey addressBytes
+
 -- | Run tests with a fresh RocksDB database and HTTP app
 withTestDB
     :: ( RunCSMTTransaction
@@ -290,7 +313,8 @@ withTestDBPrefixed
 withTestDBPrefixed action =
     withSystemTempDirectory "http-test-prefixed" $ \dir ->
         withRocksDB dir $ \db -> do
-            runner <- newRunRocksDBCSMTTransaction db testPrisms prefixedCSMTContext
+            runner <-
+                newRunRocksDBCSMTTransaction db testPrisms prefixedCSMTContext
             setup nullTracer runner testArmageddonParams
             action runner
                 $ mkUpdate
@@ -660,8 +684,12 @@ spec = do
                     let key3 = mkTestKey "utxo3"
                         value3 = BL.fromStrict $ "BBBB" <> "output3-data"
 
-                    update1 <- forwardTipApply update 100 100
-                        [Insert key1 value1, Insert key2 value2, Insert key3 value3]
+                    update1 <-
+                        forwardTipApply
+                            update
+                            100
+                            100
+                            [Insert key1 value1, Insert key2 value2, Insert key3 value3]
                     _ <- pure update1
 
                     let byAddress = queryTestByAddress runner
@@ -726,3 +754,110 @@ spec = do
                                     defaultRequest{requestMethod = methodGet}
                                     "/utxos-by-address/deadbeef"
                         liftIO $ simpleStatus resp `shouldBe` status503
+
+    describe "by-address query properties" $ do
+        it "survives interleaved inserts and deletes across multiple slots"
+            $ property
+            $ do
+                (batches, live) <- genValidOps
+                pure
+                    $ ioProperty
+                    $ withTestDBPrefixed
+                    $ \runner update -> do
+                        -- Apply each batch at a successive slot
+                        foldM_
+                            ( \u (slot, ops) ->
+                                forwardTipApply u slot slot ops
+                            )
+                            update
+                            (zip [SlotNo 100, SlotNo 200 ..] batches)
+                        -- For each address, verify the live set matches
+                        let addrs = nub [a | (_, _, a) <- live]
+                        mapM_ (verifyAddress runner live) addrs
+                        -- Non-existent address returns empty
+                        empty <- queryRawByAddress runner "ZZZZ"
+                        empty `shouldBe` []
+  where
+    verifyAddress runner live addr = do
+        let expected = sort [(k, v) | (k, v, a) <- live, a == addr]
+        actual <- queryRawByAddress runner addr
+        sort actual `shouldBe` expected
+
+{- | Generate a valid sequence of interleaved insert/delete operations.
+
+Returns @([[Operation k v]], [(k, v, addr)])@ — a list of batches
+(each applied at a separate slot) and the final live set of entries.
+-}
+genValidOps
+    :: Gen
+        ( [[Operation BL.ByteString BL.ByteString]]
+        , [(BL.ByteString, BL.ByteString, ByteString)]
+        )
+genValidOps = do
+    -- Generate 2-4 distinct 4-byte address prefixes
+    nAddrs <- choose (2 :: Int, 4)
+    addrs <-
+        nub
+            <$> vectorOf
+                nAddrs
+                (BC.pack <$> vectorOf 4 (choose ('A', 'Z')))
+    -- Generate a pool of unique keys
+    nKeys <- choose (6, 16)
+    allKeys <-
+        nub
+            <$> vectorOf
+                nKeys
+                (mkTestKey <$> vectorOf 20 (choose ('a', 'z')))
+    -- Generate 2-5 batches of operations
+    nBatches <- choose (2 :: Int, 5)
+    -- Fold: accumulate (remaining keys, live entries, batches)
+    (_, finalLive, allBatches) <-
+        foldM
+            (genBatch addrs)
+            (allKeys, [], [])
+            [1 .. nBatches]
+    pure (allBatches, finalLive)
+
+-- | Generate one batch of interleaved insert/delete operations.
+genBatch
+    :: [ByteString]
+    -- ^ Address pool
+    -> ( [BL.ByteString]
+       , [(BL.ByteString, BL.ByteString, ByteString)]
+       , [[Operation BL.ByteString BL.ByteString]]
+       )
+    -- ^ (unused keys, live entries, accumulated batches)
+    -> Int
+    -- ^ Batch index (unused, just for foldM)
+    -> Gen
+        ( [BL.ByteString]
+        , [(BL.ByteString, BL.ByteString, ByteString)]
+        , [[Operation BL.ByteString BL.ByteString]]
+        )
+genBatch addrs (unused, live, batches) _ = do
+    -- Insert 1-3 new keys (if available)
+    nInsert <- choose (1, min 3 (max 1 $ length unused))
+    insertKeys <- take nInsert <$> shuffle unused
+    let unused' = filter (`notElem` insertKeys) unused
+    inserts <- traverse (mkInsert addrs) insertKeys
+    let insertOps = [Insert k v | (k, v, _) <- inserts]
+    -- Delete 0-2 of previously live entries (not from this batch)
+    nDelete <- choose (0 :: Int, min 2 (length live))
+    toDelete <- take nDelete <$> shuffle live
+    let deleteOps = [Delete k | (k, _, _) <- toDelete]
+        deletedKeys = [dk | (dk, _, _) <- toDelete]
+        live' =
+            filter (\(k, _, _) -> k `notElem` deletedKeys) live
+                ++ inserts
+    -- Inserts first, then deletes (deletes refer to pre-existing keys)
+    pure (unused', live', batches ++ [insertOps ++ deleteOps])
+
+-- | Create an insert entry with a random address from the pool.
+mkInsert
+    :: [ByteString]
+    -> BL.ByteString
+    -> Gen (BL.ByteString, BL.ByteString, ByteString)
+mkInsert addrs k = do
+    addr <- elements addrs
+    suffix <- BC.pack <$> vectorOf 8 (choose ('0', '9'))
+    pure (k, BL.fromStrict (addr <> suffix), addr)

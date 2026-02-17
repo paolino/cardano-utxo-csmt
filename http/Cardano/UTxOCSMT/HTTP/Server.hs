@@ -78,7 +78,9 @@ apiServer getMetrics getMerkleRoots getProof getByAddress getReady =
     byAddressHandler address = requireSynced $ do
         r <- liftIO $ getByAddress address
         case r of
-            Left err -> throwError err400{errBody = BL.fromStrict $ TE.encodeUtf8 $ T.pack err}
+            Left err ->
+                throwError
+                    err400{errBody = BL.fromStrict $ TE.encodeUtf8 $ T.pack err}
             Right entries -> pure entries
 
     readyHandler = liftIO getReady

@@ -14,10 +14,10 @@ import CSMT (FromKV (..), Hashing, inserting)
 import CSMT.Deletion (deleting)
 import CSMT.Interface (Indirect (..), Key, root)
 import CSMT.Proof.Completeness (collectValues)
-import Control.Lens (review)
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
     )
+import Control.Lens (review)
 import Control.Monad.Reader
     ( MonadReader (..)
     , MonadTrans (..)
@@ -76,10 +76,11 @@ queryMerkleRoot = do
     CSMTContext{hashing} <- lift . lift $ ask
     root hashing CSMTCol
 
--- | Query all UTxOs under a given address prefix.
--- Uses 'collectValues' to navigate the address-prefixed CSMT,
--- then reconstructs KV keys from leaf paths via the 'isoK' iso
--- in 'CSMTContext' and looks up values.
+{- | Query all UTxOs under a given address prefix.
+Uses 'collectValues' to navigate the address-prefixed CSMT,
+then reconstructs KV keys from leaf paths via the 'isoK' iso
+in 'CSMTContext' and looks up values.
+-}
 queryByAddress
     :: (Monad m, Ord key)
     => Key
@@ -88,7 +89,7 @@ queryByAddress
 queryByAddress addressKey = do
     CSMTContext{fromKV = FromKV{isoK}} <- lift . lift $ ask
     indirects <- collectValues CSMTCol addressKey
-    fmap catMaybes $ traverse (lookupKV isoK) indirects
+    catMaybes <$> traverse (lookupKV isoK) indirects
   where
     lookupKV isoK' Indirect{jump} = do
         let k = review isoK' jump
