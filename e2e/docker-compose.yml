@@ -5,7 +5,7 @@ services:
       - "10000:10000"
     volumes:
       - ./node.properties:/app/config/node.properties
-      - node-ipc:/clusters/nodes/default/node
+      - node-ipc:/clusters
     entrypoint: ["/app/yaci-cli"]
     command: ["create-node", "-o", "--start"]
     healthcheck:
@@ -21,10 +21,10 @@ services:
       yaci-cli:
         condition: service_healthy
     volumes:
-      - node-ipc:/node:ro
+      - node-ipc:/clusters:ro
     command:
       - "--socket-path"
-      - "/node/node.sock"
+      - "/clusters/nodes/default/node/node.sock"
       - "--network"
       - "devnet"
       - "--db-path"
