@@ -114,11 +114,9 @@ e2e-build:
     #!/usr/bin/env bash
     set -euo pipefail
     nix build .#docker-image
-    docker load < result
-    version=$(nix eval --raw .#version)
-    docker image tag \
-        "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo:$version" \
-        "cardano-utxo:e2e"
+    loaded=$(docker load < result | grep 'Loaded image:' | sed 's/Loaded image: //')
+    echo "Loaded: $loaded"
+    docker image tag "$loaded" cardano-utxo:e2e
 
 # Run N2C E2E test against Yaci DevKit
 e2e:

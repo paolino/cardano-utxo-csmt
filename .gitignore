@@ -16,3 +16,4 @@ utxo-csmt
 cabal.project.local
 .ghc*
 .llm/
+WIP.md
