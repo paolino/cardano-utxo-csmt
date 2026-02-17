@@ -22,14 +22,20 @@ where
 -- column family setup, serialization prisms for encoding/decoding values,
 -- and the CSMT context for hashing operations.
 
-import CSMT (FromKV (..))
+import CSMT (FromKV (..), Key)
 import CSMT.Hashes
     ( Hash (..)
+    , byteStringToKey
     , fromKVHashes
     , hashHashing
     , isoHash
     , mkHash
     )
+import Cardano.Ledger.Address (unCompactAddr)
+import Cardano.Ledger.Babbage.TxOut (BabbageTxOut)
+import Cardano.Ledger.Binary (decodeFull, natVersion)
+import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Core (compactAddrTxOutL)
 import Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     ( ArmageddonParams (..)
     )
@@ -52,6 +58,7 @@ import Control.Lens
     , review
     , strict
     , view
+    , (^.)
     )
 import Data.ByteString (StrictByteString)
 import Data.ByteString.Lazy (LazyByteString)
@@ -136,6 +143,7 @@ armageddonParams =
 
 Configures how keys and values are converted to hashable form
 using the standard hash functions from 'CSMT.Hashes'.
+The tree key is prefixed with address bytes for by-address queries.
 -}
 context :: CSMTContext Hash LazyByteString LazyByteString
 context =
@@ -144,9 +152,19 @@ context =
             FromKV
                 { fromK = fromK fromKVHashes . view strict
                 , fromV = fromV fromKVHashes . view strict
+                , treePrefix = addressPrefix . view strict
                 }
         , hashing = hashHashing
         }
+
+-- | Extract address bytes from a CBOR-encoded Conway TxOut, convert to tree key prefix.
+addressPrefix :: StrictByteString -> Key
+addressPrefix cborTxOut = byteStringToKey addressBytes
+  where
+    addressBytes = case decodeFull (natVersion @11) (view lazy cborTxOut) of
+        Left e -> error $ "addressPrefix: decode failed: " <> show e
+        Right (txOut :: BabbageTxOut ConwayEra) ->
+            fromShort $ unCompactAddr (txOut ^. compactAddrTxOutL)
 
 {- | Prisms for encoding and decoding database values.
 
@@ -220,7 +238,7 @@ Returns the most recent point that is considered final (more than
 2160 slots behind the tip, approximately 12 hours on Cardano mainnet).
 -}
 mFinality
-    :: (Ord key, MonadFail m)
+    :: MonadFail m
     => RunCSMTTransaction cf op Point hash key value m
     -- ^ Database transaction runner
     -> m (Maybe Point)

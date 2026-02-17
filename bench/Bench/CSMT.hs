@@ -116,6 +116,7 @@ benchContext =
             FromKV
                 { fromK = fromK fromKVHashes . view strict
                 , fromV = fromV fromKVHashes . view strict
+                , treePrefix = const []
                 }
         , hashing = hashHashing
         }

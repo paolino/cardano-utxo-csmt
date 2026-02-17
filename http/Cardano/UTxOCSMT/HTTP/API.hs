@@ -19,6 +19,7 @@ module Cardano.UTxOCSMT.HTTP.API
     , docs
     , MerkleRootEntry (..)
     , InclusionProofResponse (..)
+    , UTxOByAddressEntry (..)
     , ReadyResponse (..)
     )
 where
@@ -64,6 +65,9 @@ type API =
             :> Capture "txId" Text
             :> Capture "txIx" Word16
             :> Get '[JSON] InclusionProofResponse
+        :<|> "utxos-by-address"
+            :> Capture "address" Text
+            :> Get '[JSON] [UTxOByAddressEntry]
         :<|> "ready"
             :> Get '[JSON] ReadyResponse
 
@@ -87,6 +91,44 @@ data InclusionProofResponse = InclusionProofResponse
     , proofMerkleRoot :: Maybe Text
     }
     deriving (Show, Eq)
+
+-- | A UTxO entry at a given address
+data UTxOByAddressEntry = UTxOByAddressEntry
+    { utxoTxIn :: Text
+    -- ^ CBOR-encoded TxIn in base16
+    , utxoTxOut :: Text
+    -- ^ CBOR-encoded TxOut in base16
+    }
+    deriving (Show, Eq)
+
+instance ToJSON UTxOByAddressEntry where
+    toJSON UTxOByAddressEntry{utxoTxIn, utxoTxOut} =
+        object
+            [ "txIn" .= utxoTxIn
+            , "txOut" .= utxoTxOut
+            ]
+
+instance FromJSON UTxOByAddressEntry where
+    parseJSON = withObject "UTxOByAddressEntry" $ \v ->
+        UTxOByAddressEntry
+            <$> v .: "txIn"
+            <*> v .: "txOut"
+
+instance ToSchema UTxOByAddressEntry where
+    declareNamedSchema _ = do
+        stringSchema <- declareSchemaRef (Proxy @String)
+        return
+            $ Swagger.NamedSchema (Just "UTxOByAddressEntry")
+            $ mempty
+            & Swagger.type_ ?~ Swagger.SwaggerObject
+            & properties
+                .~ fromList
+                    [ ("txIn", stringSchema)
+                    , ("txOut", stringSchema)
+                    ]
+            & required .~ ["txIn", "txOut"]
+            & description
+                ?~ "A UTxO entry with CBOR-encoded TxIn and TxOut in base16"
 
 renderHashBase16 :: Hash -> Text
 renderHashBase16 = Text.decodeUtf8 . convertToBase Base16 . renderHash

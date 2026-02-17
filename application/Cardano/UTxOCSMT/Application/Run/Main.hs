@@ -47,6 +47,7 @@ import Cardano.UTxOCSMT.Application.Run.Query
     ( mkReadyResponse
     , queryInclusionProof
     , queryMerkleRoots
+    , queryUTxOsByAddress
     )
 import Cardano.UTxOCSMT.Application.Run.RenderMetrics
     ( renderMetrics
@@ -173,6 +174,7 @@ main = withUtf8 $ do
                         (readTVarIO metricsVar)
                         (queryMerkleRoots runner)
                         (queryInclusionProof runner)
+                        (queryUTxOsByAddress runner)
                         getReadyResponse
 
             -- Do Mithril bootstrap before creating Update state

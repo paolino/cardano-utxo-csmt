@@ -22,6 +22,9 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.AppConfig
     , defaultAppConfig
     , encodeAppConfig
     )
+import CSMT.Hashes (byteStringToKey)
+import CSMT.Interface (Key)
+import CSMT.Proof.Completeness (collectValues)
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Columns (..)
     , ConfigKey (..)
@@ -36,10 +39,11 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     ( Query (..)
     , hoistQuery
     )
+import CSMT.Interface (Indirect (..))
 import Control.Monad.Trans (lift)
 import Data.ByteString (ByteString)
 import Data.Function (fix)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Word (Word64)
 import Database.KV.Cursor
     ( Entry (..)
@@ -55,15 +59,17 @@ import Database.KV.Transaction
     )
 import Ouroboros.Network.Point (WithOrigin (..))
 
--- | Create an query interface
+-- | Create a query interface
 mkQuery
     :: (Ord key, MonadFail m)
-    => Query
+    => (Key -> key)
+    -- ^ Inverse of fromK: convert tree key suffix back to KV key
+    -> Query
         (Transaction m cf (Columns slot hash key value) op)
         slot
         key
         value
-mkQuery =
+mkQuery toKey =
     Query
         { getValue = query KVCol
         , getTip =
@@ -78,16 +84,28 @@ mkQuery =
                 case mf of
                     Nothing -> lift . lift $ fail "No finality point in rollback points"
                     Just e -> pure $ entryKey e
+        , getByAddress = \addressBytes -> do
+                let addressKey = byteStringToKey addressBytes
+                indirects <- collectValues CSMTCol addressKey
+                fmap catMaybes $ traverse lookupKV indirects
         }
+  where
+    lookupKV indirect = do
+        let k = toKey (jump indirect)
+        mv <- query KVCol k
+        pure $ fmap (k,) mv
 
 {- | Create a 'Query' interface for RocksDB where all queries are run in separate transactions
 Useful for property testing
 -}
 mkTransactionedQuery
     :: (Ord key, MonadFail m)
-    => RunTransaction cf op slot hash key value m
+    => (Key -> key)
+    -- ^ Inverse of fromK: convert tree key suffix back to KV key
+    -> RunTransaction cf op slot hash key value m
     -> Query m slot key value
-mkTransactionedQuery (RunTransaction runTx) = hoistQuery runTx mkQuery
+mkTransactionedQuery toKey (RunTransaction runTx) =
+    hoistQuery runTx (mkQuery toKey)
 
 {- | Get all merkle roots by iterating in reverse over the RollbackPoints table
 Returns a list of (slot, blockHash, merkleRoot) tuples in reverse order (newest first)
