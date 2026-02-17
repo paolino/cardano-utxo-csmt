@@ -132,12 +132,19 @@ This function orchestrates the full Mithril bootstrap process:
 3. Extracts the UTxO set from the downloaded ledger state
 4. Streams UTxOs into the CSMT database
 5. Returns the checkpoint for chain sync to continue from
+
+The @onBeforeDbWrite@ callback is invoked after download succeeds but
+before streaming UTxOs into the database. This is the right moment to
+set a bootstrap-in-progress marker: download failures won\'t leave a
+stale marker that triggers unnecessary DB wipes on restart.
 -}
 importFromMithril
     :: Tracer IO ImportTrace
     -- ^ Tracer for progress logging
     -> MithrilConfig
     -- ^ Mithril client configuration
+    -> IO ()
+    -- ^ Action to run after download succeeds, before DB writes begin
     -> RunCSMTTransaction
         ColumnFamily
         BatchOp
@@ -148,7 +155,7 @@ importFromMithril
         IO
     -- ^ CSMT transaction runner for database operations
     -> IO ImportResult
-importFromMithril TraceWith{tracer, trace} config runner = do
+importFromMithril TraceWith{tracer, trace} config onBeforeDbWrite runner = do
     trace ImportStarting
 
     -- Step 1: Fetch latest snapshot metadata
@@ -189,6 +196,11 @@ importFromMithril TraceWith{tracer, trace} config runner = do
                     traceWith tracer
                         $ ImportMithril
                         $ MithrilDownloadComplete dbPath
+
+                    -- Mark bootstrap-in-progress now that we're about
+                    -- to write to the DB. Download failures above won't
+                    -- leave a stale marker.
+                    onBeforeDbWrite
 
                     -- Step 3: Extract UTxO and import
                     traceWith tracer $ ImportExtractingUTxO dbPath
