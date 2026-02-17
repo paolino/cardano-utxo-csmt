@@ -28,6 +28,9 @@ module Cardano.UTxOCSMT.Ouroboros.Types
     , N2CChainSync
     , N2CChainSyncApplication
 
+      -- * Type family
+    , TipOf
+
       -- * Follower/Intersector
     , Follower (..)
     , ProgressOrRewind (..)
@@ -56,6 +59,12 @@ type Tip = Network.Tip Block
 
 -- | Real Cardano Point type
 type Point = Network.Point Header
+
+-- | Type family mapping a slot type to its chain tip type
+type family TipOf slot
+
+-- | The chain tip for a 'Point' is a 'SlotNo'
+type instance TipOf Point = Network.SlotNo
 
 -- | The header hash type used in the chain sync connection
 type HeaderHash = Network.HeaderHash Block

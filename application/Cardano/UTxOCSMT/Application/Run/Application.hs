@@ -22,7 +22,6 @@ import Cardano.UTxOCSMT.Application.ChainSyncN2C
 import Cardano.UTxOCSMT.Application.Database.Interface
     ( Operation (..)
     , State (..)
-    , TipOf
     , Update (..)
     )
 import Cardano.UTxOCSMT.Application.Metrics
@@ -63,9 +62,6 @@ import Ouroboros.Network.Point
     ( WithOrigin (..)
     )
 import System.IO (BufferMode (..), hSetBuffering, stdout)
-
--- | The tip type for Point is SlotNo
-type instance TipOf Point = SlotNo
 
 -- | Events emitted by the application
 data ApplicationTrace

@@ -32,6 +32,7 @@ module Cardano.UTxOCSMT.Application.Database.Interface
     )
 where
 
+import Cardano.UTxOCSMT.Ouroboros.Types (TipOf)
 import Data.List (sortOn)
 import Ouroboros.Network.Point (WithOrigin (..))
 import Prelude hiding (truncate)
@@ -53,9 +54,6 @@ data State m slot key value
       Intersecting [slot] (Update m slot key value)
     | -- | Database is truncating, no possible rollbacks, the protocol should reset to Origin
       Truncating (Update m slot key value)
-
--- | Type family mapping a slot type to its chain tip type
-type family TipOf slot
 
 {- | Represents an update to the database. We offer a continuation-based API so that
 the database implementation can thread an internal state without messing up with the
