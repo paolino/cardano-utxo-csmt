@@ -5,11 +5,11 @@ services:
       - "10000:10000"
     volumes:
       - ./node.properties:/app/config/node.properties
-      - node-ipc:/clusters/nodes/node1
+      - node-ipc:/clusters/nodes/default/node
     entrypoint: ["/app/yaci-cli"]
     command: ["create-node", "-o", "--start"]
     healthcheck:
-      test: ["CMD", "test", "-S", "/clusters/nodes/node1/node.sock"]
+      test: ["CMD", "test", "-S", "/clusters/nodes/default/node/node.sock"]
       interval: 5s
       timeout: 5s
       retries: 60
