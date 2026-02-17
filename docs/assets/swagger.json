@@ -235,6 +235,22 @@
                 "slotsBehind"
             ],
             "type": "object"
+        },
+        "UTxOByAddressEntry": {
+            "description": "A UTxO entry with CBOR-encoded TxIn and TxOut in base16",
+            "properties": {
+                "txIn": {
+                    "type": "string"
+                },
+                "txOut": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "txIn",
+                "txOut"
+            ],
+            "type": "object"
         }
     },
     "info": {
@@ -324,6 +340,35 @@
                         "schema": {
                             "$ref": "#/definitions/ReadyResponse"
                         }
+                    }
+                }
+            }
+        },
+        "/utxos-by-address/{address}": {
+            "get": {
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "address",
+                        "required": true,
+                        "type": "string"
+                    }
+                ],
+                "produces": [
+                    "application/json;charset=utf-8"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "schema": {
+                            "items": {
+                                "$ref": "#/definitions/UTxOByAddressEntry"
+                            },
+                            "type": "array"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid `address`"
                     }
                 }
             }

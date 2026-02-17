@@ -3,8 +3,8 @@ module Cardano.UTxOCSMT.Application.Database.RocksDBSpec
     )
 where
 
-import CSMT.Backend.RocksDB (RunRocksDB (..))
 import CSMT (FromKV (..))
+import CSMT.Backend.RocksDB (RunRocksDB (..))
 import CSMT.Hashes
     ( Hash
     , fromKVHashes
