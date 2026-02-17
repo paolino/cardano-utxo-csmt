@@ -2,6 +2,7 @@
 
 module Cardano.UTxOCSMT.Application.Options
     ( Options (..)
+    , ConnectionMode (..)
     , CardanoNetwork (..)
     , optionsParser
     , optionsParserCore
@@ -20,6 +21,8 @@ import Autodocodec
     , dimapCodec
     , shownBoundedEnumCodec
     )
+
+import Control.Applicative ((<|>))
 
 import Cardano.UTxOCSMT.Application.BlockFetch
     ( EventQueueLength (..)
@@ -100,10 +103,22 @@ mithrilNetworkFor Mainnet = MithrilMainnet
 mithrilNetworkFor Preprod = MithrilPreprod
 mithrilNetworkFor Preview = MithrilPreview
 
+-- | How to connect to a Cardano node
+data ConnectionMode
+    = -- | Node-to-node over TCP (ChainSync headers + BlockFetch)
+      N2N
+        { n2nHost :: String
+        , n2nPort :: PortNumber
+        }
+    | -- | Node-to-client over Unix socket (ChainSync full blocks)
+      N2C
+        { n2cSocket :: FilePath
+        }
+    deriving stock (Show)
+
 data Options = Options
     { network :: CardanoNetwork
-    , nodeName :: String
-    , portNumber :: PortNumber
+    , connectionMode :: ConnectionMode
     , startingPoint :: Point
     , headersQueueSize :: EventQueueLength
     , dbPath :: FilePath
@@ -186,7 +201,7 @@ nodeNameOption =
         [ long "node-name"
         , short 's'
         , conf "node-name"
-        , help "Peer node hostname"
+        , help "Peer node hostname (n2n mode)"
         , metavar "HOSTNAME"
         , reader str
         , option
@@ -198,11 +213,28 @@ portNumberOption =
         [ long "node-port"
         , short 'p'
         , conf "node-port"
-        , help "Peer node port"
+        , help "Peer node port (n2n mode)"
         , metavar "INT"
         , reader auto
         , option
         ]
+
+socketPathOption :: Parser FilePath
+socketPathOption =
+    setting
+        [ long "socket-path"
+        , conf "socket-path"
+        , help "Path to node Unix socket (n2c mode)"
+        , metavar "FILE"
+        , reader str
+        , option
+        ]
+
+-- | Parse connection mode: n2n (host+port) or n2c (socket path)
+connectionModeParser :: Parser ConnectionMode
+connectionModeParser =
+    (N2C <$> socketPathOption)
+        <|> (N2N <$> nodeNameOption <*> portNumberOption)
 
 startingPointOption :: Parser Point
 startingPointOption =
@@ -317,8 +349,7 @@ optionsParserCore :: Parser Options
 optionsParserCore =
     mkOptions
         <$> networkOption
-        <*> nodeNameOption
-        <*> portNumberOption
+        <*> connectionModeParser
         <*> startingPointOption
         <*> eventQueueSizeOption
         <*> dbPathOption
@@ -332,8 +363,7 @@ optionsParserCore =
   where
     mkOptions
         net
-        node
-        port
+        connMode
         start
         queue
         db
@@ -346,8 +376,7 @@ optionsParserCore =
         skipValidation =
             Options
                 { network = net
-                , nodeName = node
-                , portNumber = port
+                , connectionMode = connMode
                 , startingPoint = start
                 , headersQueueSize = queue
                 , dbPath = db

@@ -140,6 +140,7 @@ library library
   exposed-modules:
     Cardano.UTxOCSMT.Application.BlockFetch
     Cardano.UTxOCSMT.Application.ChainSync
+    Cardano.UTxOCSMT.Application.ChainSyncN2C
     Cardano.UTxOCSMT.Application.Database.Implementation.AppConfig
     Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     Cardano.UTxOCSMT.Application.Database.Implementation.Columns
@@ -166,6 +167,7 @@ library library
     Cardano.UTxOCSMT.Ouroboros.Application
     Cardano.UTxOCSMT.Ouroboros.Codecs
     Cardano.UTxOCSMT.Ouroboros.Connection
+    Cardano.UTxOCSMT.Ouroboros.ConnectionN2C
     Cardano.UTxOCSMT.Ouroboros.Types
     Control.Foldl.Extra
     Data.List.SampleFibonacci

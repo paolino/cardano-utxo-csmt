@@ -2,6 +2,7 @@ module Cardano.UTxOCSMT.Ouroboros.Codecs
     ( codecChainSync
     , codecBlockFetch
     , codecKeepAlive
+    , codecChainSyncN2C
     ) where
 
 import Cardano.Chain.Slotting (EpochSlots (EpochSlots))
@@ -10,6 +11,7 @@ import Cardano.UTxOCSMT.Ouroboros.Types
     , BlockFetch
     , ChainSync
     , Header
+    , N2CChainSync
     , Point
     )
 import Codec.Serialise (DeserialiseFailure, Serialise (..))
@@ -28,13 +30,17 @@ import Ouroboros.Consensus.Cardano.Block
     )
 import Ouroboros.Consensus.Cardano.Block qualified as Consensus
 import Ouroboros.Consensus.Cardano.Node
-    ( pattern CardanoNodeToNodeVersion2
+    ( pattern CardanoNodeToClientVersion16
+    , pattern CardanoNodeToNodeVersion2
     )
 import Ouroboros.Consensus.HardFork.Combinator.NetworkVersion
-    ( HardForkNodeToNodeVersion
+    ( HardForkNodeToClientVersion
+    , HardForkNodeToNodeVersion
     )
 import Ouroboros.Consensus.Node.Serialisation
-    ( decodeNodeToNode
+    ( decodeNodeToClient
+    , decodeNodeToNode
+    , encodeNodeToClient
     , encodeNodeToNode
     )
 import Ouroboros.Consensus.Protocol.Praos.Header ()
@@ -128,3 +134,38 @@ codecKeepAlive
         IO
         LBS.ByteString
 codecKeepAlive = KeepAlive.codecKeepAlive_v2
+
+----- N2C (node-to-client) codecs -----
+
+n2cVersion
+    :: HardForkNodeToClientVersion
+        (ByronBlock : Consensus.CardanoShelleyEras c)
+n2cVersion = CardanoNodeToClientVersion16
+
+-- | N2C ChainSync codec — encodes/decodes full blocks (not headers)
+codecChainSyncN2C
+    :: Codec
+        N2CChainSync
+        DeserialiseFailure
+        IO
+        LBS.ByteString
+codecChainSyncN2C =
+    ChainSync.codecChainSync
+        encBlockN2C
+        decBlockN2C
+        encPointBlock
+        decPointBlock
+        encTip
+        decTip
+
+encBlockN2C :: Block -> Encoding
+encBlockN2C = encodeNodeToClient @Block ccfg n2cVersion
+
+decBlockN2C :: Decoder s Block
+decBlockN2C = decodeNodeToClient @Block ccfg n2cVersion
+
+encPointBlock :: Network.Point Block -> Encoding
+encPointBlock = encode
+
+decPointBlock :: Decoder s (Network.Point Block)
+decPointBlock = decode

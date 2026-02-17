@@ -16,6 +16,7 @@ where
 
 import Cardano.UTxOCSMT.Application.Options
     ( CardanoNetwork (..)
+    , ConnectionMode (..)
     , MithrilNetwork (..)
     , MithrilOptions (..)
     , Options (..)
@@ -263,8 +264,11 @@ spec = describe "Application.Options" $ do
                         ["-d", "/tmp/db"]
                         Map.empty
                         configObj
-            nodeName opts `shouldBe` "custom-node.example.com"
-            portNumber opts `shouldBe` 9999
+            case connectionMode opts of
+                N2N{n2nHost, n2nPort} -> do
+                    n2nHost `shouldBe` "custom-node.example.com"
+                    n2nPort `shouldBe` 9999
+                N2C{} -> fail "expected N2N connection mode"
 
         it "reads mithril options nested under mithril key" $ do
             configObj <-
