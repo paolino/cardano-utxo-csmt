@@ -81,6 +81,7 @@ data CardanoNetwork
     = Mainnet
     | Preprod
     | Preview
+    | Devnet
     deriving stock (Show, Read, Eq, Ord, Enum, Bounded)
 
 instance HasCodec CardanoNetwork where
@@ -96,12 +97,14 @@ networkMagicFor :: CardanoNetwork -> NetworkMagic
 networkMagicFor Mainnet = NetworkMagic 764824073
 networkMagicFor Preprod = NetworkMagic 1
 networkMagicFor Preview = NetworkMagic 2
+networkMagicFor Devnet = NetworkMagic 42
 
 -- | Get Mithril network for a Cardano network
 mithrilNetworkFor :: CardanoNetwork -> MithrilNetwork
 mithrilNetworkFor Mainnet = MithrilMainnet
 mithrilNetworkFor Preprod = MithrilPreprod
 mithrilNetworkFor Preview = MithrilPreview
+mithrilNetworkFor Devnet = MithrilPreprod
 
 -- | How to connect to a Cardano node
 data ConnectionMode
@@ -178,6 +181,7 @@ readCardanoNetwork :: String -> Maybe CardanoNetwork
 readCardanoNetwork "mainnet" = Just Mainnet
 readCardanoNetwork "preprod" = Just Preprod
 readCardanoNetwork "preview" = Just Preview
+readCardanoNetwork "devnet" = Just Devnet
 readCardanoNetwork _ = Nothing
 
 networkOption :: Parser CardanoNetwork
@@ -187,8 +191,9 @@ networkOption =
         , short 'n'
         , conf "network"
         , help
-            "Cardano network (mainnet, preprod, preview). \
-            \Sets network magic, default peer node, and Mithril network."
+            "Cardano network (mainnet, preprod, preview, devnet). \
+            \Sets network magic, default peer node, and Mithril network. \
+            \Use devnet for local Yaci DevKit networks (magic 42)."
         , metavar "NETWORK"
         , reader $ maybeReader readCardanoNetwork
         , value Mainnet
@@ -384,7 +389,11 @@ optionsParserCore =
                 , apiPort = api
                 , apiDocsPort = apiDocs
                 , metricsOn = metrics
-                , mithrilOptions = mithril{mithrilNetwork = mithrilNetworkFor net}
+                , mithrilOptions =
+                    mithril
+                        { mithrilNetwork =
+                            mithrilNetworkFor net
+                        }
                 , syncThreshold = threshold
                 , skipNodeValidation = skipValidation
                 }

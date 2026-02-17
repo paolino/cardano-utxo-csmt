@@ -214,6 +214,14 @@ spec = describe "Application.Options" $ do
             mithrilAggregatorUrl (mithrilOptions opts)
                 `shouldBe` Just "https://cli.example.com"
 
+    describe "--network devnet option" $ do
+        it "parses devnet network" $ do
+            opts <-
+                expectSuccess
+                    $ runParser
+                        ["-d", "/tmp/db", "--network", "devnet"]
+            network opts `shouldBe` Devnet
+
     describe "combined options" $ do
         it "parses multiple options together" $ do
             opts <-

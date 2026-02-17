@@ -109,6 +109,33 @@ integration-all:
     cabal test cardano-utxo-csmt-integration-test \
         --test-show-details=direct
 
+# Build docker image for E2E testing
+e2e-build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nix build .#docker-image
+    docker load < result
+    version=$(nix eval --raw .#version)
+    docker image tag \
+        "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo:$version" \
+        "cardano-utxo:e2e"
+
+# Run N2C E2E test against Yaci DevKit
+e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just e2e-build
+    docker compose -f e2e/docker-compose.yml down -v 2>/dev/null || true
+    docker compose -f e2e/docker-compose.yml up \
+        --abort-on-container-exit \
+        --exit-code-from e2e-test
+    docker compose -f e2e/docker-compose.yml down -v
+
+# Tear down E2E environment
+e2e-down:
+    #!/usr/bin/env bash
+    docker compose -f e2e/docker-compose.yml down -v
+
 update-swagger:
     #!/usr/bin/env bash
     nix run .#cardano-utxo-swagger > docs/assets/swagger.json
