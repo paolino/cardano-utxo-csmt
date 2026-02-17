@@ -282,14 +282,17 @@ setupDB
                                 , MithrilClient.mithrilAncillaryVk = ancillaryVk
                                 }
 
-                    -- Set bootstrap-in-progress marker before streaming
-                    txRunTransaction
-                        $ setBootstrapInProgress decodePoint encodePoint
+                    let markBootstrapInProgress =
+                            txRunTransaction
+                                $ setBootstrapInProgress
+                                    decodePoint
+                                    encodePoint
 
                     result <-
                         importFromMithril
                             (contramap Mithril tracer)
                             mithrilConfig
+                            markBootstrapInProgress
                             runner
 
                     case result of
