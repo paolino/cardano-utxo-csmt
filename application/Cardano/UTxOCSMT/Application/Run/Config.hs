@@ -150,7 +150,7 @@ context =
     CSMTContext
         { fromKV =
             FromKV
-                { fromK = fromK fromKVHashes . view strict
+                { isoK = strict . isoK fromKVHashes
                 , fromV = fromV fromKVHashes . view strict
                 , treePrefix = addressPrefix . view strict
                 }

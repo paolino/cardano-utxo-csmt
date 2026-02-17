@@ -20,7 +20,6 @@ import CSMT.Hashes
     ( Hash
     , byteStringToKey
     , generateInclusionProof
-    , keyToByteString
     , renderHash
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
@@ -59,7 +58,6 @@ import Data.ByteArray.Encoding
     )
 import Data.ByteString (toStrict)
 import Data.ByteString.Lazy (LazyByteString)
-import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Short (toShort)
 import Data.Text (Text)
 import Data.Text.Encoding qualified as Text
@@ -159,8 +157,7 @@ queryUTxOsByAddress (RunCSMTTransaction runCSMT) addressHex =
         Left err -> pure $ Left $ "Invalid base16 address: " <> err
         Right addressBytes -> do
             let addressKey = byteStringToKey addressBytes
-                toKey = BL.fromStrict . keyToByteString
-            results <- runCSMT $ queryByAddress toKey addressKey
+            results <- runCSMT $ queryByAddress addressKey
             pure $ Right $ fmap toEntry results
   where
     toEntry (txIn, txOut) =
