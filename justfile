@@ -129,10 +129,22 @@ e2e:
         --exit-code-from e2e-test
     docker compose -f e2e/docker-compose.yml down -v
 
+# Run N2N E2E test against Yaci DevKit
+e2e-n2n:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just e2e-build
+    docker compose -f e2e/docker-compose.n2n.yml down -v 2>/dev/null || true
+    docker compose -f e2e/docker-compose.n2n.yml up \
+        --abort-on-container-exit \
+        --exit-code-from e2e-test
+    docker compose -f e2e/docker-compose.n2n.yml down -v
+
 # Tear down E2E environment
 e2e-down:
     #!/usr/bin/env bash
     docker compose -f e2e/docker-compose.yml down -v
+    docker compose -f e2e/docker-compose.n2n.yml down -v 2>/dev/null || true
 
 update-swagger:
     #!/usr/bin/env bash

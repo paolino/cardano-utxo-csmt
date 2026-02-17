@@ -1,0 +1,63 @@
+services:
+  yaci-cli:
+    image: bloxbean/yaci-cli:0.11.0-beta1
+    ports:
+      - "10000:10000"
+      - "3001:3001"
+    volumes:
+      - ./node.properties:/app/config/node.properties
+      - node-ipc:/clusters
+    entrypoint: ["/app/yaci-cli"]
+    command: ["create-node", "-o", "--start"]
+    healthcheck:
+      test: ["CMD", "test", "-S", "/clusters/nodes/default/node/node.sock"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+  cardano-utxo:
+    image: cardano-utxo:e2e
+    depends_on:
+      yaci-cli:
+        condition: service_healthy
+    command:
+      - "--node-name"
+      - "yaci-cli"
+      - "--node-port"
+      - "3001"
+      - "--network"
+      - "devnet"
+      - "--db-path"
+      - "/tmp/e2e-db"
+      - "--api-port"
+      - "8080"
+      - "--skip-node-validation"
+
+  e2e-test:
+    image: curlimages/curl:latest
+    depends_on:
+      cardano-utxo:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for cardano-utxo API (N2N)..."
+        for i in $(seq 1 60); do
+          if curl -sf http://cardano-utxo:8080/ready 2>/dev/null; then
+            echo ""
+            echo "API is ready!"
+            echo "Checking sync status..."
+            curl -sf http://cardano-utxo:8080/ready | head -c 500
+            echo ""
+            echo "N2N E2E TEST PASSED"
+            exit 0
+          fi
+          echo "  attempt $i/60 - not ready yet"
+          sleep 5
+        done
+        echo "N2N E2E TEST FAILED - API never became ready"
+        exit 1
+
+volumes:
+  node-ipc:
