@@ -3,7 +3,7 @@
 pkgs.dockerTools.buildImage {
   name = "ghcr.io/paolino/cardano-utxo-csmt/cardano-utxo-csmt";
   tag = version;
-  config = { EntryPoint = [ "cardano-utxo-csmt" ]; };
+  config = { EntryPoint = [ "cardano-utxo" ]; };
   copyToRoot = pkgs.buildEnv {
     name = "image-root";
     paths =
