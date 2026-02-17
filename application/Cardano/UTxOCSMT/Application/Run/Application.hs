@@ -1,5 +1,6 @@
 module Cardano.UTxOCSMT.Application.Run.Application
     ( application
+    , applicationN2C
     , ApplicationTrace (..)
     , renderApplicationTrace
     )
@@ -15,6 +16,9 @@ import Cardano.UTxOCSMT.Application.BlockFetch
 import Cardano.UTxOCSMT.Application.ChainSync
     ( mkChainSyncApplication
     )
+import Cardano.UTxOCSMT.Application.ChainSyncN2C
+    ( mkN2CChainSyncApplication
+    )
 import Cardano.UTxOCSMT.Application.Database.Interface
     ( Operation (..)
     , State (..)
@@ -26,6 +30,9 @@ import Cardano.UTxOCSMT.Application.Metrics
     )
 import Cardano.UTxOCSMT.Application.UTxOs (Change (..), uTxOs)
 import Cardano.UTxOCSMT.Ouroboros.Connection (runNodeApplication)
+import Cardano.UTxOCSMT.Ouroboros.ConnectionN2C
+    ( runLocalNodeApplication
+    )
 import Cardano.UTxOCSMT.Ouroboros.Types
     ( Follower (..)
     , Intersector (..)
@@ -46,6 +53,7 @@ import Data.Tracer.TraceWith
     )
 import Data.Void (Void)
 import Data.Word (Word64)
+import Ouroboros.Consensus.Block (getHeader)
 import Ouroboros.Network.Block (SlotNo (..))
 import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic)
@@ -290,3 +298,88 @@ application
                 Right (Left ()) ->
                     error "application: chain following application exited unexpectedly"
                 Right _ -> error "application: impossible branch reached"
+
+-- | N2C variant: connects via Unix socket, no BlockFetch needed
+applicationN2C
+    :: NetworkMagic
+    -- ^ Network magic
+    -> FilePath
+    -- ^ Socket path
+    -> Point
+    -- ^ Starting point
+    -> (Point -> IO ())
+    -- ^ Action to set the base checkpoint
+    -> Maybe SlotNo
+    -- ^ Optional skip until slot for Mithril bootstrap
+    -> Tracer IO MetricsEvent
+    -- ^ Tracer for metrics events
+    -> Tracer IO ApplicationTrace
+    -- ^ Tracer for application events
+    -> Update IO Point ByteString ByteString
+    -- ^ Initial database FSM update
+    -> [Point]
+    -- ^ Available points to sync from
+    -> IO (Maybe Point)
+    -- ^ Finality target
+    -> IO Void
+applicationN2C
+    networkMagic'
+    socketPath
+    startingPoint
+    setCheckpoint
+    mSkipTargetSlot
+    TraceWith{trace = metricTrace, contra = metricContra}
+    TraceWith{tracer}
+    initialDBUpdate
+    availablePoints
+    mFinality =
+        do
+            hSetBuffering stdout NoBuffering
+
+            let counting = metricTrace UTxOChangeEvent
+
+                metricsSkipTracer = Tracer
+                    $ \HeaderSkipProgress{skipCurrentSlot, skipTargetSlot} ->
+                        metricTrace
+                            $ HeaderSyncProgressEvent
+                                skipCurrentSlot
+                                skipTargetSlot
+                appSkipTracer = contramap ApplicationHeaderSkipProgress tracer
+
+            skipProgressTracer <-
+                throttleBySlot 1000 (appSkipTracer <> metricsSkipTracer)
+
+            let onSkipComplete =
+                    metricTrace $ BootstrapPhaseEvent Synced
+
+                blockIntersector =
+                    intersector tracer counting mFinality
+                        $ Syncing initialDBUpdate
+
+                points =
+                    if null availablePoints
+                        then [startingPoint]
+                        else availablePoints
+
+                chainSyncApp =
+                    mkN2CChainSyncApplication
+                        (metricContra (BlockInfoEvent . getHeader))
+                        (metricContra ChainTipEvent)
+                        skipProgressTracer
+                        setCheckpoint
+                        onSkipComplete
+                        mSkipTargetSlot
+                        blockIntersector
+                        points
+
+            result <-
+                runLocalNodeApplication
+                    networkMagic'
+                    socketPath
+                    chainSyncApp
+
+            case result of
+                Left err -> throwIO err
+                Right () ->
+                    error
+                        "applicationN2C: chain sync exited unexpectedly"

@@ -24,14 +24,14 @@ import Cardano.UTxOCSMT.Application.Metrics
     , metricsTracer
     )
 import Cardano.UTxOCSMT.Application.Options
-    ( Options (..)
+    ( ConnectionMode (..)
+    , Options (..)
     , networkMagic
-    , nodeName
     , optionsParser
-    , portNumber
     )
 import Cardano.UTxOCSMT.Application.Run.Application
     ( application
+    , applicationN2C
     )
 import Cardano.UTxOCSMT.Application.Run.Config
     ( armageddonParams
@@ -175,15 +175,22 @@ main = withUtf8 $ do
                         getReadyResponse
 
             -- Do Mithril bootstrap before creating Update state
+            -- N2C mode skips TCP node validation (uses Unix socket)
+            let (setupNodeName, setupNodePort, setupSkipValidation) =
+                    case connectionMode options of
+                        N2N{n2nHost, n2nPort} ->
+                            (n2nHost, n2nPort, skipNodeValidation options)
+                        N2C{} ->
+                            ("localhost", 0, True)
             SetupResult{setupStartingPoint, setupMithrilSlot} <-
                 setupDB
                     tracer
                     startingPoint
                     mithrilOptions
                     (networkMagic options)
-                    (nodeName options)
-                    (portNumber options)
-                    (skipNodeValidation options)
+                    setupNodeName
+                    setupNodePort
+                    setupSkipValidation
                     armageddonParams
                     runner
 
@@ -218,19 +225,34 @@ main = withUtf8 $ do
                     traceWith metricsEvent $ BootstrapPhaseEvent Synced
 
             result <-
-                application
-                    (networkMagic options)
-                    (nodeName options)
-                    (portNumber options)
-                    setupStartingPoint
-                    headersQueueSize
-                    setCheckpoint
-                    mSkipTargetSlot
-                    metricsEvent
-                    (contra Application)
-                    state
-                    slots
-                    (mFinality runner)
+                ( case connectionMode options of
+                    N2N{n2nHost, n2nPort} ->
+                        application
+                            (networkMagic options)
+                            n2nHost
+                            n2nPort
+                            setupStartingPoint
+                            headersQueueSize
+                            setCheckpoint
+                            mSkipTargetSlot
+                            metricsEvent
+                            (contra Application)
+                            state
+                            slots
+                            (mFinality runner)
+                    N2C{n2cSocket} ->
+                        applicationN2C
+                            (networkMagic options)
+                            n2cSocket
+                            setupStartingPoint
+                            setCheckpoint
+                            mSkipTargetSlot
+                            metricsEvent
+                            (contra Application)
+                            state
+                            slots
+                            (mFinality runner)
+                )
                     `catch` \(e :: SomeException) -> do
                         trace
                             $ HTTPServiceError

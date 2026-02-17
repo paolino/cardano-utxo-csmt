@@ -39,6 +39,7 @@ import Cardano.UTxOCSMT.Application.Database.Interface
 import Control.Monad.Trans (lift)
 import Data.ByteString (ByteString)
 import Data.Function (fix)
+import Data.Maybe (fromMaybe)
 import Data.Word (Word64)
 import Database.KV.Cursor
     ( Entry (..)
@@ -119,9 +120,10 @@ getAppConfig decodeSlot = do
     mBs <- query ConfigCol AppConfigKey
     pure $ case mBs of
         Nothing -> defaultAppConfig
-        Just bs -> case decodeAppConfig decodeSlot bs of
-            Nothing -> defaultAppConfig
-            Just cfg -> cfg
+        Just bs ->
+            fromMaybe
+                defaultAppConfig
+                (decodeAppConfig decodeSlot bs)
 
 -- | Store the application configuration
 putAppConfig

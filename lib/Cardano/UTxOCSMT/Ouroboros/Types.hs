@@ -23,6 +23,12 @@ module Cardano.UTxOCSMT.Ouroboros.Types
     , KeepAliveApplication
     , ChainSync
     , BlockFetch
+
+      -- * N2C (node-to-client) types
+    , N2CChainSync
+    , N2CChainSyncApplication
+
+      -- * Follower/Intersector
     , Follower (..)
     , ProgressOrRewind (..)
     , Intersector (..)
@@ -68,6 +74,14 @@ type ChainSync = ChainSync.ChainSync Header Point Tip
 
 -- | Type alias for BlockFetch protocol
 type BlockFetch = BlockFetch.BlockFetch Block Point
+
+-- | N2C ChainSync uses Block (not Header) and Block-based Tip
+type N2CChainSync =
+    ChainSync.ChainSync Block (Network.Point Block) (Network.Tip Block)
+
+-- | N2C ChainSync client application
+type N2CChainSyncApplication =
+    ChainSyncClient Block (Network.Point Block) (Network.Tip Block) IO ()
 
 data ProgressOrRewind h
     = Progress (Follower h)
