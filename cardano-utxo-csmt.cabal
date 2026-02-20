@@ -53,6 +53,17 @@ common warnings
     TypeOperators
     ViewPatterns
 
+library
+  -- Thin main library required for haskell.nix compatibility.
+  -- haskell.nix's redirect.nix expects a main library component;
+  -- without it, packages with only named sub-libraries cause
+  -- a TargetNotLocal evaluation error.
+  import:           warnings
+  default-language: Haskell2010
+  build-depends:
+    , base
+    , cardano-utxo-csmt:library
+
 library http
   import:           warnings
   visibility:       public
