@@ -51,6 +51,7 @@ import Database.KV.Database (mkColumns)
 import Database.KV.RocksDB (mkRocksDBDatabase)
 import Database.KV.Transaction qualified as L
 import Database.RocksDB (BatchOp, ColumnFamily, DB (..))
+import UnliftIO (MonadUnliftIO)
 
 type RocksDBTransaction m slot hash key value =
     L.Transaction m ColumnFamily (Columns slot hash key value) BatchOp
@@ -60,7 +61,7 @@ type RocksDBQuery m slot hash key value =
 
 -- | Create a 'RunTransaction' for RocksDB
 newRunRocksDBTransaction
-    :: (MonadIO m, MonadFail m, MonadMask m)
+    :: (MonadUnliftIO m, MonadFail m, MonadMask m)
     => DB
     -> Prisms slot hash key value
     -- ^ Prisms for serializing/deserializing keys and values
@@ -70,7 +71,7 @@ newRunRocksDBTransaction db prisms = do
     pure $ RunTransaction rt
 
 newRunRocksDBCSMTTransaction
-    :: (MonadIO m, MonadFail m, MonadMask m)
+    :: (MonadUnliftIO m, MonadFail m, MonadMask m)
     => DB
     -> Prisms slot hash key value
     -- ^ Prisms for serializing/deserializing keys and values
@@ -92,7 +93,7 @@ newRunRocksDBCSMTTransaction db prisms csmtContext = do
         $ \tx -> runReaderT (rt tx) csmtContext
 
 newRunTransaction
-    :: (MonadIO m, MonadIO n, MonadMask n, MonadFail n)
+    :: (MonadIO m, MonadUnliftIO n, MonadMask n, MonadFail n)
     => DB
     -> Prisms slot hash key value
     -> m
@@ -109,7 +110,7 @@ newRunTransaction db prisms =
         $ codecs prisms
 
 newRocksDBState
-    :: (MonadIO m, MonadFail m, Ord key, Ord slot, MonadMask m)
+    :: (MonadUnliftIO m, MonadFail m, Ord key, Ord slot, MonadMask m)
     => Tracer m (UpdateTrace slot hash)
     -> DB
     -> Prisms slot hash key value

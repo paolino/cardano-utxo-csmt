@@ -249,6 +249,7 @@ library library
     , time
     , typed-process
     , typed-protocols
+    , unliftio
 
   hs-source-dirs:   lib
   default-language: Haskell2010
