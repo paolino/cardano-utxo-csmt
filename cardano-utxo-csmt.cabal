@@ -64,6 +64,27 @@ library
     , base
     , cardano-utxo-csmt:library
 
+library config
+  import:           warnings
+  visibility:       public
+  hs-source-dirs:   config
+  default-language: Haskell2010
+  exposed-modules:  Cardano.UTxOCSMT.Config
+  build-depends:
+    , base
+    , bytestring
+    , cardano-ledger-babbage
+    , cardano-ledger-binary
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-utxo-csmt:library
+    , cereal
+    , csmt
+    , lens
+    , ouroboros-consensus
+    , ouroboros-network-api
+    , rocksdb-haskell-jprupp
+
 library http
   import:           warnings
   visibility:       public
@@ -123,6 +144,7 @@ library application
     , cardano-ledger-byron
     , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-utxo-csmt:config
     , cardano-utxo-csmt:http
     , cardano-utxo-csmt:library
     , cereal
