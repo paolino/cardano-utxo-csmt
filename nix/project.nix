@@ -1,4 +1,5 @@
-{ CHaP, indexState, pkgs, mkdocs, asciinema, cardano-cli, ... }:
+{ CHaP, indexState, pkgs, mkdocs, asciinema, cardano-cli, cardano-node-pkgs, ...
+}:
 
 let
   indexTool = { index-state = indexState; };
@@ -32,6 +33,7 @@ let
       asciinema.resize
       pkgs.asciinema
       cardano-cli."cardano-cli:exe:cardano-cli"
+      cardano-node-pkgs.cardano-node
     ];
     shellHook = ''
       echo "Entering shell for cardano-utxo CLI development"
@@ -59,4 +61,6 @@ in {
     project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo;
   packages.cardano-utxo-swagger =
     project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-swagger;
+  packages.integration-tests =
+    project.hsPkgs.cardano-utxo-csmt.components.tests.cardano-utxo-csmt-integration-test;
 }

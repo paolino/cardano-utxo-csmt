@@ -13,6 +13,7 @@
     mkdocs.url = "github:paolino/dev-assets?dir=mkdocs";
     asciinema.url = "github:paolino/dev-assets?dir=asciinema";
     cardano-cli.url = "github:IntersectMBO/cardano-cli";
+    cardano-node.url = "github:IntersectMBO/cardano-node/10.5.4";
     iohkNix = {
       url = "github:input-output-hk/iohk-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -24,7 +25,7 @@
   };
 
   outputs = inputs@{ self, nixpkgs, flake-parts, haskellNix, mkdocs, asciinema
-    , cardano-cli, iohkNix, CHaP, ... }:
+    , cardano-cli, cardano-node, iohkNix, CHaP, ... }:
     let
       version = self.dirtyShortRev or self.shortRev;
       parts = flake-parts.lib.mkFlake { inherit inputs; } {
@@ -45,6 +46,7 @@
               inherit CHaP;
               inherit pkgs;
               cardano-cli = cardano-cli.packages.${system};
+              cardano-node-pkgs = cardano-node.packages.${system};
               mkdocs = mkdocs.packages.${system};
               asciinema = asciinema.packages.${system};
             };
@@ -57,7 +59,8 @@
           in rec {
             packages = {
               inherit (project.packages)
-                bench unit-tests cardano-utxo cardano-utxo-swagger;
+                bench unit-tests integration-tests cardano-utxo
+                cardano-utxo-swagger;
               inherit docker-image;
               default = packages.cardano-utxo;
             };

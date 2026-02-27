@@ -372,6 +372,40 @@ test-suite unit-tests
     Data.List.SampleFibonacciSpec
     Data.Tracer.ThrottleSpec
 
+test-suite cardano-utxo-csmt-integration-test
+  import:             warnings
+  ghc-options:        -Wno-unused-packages
+  default-language:   GHC2021
+  hs-source-dirs:     integration-test
+  build-depends:
+    , async
+    , base
+    , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-allegra
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-node-clients
+    , containers
+    , directory
+    , filepath
+    , hspec
+    , microlens
+    , ouroboros-network-api
+    , process
+    , time
+    , unix
+
+  build-tool-depends: hspec-discover:hspec-discover
+  type:               exitcode-stdio-1.0
+  main-is:            main.hs
+  other-modules:
+    Cardano.Node.Client.E2E.Devnet
+    Cardano.Node.Client.E2E.ProviderSpec
+    Cardano.Node.Client.E2E.Setup
+    Cardano.Node.Client.E2E.SubmitterSpec
+
 benchmark bench
   import:           warnings
   default-language: Haskell2010
