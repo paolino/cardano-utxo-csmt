@@ -30,7 +30,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
-    , RunCSMTTransaction (..)
+    , RunTransaction (..)
     , queryByAddress
     , queryMerkleRoot
     )
@@ -74,7 +74,7 @@ block hash, and merkle root for each processed block. Results are
 filtered to exclude Origin points.
 -}
 queryMerkleRoots
-    :: RunCSMTTransaction
+    :: RunTransaction
         ColumnFamily
         BatchOp
         Point
@@ -85,8 +85,8 @@ queryMerkleRoots
     -- ^ Database transaction runner
     -> IO [MerkleRootEntry]
     -- ^ List of merkle root entries
-queryMerkleRoots (RunCSMTTransaction runCSMT) =
-    runCSMT $ concatMap toMerkleRootEntry <$> getAllMerkleRoots
+queryMerkleRoots (RunTransaction runTx) =
+    runTx $ concatMap toMerkleRootEntry <$> getAllMerkleRoots
   where
     toMerkleRootEntry (slot, blockHash, merkleRoot) = case slot of
         Origin -> []
@@ -100,7 +100,7 @@ Generates a cryptographic proof that a specific UTxO exists in the
 current merkle tree. Returns 'Nothing' if the UTxO is not found.
 -}
 queryInclusionProof
-    :: RunCSMTTransaction
+    :: RunTransaction
         ColumnFamily
         BatchOp
         Point
@@ -115,11 +115,11 @@ queryInclusionProof
     -- ^ Transaction output index
     -> IO (Maybe InclusionProofResponse)
     -- ^ Inclusion proof response, if the UTxO exists
-queryInclusionProof (RunCSMTTransaction runCSMT) txIdText txIx = do
-    runCSMT $ do
-        let CSMTContext{fromKV} = context
+queryInclusionProof (RunTransaction runTx) txIdText txIx = do
+    runTx $ do
+        let CSMTContext{fromKV, hashing} = context
         result <- generateInclusionProof fromKV KVCol CSMTCol txIn
-        merkle <- queryMerkleRoot
+        merkle <- queryMerkleRoot hashing
         pure $ do
             (out, proof') <- result
             let merkleText =
@@ -140,7 +140,7 @@ queryInclusionProof (RunCSMTTransaction runCSMT) txIdText txIx = do
 
 -- | Query all UTxOs at a given address.
 queryUTxOsByAddress
-    :: RunCSMTTransaction
+    :: RunTransaction
         ColumnFamily
         BatchOp
         Point
@@ -152,12 +152,13 @@ queryUTxOsByAddress
     -> Text
     -- ^ Address in base16 encoding
     -> IO (Either String [UTxOByAddressEntry])
-queryUTxOsByAddress (RunCSMTTransaction runCSMT) addressHex =
+queryUTxOsByAddress (RunTransaction runTx) addressHex =
     case decodeBase16Text addressHex of
         Left err -> pure $ Left $ "Invalid base16 address: " <> err
         Right addressBytes -> do
-            let addressKey = byteStringToKey addressBytes
-            results <- runCSMT $ queryByAddress addressKey
+            let CSMTContext{fromKV} = context
+                addressKey = byteStringToKey addressBytes
+            results <- runTx $ queryByAddress fromKV addressKey
             pure $ Right $ fmap toEntry results
   where
     toEntry (txIn, txOut) =

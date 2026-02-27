@@ -13,12 +13,12 @@ module Cardano.UTxOCSMT.Application.Database.RocksDB
     ( RocksDBTransaction
     , RocksDBQuery
     , newRunRocksDBTransaction
-    , newRunRocksDBCSMTTransaction
     , newRocksDBState
     , createUpdateState
     )
 where
 
+import CSMT (FromKV, Hashing)
 import Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     ( ArmageddonParams
     , setup
@@ -29,9 +29,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     , codecs
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
-    ( CSMTContext (..)
-    , RunCSMTTransaction (..)
-    , RunTransaction (..)
+    ( RunTransaction (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     ( UpdateTrace
@@ -45,9 +43,6 @@ import Cardano.UTxOCSMT.Application.Database.Interface
 import Control.Monad (when)
 import Control.Monad.Catch (MonadMask)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader
-    ( ReaderT (..)
-    )
 import Control.Tracer (Tracer, nullTracer)
 import Data.Maybe (isNothing)
 import Database.KV.Cursor (firstEntry)
@@ -75,28 +70,6 @@ newRunRocksDBTransaction db prisms = do
     L.RunTransaction rt <- newRunTransaction db prisms
     pure $ RunTransaction rt
 
-newRunRocksDBCSMTTransaction
-    :: (MonadUnliftIO m, MonadFail m, MonadMask m)
-    => DB
-    -> Prisms slot hash key value
-    -- ^ Prisms for serializing/deserializing keys and values
-    -> CSMTContext hash key value
-    -> m
-        ( RunCSMTTransaction
-            ColumnFamily
-            BatchOp
-            slot
-            hash
-            key
-            value
-            m
-        )
-newRunRocksDBCSMTTransaction db prisms csmtContext = do
-    L.RunTransaction rt <- newRunTransaction db prisms
-    pure
-        $ RunCSMTTransaction
-        $ \tx -> runReaderT (rt tx) csmtContext
-
 newRunTransaction
     :: (MonadIO m, MonadUnliftIO n, MonadMask n, MonadFail n)
     => DB
@@ -119,41 +92,45 @@ newRocksDBState
     => Tracer m (UpdateTrace slot hash)
     -> DB
     -> Prisms slot hash key value
-    -> CSMTContext hash key value
+    -> FromKV key value hash
+    -> Hashing hash
     -> (slot -> hash)
     -> (slot -> TipOf slot -> m ())
     -- ^ Called after each forward; use to check if at tip and emit Synced
     -> ArmageddonParams hash
     -> m
         ( (Update m slot key value, [slot])
-        , RunCSMTTransaction ColumnFamily BatchOp slot hash key value m
+        , RunTransaction ColumnFamily BatchOp slot hash key value m
         )
 newRocksDBState
     tracer
     db
     prisms
-    csmtContext
+    fkv
+    h
     slotHash
     onForward
     armageddonParams = do
-        runner <- newRunRocksDBCSMTTransaction db prisms csmtContext
+        runner <- newRunRocksDBTransaction db prisms
         ensureInitialized runner armageddonParams
         (,runner)
-            <$> newState tracer slotHash onForward armageddonParams runner
+            <$> newState tracer fkv h slotHash onForward armageddonParams runner
 
 -- | Create Update state from an existing runner
 createUpdateState
     :: (MonadFail m, Ord key, Ord slot)
     => Tracer m (UpdateTrace slot hash)
+    -> FromKV key value hash
+    -> Hashing hash
     -> (slot -> hash)
     -> (slot -> TipOf slot -> m ())
     -- ^ Called after each forward; use to check if at tip and emit Synced
     -> ArmageddonParams hash
-    -> RunCSMTTransaction ColumnFamily BatchOp slot hash key value m
+    -> RunTransaction ColumnFamily BatchOp slot hash key value m
     -> m (Update m slot key value, [slot])
-createUpdateState tracer slotHash onForward armageddonParams runner = do
+createUpdateState tracer fkv h slotHash onForward armageddonParams runner = do
     ensureInitialized runner armageddonParams
-    newState tracer slotHash onForward armageddonParams runner
+    newState tracer fkv h slotHash onForward armageddonParams runner
 
 {- | Ensure the database has been initialized with an Origin rollback point.
 This makes the public API self-initializing so callers can't forget to
@@ -161,10 +138,10 @@ call 'setup' before creating state.
 -}
 ensureInitialized
     :: (Ord slot, Monad m)
-    => RunCSMTTransaction cf op slot hash key value m
+    => RunTransaction cf op slot hash key value m
     -> ArmageddonParams hash
     -> m ()
-ensureInitialized runner@RunCSMTTransaction{txRunTransaction} armageddonParams = do
+ensureInitialized runner@RunTransaction{transact} armageddonParams = do
     empty <-
-        txRunTransaction $ iterating RollbackPoints $ isNothing <$> firstEntry
+        transact $ iterating RollbackPoints $ isNothing <$> firstEntry
     when empty $ setup nullTracer runner armageddonParams

@@ -22,8 +22,9 @@ module Cardano.UTxOCSMT.Mithril.Import
     )
 where
 
+import CSMT (FromKV, Hashing)
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
-    ( RunCSMTTransaction
+    ( RunTransaction
     )
 import Cardano.UTxOCSMT.Mithril.Client
     ( MithrilConfig (..)
@@ -145,7 +146,11 @@ importFromMithril
     -- ^ Mithril client configuration
     -> IO ()
     -- ^ Action to run after download succeeds, before DB writes begin
-    -> RunCSMTTransaction
+    -> FromKV ByteString ByteString hash
+    -- ^ Key/value codec for CSMT operations
+    -> Hashing hash
+    -- ^ Hashing operations for CSMT
+    -> RunTransaction
         ColumnFamily
         BatchOp
         Point
@@ -153,9 +158,9 @@ importFromMithril
         ByteString
         ByteString
         IO
-    -- ^ CSMT transaction runner for database operations
+    -- ^ Transaction runner for database operations
     -> IO ImportResult
-importFromMithril TraceWith{tracer, trace} config onBeforeDbWrite runner = do
+importFromMithril TraceWith{tracer, trace} config onBeforeDbWrite fkv h runner = do
     trace ImportStarting
 
     -- Step 1: Fetch latest snapshot metadata
@@ -212,6 +217,8 @@ importFromMithril TraceWith{tracer, trace} config onBeforeDbWrite runner = do
                             ( streamToCSMT
                                 (contramap ImportStreaming tracer)
                                 defaultStreamConfig
+                                fkv
+                                h
                                 runner
                             )
 
