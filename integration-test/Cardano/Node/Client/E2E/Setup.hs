@@ -24,6 +24,12 @@ module Cardano.Node.Client.E2E.Setup
       -- * Signing
     , addKeyWitness
 
+      -- * Transaction building
+    , buildTransfer
+
+      -- * UTxO polling
+    , waitForUTxOChange
+
       -- * Devnet bracket
     , withDevnet
     ) where
@@ -36,6 +42,7 @@ import Control.Concurrent.Async
     )
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
+import Data.Sequence.Strict ((|>))
 import Data.Set qualified as Set
 import System.Environment (lookupEnv)
 
@@ -47,16 +54,38 @@ import Cardano.Crypto.DSIGN
     )
 import Cardano.Crypto.Seed (mkSeedFromBytes)
 import Cardano.Ledger.Address (Addr (..))
+import Cardano.Ledger.Allegra.Scripts
+    ( ValidityInterval (..)
+    )
 import Cardano.Ledger.Api.Tx
     ( Tx
     , addrTxWitsL
+    , mkBasicTx
     , txIdTx
     , witsTxL
     )
+import Cardano.Ledger.Api.Tx.Body
+    ( mkBasicTxBody
+    , outputsTxBodyL
+    , vldtTxBodyL
+    )
 import Cardano.Ledger.Api.Tx.In (TxId (..))
-import Cardano.Ledger.BaseTypes (Network (..))
+import Cardano.Ledger.Api.Tx.Out
+    ( TxOut
+    , mkBasicTxOut
+    )
+import Cardano.Ledger.BaseTypes
+    ( Inject (..)
+    , Network (..)
+    , SlotNo (..)
+    , StrictMaybe (SJust, SNothing)
+    )
+import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
-import Cardano.Ledger.Core (extractHash)
+import Cardano.Ledger.Core
+    ( PParams
+    , extractHash
+    )
 import Cardano.Ledger.Credential
     ( Credential (..)
     , StakeReference (..)
@@ -70,7 +99,10 @@ import Cardano.Ledger.Keys
     , hashKey
     , signedDSIGN
     )
-import Lens.Micro ((%~), (&))
+import Cardano.Ledger.TxIn (TxIn)
+import Lens.Micro ((%~), (&), (.~))
+
+import Cardano.Node.Client.Balance (balanceTx)
 import Ouroboros.Network.Magic
     ( NetworkMagic (..)
     )
@@ -86,6 +118,9 @@ import Cardano.Node.Client.N2C.Connection
 import Cardano.Node.Client.N2C.Types
     ( LSQChannel
     , LTxSChannel
+    )
+import Cardano.Node.Client.Provider
+    ( Provider (..)
     )
 
 -- | Devnet uses network magic 42.
@@ -170,6 +205,67 @@ mkWitVKey (TxId hash) sk =
         (signedDSIGN sk (extractHash hash))
   where
     vk = VKey (deriveVerKeyDSIGN sk)
+
+{- | Build a balanced and signed transfer
+transaction that sends a specific amount to a
+recipient address.
+-}
+buildTransfer
+    :: PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> SignKeyDSIGN Ed25519DSIGN
+    -> Addr
+    -- ^ Change address (sender)
+    -> Addr
+    -- ^ Recipient
+    -> Coin
+    -- ^ Amount to send
+    -> Tx ConwayEra
+buildTransfer pp utxos sk changeAddr toAddr amount =
+    let recipientOut =
+            mkBasicTxOut toAddr (inject amount)
+        vldt =
+            ValidityInterval
+                SNothing
+                (SJust (SlotNo 100_000))
+        body =
+            mkBasicTxBody
+                & vldtTxBodyL .~ vldt
+                & outputsTxBodyL
+                    .~ (mempty |> recipientOut)
+        tx = mkBasicTx body
+    in  case balanceTx pp utxos changeAddr tx of
+            Left err ->
+                error
+                    $ "buildTransfer failed: "
+                        <> show err
+            Right balanced ->
+                addKeyWitness sk balanced
+
+{- | Poll 'queryUTxOs' until the result differs
+from @oldUtxos@. Retries every 500ms, gives up
+after 60 attempts (30s).
+-}
+waitForUTxOChange
+    :: Provider IO
+    -> Addr
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO [(TxIn, TxOut ConwayEra)]
+waitForUTxOChange provider addr oldUtxos =
+    go (60 :: Int)
+  where
+    oldKeys = Set.fromList (map fst oldUtxos)
+    go 0 =
+        error "waitForUTxOChange: timed out"
+    go n = do
+        utxos <- queryUTxOs provider addr
+        let newKeys =
+                Set.fromList (map fst utxos)
+        if newKeys /= oldKeys
+            then pure utxos
+            else do
+                threadDelay 500_000
+                go (n - 1)
 
 {- | Start a cardano-node devnet, connect via
 N2C, run an action, and tear down.

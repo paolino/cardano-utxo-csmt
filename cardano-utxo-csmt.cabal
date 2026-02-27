@@ -387,6 +387,7 @@ test-suite cardano-utxo-csmt-integration-test
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-node-clients
+    , cardano-strict-containers
     , containers
     , directory
     , filepath
@@ -405,6 +406,7 @@ test-suite cardano-utxo-csmt-integration-test
     Cardano.Node.Client.E2E.ProviderSpec
     Cardano.Node.Client.E2E.Setup
     Cardano.Node.Client.E2E.SubmitterSpec
+    Cardano.Node.Client.E2E.UTxOStateSpec
 
 benchmark bench
   import:           warnings
