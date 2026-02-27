@@ -359,15 +359,15 @@ spec = do
             -- First session: set skip slot then "crash" (close DB)
             withRocksDB testDir $ \(RunRocksDB r) -> do
                 db <- r ask
-                RunCSMTTransaction{transact} <-
-                    newRunRocksDBCSMTTransaction db prisms csmtContext
+                RunTransaction{transact} <-
+                    newRunRocksDBTransaction db prisms
                 transact
                     $ setSkipSlot decodeSlot encodeSlot 98765432
             -- Second session: "restart" and verify skip slot persisted
             withRocksDB testDir $ \(RunRocksDB r) -> do
                 db <- r ask
-                RunCSMTTransaction{transact} <-
-                    newRunRocksDBCSMTTransaction db prisms csmtContext
+                RunTransaction{transact} <-
+                    newRunRocksDBTransaction db prisms
                 slot <- transact $ getSkipSlot decodeSlot
                 slot `shouldBe` Just 98765432
 
