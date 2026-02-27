@@ -44,7 +44,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
-    , RunCSMTTransaction (..)
+    , RunTransaction (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     ( newFinality
@@ -239,11 +239,11 @@ Returns the most recent point that is considered final (more than
 -}
 mFinality
     :: MonadFail m
-    => RunCSMTTransaction cf op Point hash key value m
+    => RunTransaction cf op Point hash key value m
     -- ^ Database transaction runner
     -> m (Maybe Point)
     -- ^ The finality point, if any
-mFinality (RunCSMTTransaction runCSMT) = runCSMT $ newFinality isFinal
+mFinality (RunTransaction runTx) = runTx $ newFinality isFinal
   where
     isFinal :: WithOrigin Point -> WithOrigin Point -> Bool
     isFinal tip finality = distance tip finality > 2160

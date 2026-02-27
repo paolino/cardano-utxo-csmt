@@ -28,7 +28,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
-    , RunCSMTTransaction (..)
+    , RunTransaction (..)
     , queryByAddress
     , queryMerkleRoot
     )
@@ -41,7 +41,7 @@ import Cardano.UTxOCSMT.Application.Database.Interface
     , Update (..)
     )
 import Cardano.UTxOCSMT.Application.Database.RocksDB
-    ( newRunRocksDBCSMTTransaction
+    ( newRunRocksDBTransaction
     )
 import Cardano.UTxOCSMT.Application.Metrics (Metrics (..))
 import Cardano.UTxOCSMT.HTTP.API
@@ -189,10 +189,10 @@ encodeBase16 = TE.decodeUtf8 . convertToBase Base16
 Adapted for test types (SlotNo slots -> SlotNo)
 -}
 queryTestMerkleRoots
-    :: RunCSMTTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
+    :: RunTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
     -> IO [MerkleRootEntry]
-queryTestMerkleRoots (RunCSMTTransaction runCSMT) =
-    runCSMT $ concatMap toEntry <$> getAllMerkleRoots
+queryTestMerkleRoots (RunTransaction runTx) =
+    runTx $ concatMap toEntry <$> getAllMerkleRoots
   where
     toEntry (slot, blockHash, merkleRoot) = case slot of
         Origin -> []
@@ -208,7 +208,7 @@ queryTestMerkleRoots (RunCSMTTransaction runCSMT) =
 For tests, we use a simplified lookup where txId is the hex of the key prefix
 -}
 queryTestInclusionProof
-    :: RunCSMTTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
+    :: RunTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
     -> BL.ByteString
     -- ^ The actual key that was inserted
     -> Text
@@ -216,15 +216,16 @@ queryTestInclusionProof
     -> Word16
     -- ^ txIx
     -> IO (Maybe InclusionProofResponse)
-queryTestInclusionProof (RunCSMTTransaction runCSMT) actualKey txIdText txIx =
-    runCSMT $ do
+queryTestInclusionProof (RunTransaction runTx) actualKey txIdText txIx =
+    runTx $ do
+        let CSMTContext{fromKV = fkv, hashing = h} = testCSMTContext
         result <-
             generateInclusionProof
-                (fromKV testCSMTContext)
+                fkv
                 KVCol
                 CSMTCol
                 actualKey
-        merkle <- queryMerkleRoot
+        merkle <- queryMerkleRoot h
         pure $ do
             (out, proof') <- result
             let merkleText = fmap (encodeBase16Text . renderHash) merkle
@@ -239,15 +240,16 @@ queryTestInclusionProof (RunCSMTTransaction runCSMT) actualKey txIdText txIx =
 
 -- | Query UTxOs by address for testing
 queryTestByAddress
-    :: RunCSMTTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
+    :: RunTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
     -> Text
     -> IO (Either String [UTxOByAddressEntry])
-queryTestByAddress (RunCSMTTransaction runCSMT) addressHex =
+queryTestByAddress (RunTransaction runTx) addressHex =
     case decodeBase16 addressHex of
         Nothing -> pure $ Left "Invalid base16 address"
         Just addressBytes -> do
-            let addressKey = byteStringToKey addressBytes
-            results <- runCSMT $ queryByAddress addressKey
+            let CSMTContext{fromKV = fkv} = testCSMTContext
+                addressKey = byteStringToKey addressBytes
+            results <- runTx $ queryByAddress fkv addressKey
             pure $ Right $ fmap toEntry results
   where
     decodeBase16 :: Text -> Maybe ByteString
@@ -263,15 +265,16 @@ queryTestByAddress (RunCSMTTransaction runCSMT) addressHex =
 
 -- | Query UTxOs by raw address bytes (no hex encoding)
 queryRawByAddress
-    :: RunCSMTTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
+    :: RunTransaction cf op SlotNo Hash BL.ByteString BL.ByteString IO
     -> ByteString
     -> IO [(BL.ByteString, BL.ByteString)]
-queryRawByAddress (RunCSMTTransaction runCSMT) addressBytes =
-    runCSMT $ queryByAddress $ byteStringToKey addressBytes
+queryRawByAddress (RunTransaction runTx) addressBytes =
+    let CSMTContext{fromKV = fkv} = testCSMTContext
+    in  runTx $ queryByAddress fkv $ byteStringToKey addressBytes
 
 -- | Run tests with a fresh RocksDB database and HTTP app
 withTestDB
-    :: ( RunCSMTTransaction
+    :: ( RunTransaction
             ColumnFamily
             BatchOp
             SlotNo
@@ -286,11 +289,14 @@ withTestDB
 withTestDB action =
     withSystemTempDirectory "http-test" $ \dir ->
         withRocksDB dir $ \db -> do
-            runner <- newRunRocksDBCSMTTransaction db testPrisms testCSMTContext
+            let CSMTContext{fromKV = fkv, hashing = h} = testCSMTContext
+            runner <- newRunRocksDBTransaction db testPrisms
             setup nullTracer runner testArmageddonParams
             action runner
                 $ mkUpdate
                     nullTracer
+                    fkv
+                    h
                     testSlotHash
                     (\_ _ -> pure ())
                     testArmageddonParams
@@ -298,7 +304,7 @@ withTestDB action =
 
 -- | Run tests with a fresh RocksDB database using address-prefixed CSMT
 withTestDBPrefixed
-    :: ( RunCSMTTransaction
+    :: ( RunTransaction
             ColumnFamily
             BatchOp
             SlotNo
@@ -313,12 +319,14 @@ withTestDBPrefixed
 withTestDBPrefixed action =
     withSystemTempDirectory "http-test-prefixed" $ \dir ->
         withRocksDB dir $ \db -> do
-            runner <-
-                newRunRocksDBCSMTTransaction db testPrisms prefixedCSMTContext
+            let CSMTContext{fromKV = fkv, hashing = h} = prefixedCSMTContext
+            runner <- newRunRocksDBTransaction db testPrisms
             setup nullTracer runner testArmageddonParams
             action runner
                 $ mkUpdate
                     nullTracer
+                    fkv
+                    h
                     testSlotHash
                     (\_ _ -> pure ())
                     testArmageddonParams

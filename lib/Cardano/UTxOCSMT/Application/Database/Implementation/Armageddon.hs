@@ -15,7 +15,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.RollbackPoint
     ( RollbackPoint (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
-    ( RunCSMTTransaction (..)
+    ( RunTransaction (..)
     )
 import Control.Monad (when)
 import Control.Monad.Trans (lift)
@@ -55,12 +55,12 @@ data ArmageddonParams hash = ArmageddonParams
 -- Clean up a column batch of rows
 cleanUpBatch
     :: (Ord (KeyOf x), Monad m)
-    => RunCSMTTransaction cf op slot hash key value m
+    => RunTransaction cf op slot hash key value m
     -> Columns slot hash key value x
     -> ArmageddonParams hash
     -> m ()
 cleanUpBatch
-    RunCSMTTransaction{txRunTransaction = transact}
+    RunTransaction{transact}
     column
     ArmageddonParams{armageddonBatchSize} = do
         fix $ \batch -> do
@@ -83,7 +83,7 @@ THIS IS NOT GOING TO RUN ATOMICALLY
 cleanup
     :: (Ord key, Ord slot, Monad m)
     => Tracer m ArmageddonTrace
-    -> RunCSMTTransaction cf op slot hash key value m
+    -> RunTransaction cf op slot hash key value m
     -> ArmageddonParams hash
     -> m ()
 cleanup (traceWith -> trace) runTransaction armageddonParams = do
@@ -102,7 +102,7 @@ THIS IS NOT GOING TO RUN ATOMICALLY
 armageddon
     :: (Ord key, Ord slot, Monad m)
     => Tracer m ArmageddonTrace
-    -> RunCSMTTransaction cf op slot hash key value m
+    -> RunTransaction cf op slot hash key value m
     -> ArmageddonParams hash
     -> m ()
 armageddon tracer runTransaction armageddonParams = do
@@ -112,11 +112,11 @@ armageddon tracer runTransaction armageddonParams = do
 setup
     :: (Ord slot, Monad m)
     => Tracer m ArmageddonTrace
-    -> RunCSMTTransaction cf op slot hash key value m
+    -> RunTransaction cf op slot hash key value m
     -> ArmageddonParams hash
     -> m ()
-setup (traceWith -> trace) (RunCSMTTransaction{txRunTransaction}) armageddonParams = do
-    txRunTransaction
+setup (traceWith -> trace) (RunTransaction{transact}) armageddonParams = do
+    transact
         $ insert
             RollbackPoints
             Origin

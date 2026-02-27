@@ -38,7 +38,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
-    , RunCSMTTransaction (..)
+    , RunTransaction (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Update
     ( mkUpdate
@@ -65,8 +65,7 @@ import Cardano.UTxOCSMT.Application.Database.Properties.Expected
     , runWithExpected
     )
 import Cardano.UTxOCSMT.Application.Database.RocksDB
-    ( newRunRocksDBCSMTTransaction
-    , newRunRocksDBTransaction
+    ( newRunRocksDBTransaction
     )
 import Control.Lens (preview, prism', review)
 import Control.Monad.Trans.Reader (ReaderT (..), ask)
@@ -174,10 +173,10 @@ runRocksDBProperties prop =
     withSystemTempDirectory "rocksdb-test" $ \dir ->
         withRocksDB dir $ \(RunRocksDB r) -> do
             db <- r ask
-            runner <- txRunner db
+            runner <- newRunRocksDBTransaction db prisms
             contextDatabase <- query db
             setup nullTracer runner armageddonParams
-            let context =
+            let ctx =
                     Context
                         { contextDatabase
                         , contextGenerator =
@@ -193,16 +192,18 @@ runRocksDBProperties prop =
                                     pure v
                                 }
                         }
-            runWithExpected context (update runner) prop
+            runWithExpected ctx (update runner) prop
   where
-    txRunner db = newRunRocksDBCSMTTransaction db prisms csmtContext
+    CSMTContext{fromKV = fkv, hashing = h} = csmtContext
     armageddonParams = ArmageddonParams 1000 (mkHash "")
     query db =
-        mkTransactionedQuery (isoK $ fromKV csmtContext)
+        mkTransactionedQuery (isoK fkv)
             <$> newRunRocksDBTransaction db prisms
     update =
         mkUpdate
             nullTracer
+            fkv
+            h
             (const $ mkHash "")
             (\_ _ -> pure ())
             armageddonParams
@@ -294,80 +295,80 @@ spec = do
             withSystemTempDirectory "rocksdb-config-test" $ \dir ->
                 withRocksDB dir $ \(RunRocksDB r) -> do
                     db <- r ask
-                    RunCSMTTransaction{txRunTransaction} <-
-                        newRunRocksDBCSMTTransaction db prisms csmtContext
+                    RunTransaction{transact} <-
+                        newRunRocksDBTransaction db prisms
                     -- Initially no checkpoint
-                    result1 <- txRunTransaction $ getBaseCheckpoint decodeSlot
+                    result1 <- transact $ getBaseCheckpoint decodeSlot
                     result1 `shouldBe` Nothing
                     -- Store checkpoint
-                    txRunTransaction
+                    transact
                         $ putBaseCheckpoint decodeSlot encodeSlot (42 :: Int)
                     -- Retrieve checkpoint
-                    result2 <- txRunTransaction $ getBaseCheckpoint decodeSlot
+                    result2 <- transact $ getBaseCheckpoint decodeSlot
                     result2 `shouldBe` Just 42
         it "tracks bootstrap in progress marker" $ do
             withSystemTempDirectory "rocksdb-bootstrap-test" $ \dir ->
                 withRocksDB dir $ \(RunRocksDB r) -> do
                     db <- r ask
-                    RunCSMTTransaction{txRunTransaction} <-
-                        newRunRocksDBCSMTTransaction db prisms csmtContext
+                    RunTransaction{transact} <-
+                        newRunRocksDBTransaction db prisms
                     -- Initially not in progress
                     inProgress1 <-
-                        txRunTransaction
+                        transact
                             $ isBootstrapInProgress decodeSlot
                     inProgress1 `shouldBe` False
                     -- Set marker
-                    txRunTransaction
+                    transact
                         $ setBootstrapInProgress decodeSlot encodeSlot
                     -- Now in progress
                     inProgress2 <-
-                        txRunTransaction
+                        transact
                             $ isBootstrapInProgress decodeSlot
                     inProgress2 `shouldBe` True
                     -- Clear marker
-                    txRunTransaction
+                    transact
                         $ clearBootstrapInProgress decodeSlot encodeSlot
                     -- No longer in progress
                     inProgress3 <-
-                        txRunTransaction
+                        transact
                             $ isBootstrapInProgress decodeSlot
                     inProgress3 `shouldBe` False
         it "stores and retrieves skip slot" $ do
             withSystemTempDirectory "rocksdb-skip-test" $ \dir ->
                 withRocksDB dir $ \(RunRocksDB r) -> do
                     db <- r ask
-                    RunCSMTTransaction{txRunTransaction} <-
-                        newRunRocksDBCSMTTransaction db prisms csmtContext
+                    RunTransaction{transact} <-
+                        newRunRocksDBTransaction db prisms
                     -- Initially no skip slot
-                    slot1 <- txRunTransaction $ getSkipSlot decodeSlot
+                    slot1 <- transact $ getSkipSlot decodeSlot
                     slot1 `shouldBe` Nothing
                     -- Set skip slot
-                    txRunTransaction
+                    transact
                         $ setSkipSlot decodeSlot encodeSlot 12345678
                     -- Retrieve skip slot
-                    slot2 <- txRunTransaction $ getSkipSlot decodeSlot
+                    slot2 <- transact $ getSkipSlot decodeSlot
                     slot2 `shouldBe` Just 12345678
                     -- Clear skip slot
-                    txRunTransaction
+                    transact
                         $ clearSkipSlot decodeSlot encodeSlot
                     -- No longer set
-                    slot3 <- txRunTransaction $ getSkipSlot decodeSlot
+                    slot3 <- transact $ getSkipSlot decodeSlot
                     slot3 `shouldBe` Nothing
         it "survives database close and reopen (crash recovery)" $ do
             let testDir = "/tmp/smoke-test-db"
             -- First session: set skip slot then "crash" (close DB)
             withRocksDB testDir $ \(RunRocksDB r) -> do
                 db <- r ask
-                RunCSMTTransaction{txRunTransaction} <-
+                RunCSMTTransaction{transact} <-
                     newRunRocksDBCSMTTransaction db prisms csmtContext
-                txRunTransaction
+                transact
                     $ setSkipSlot decodeSlot encodeSlot 98765432
             -- Second session: "restart" and verify skip slot persisted
             withRocksDB testDir $ \(RunRocksDB r) -> do
                 db <- r ask
-                RunCSMTTransaction{txRunTransaction} <-
+                RunCSMTTransaction{transact} <-
                     newRunRocksDBCSMTTransaction db prisms csmtContext
-                slot <- txRunTransaction $ getSkipSlot decodeSlot
+                slot <- transact $ getSkipSlot decodeSlot
                 slot `shouldBe` Just 98765432
 
 withRocksDB

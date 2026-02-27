@@ -17,6 +17,7 @@ where
 -- initialization of new databases, and optional bootstrapping from Mithril
 -- snapshots for faster initial sync.
 
+import CSMT (FromKV, Hashing)
 import Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     ( ArmageddonParams
     , cleanup
@@ -35,7 +36,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     , setSkipSlot
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
-    ( RunCSMTTransaction (..)
+    ( RunTransaction (..)
     )
 import Cardano.UTxOCSMT.Application.Options (MithrilOptions (..))
 import Cardano.UTxOCSMT.Application.Run.Config
@@ -123,7 +124,11 @@ setupDB
     -- ^ Skip node validation
     -> ArmageddonParams hash
     -- ^ Parameters for database initialization
-    -> RunCSMTTransaction
+    -> FromKV LazyByteString LazyByteString hash
+    -- ^ Key/value codec for CSMT operations
+    -> Hashing hash
+    -- ^ Hashing operations for CSMT
+    -> RunTransaction
         ColumnFamily
         BatchOp
         Point
@@ -143,9 +148,11 @@ setupDB
     nodePort
     skipValidation
     armageddonParams
-    runner@RunCSMTTransaction{txRunTransaction} = do
+    fkv
+    h
+    runner@RunTransaction{transact} = do
         -- Check for incomplete bootstrap and clean up if needed
-        incomplete <- txRunTransaction $ isBootstrapInProgress decodePoint
+        incomplete <- transact $ isBootstrapInProgress decodePoint
         when incomplete $ do
             trace IncompleteBootstrapDetected
             cleanup (contra New) runner armageddonParams
@@ -166,7 +173,7 @@ setupDB
                             else regularSetup
                     else regularSetup
             else do
-                (response, skipSlot) <- txRunTransaction $ do
+                (response, skipSlot) <- transact $ do
                     cp <- getBaseCheckpoint decodePoint
                     ss <- getSkipSlot decodePoint
                     pure (cp, ss)
@@ -222,7 +229,7 @@ setupDB
 
         regularSetup = do
             setup (contra New) runner armageddonParams
-            txRunTransaction
+            transact
                 $ putBaseCheckpoint decodePoint encodePoint startingPoint
             return
                 SetupResult
@@ -283,7 +290,7 @@ setupDB
                                 }
 
                     let markBootstrapInProgress =
-                            txRunTransaction
+                            transact
                                 $ setBootstrapInProgress
                                     decodePoint
                                     encodePoint
@@ -293,6 +300,8 @@ setupDB
                             (contramap Mithril tracer)
                             mithrilConfig
                             markBootstrapInProgress
+                            fkv
+                            h
                             runner
 
                     case result of
@@ -304,7 +313,7 @@ setupDB
                             -- Save checkpoint and skip slot (will be cleared
                             -- when we reach the Mithril slot during chain sync)
                             -- Also clear the bootstrap-in-progress marker
-                            txRunTransaction $ do
+                            transact $ do
                                 putBaseCheckpoint
                                     decodePoint
                                     encodePoint
@@ -335,7 +344,7 @@ Returns 'True' if the database is new (no rollback points stored),
 'False' if it contains existing data.
 -}
 checkEmptyRollbacks
-    :: RunCSMTTransaction
+    :: RunTransaction
         ColumnFamily
         BatchOp
         Point
@@ -346,7 +355,7 @@ checkEmptyRollbacks
     -- ^ Database transaction runner
     -> IO Bool
     -- ^ 'True' if database is empty
-checkEmptyRollbacks (RunCSMTTransaction runCSMT) =
-    runCSMT $ do
+checkEmptyRollbacks (RunTransaction runTx) =
+    runTx $ do
         mfe <- iterating RollbackPoints firstEntry
         return $ isNothing mfe

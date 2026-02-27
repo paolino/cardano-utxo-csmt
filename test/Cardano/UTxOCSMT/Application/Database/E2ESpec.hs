@@ -9,7 +9,7 @@ module Cardano.UTxOCSMT.Application.Database.E2ESpec
     )
 where
 
-import CSMT (FromKV (..))
+import CSMT (FromKV (..), Hashing)
 import CSMT.Hashes
     ( Hash
     , fromKVHashes
@@ -22,9 +22,6 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Armageddon
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     ( Prisms (..)
-    )
-import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
-    ( CSMTContext (..)
     )
 import Cardano.UTxOCSMT.Application.Database.Interface
     ( Operation (..)
@@ -61,17 +58,16 @@ testPrisms =
         , valueP = lazy
         }
 
-testCSMTContext :: CSMTContext Hash BL.ByteString BL.ByteString
-testCSMTContext =
-    CSMTContext
-        { fromKV =
-            FromKV
-                { isoK = strict . isoK fromKVHashes
-                , fromV = fromV fromKVHashes . view strict
-                , treePrefix = const []
-                }
-        , hashing = hashHashing
+testFromKV :: FromKV BL.ByteString BL.ByteString Hash
+testFromKV =
+    FromKV
+        { isoK = strict . isoK fromKVHashes
+        , fromV = fromV fromKVHashes . view strict
+        , treePrefix = const []
         }
+
+testHashing :: Hashing Hash
+testHashing = hashHashing
 
 testArmageddonParams :: ArmageddonParams Hash
 testArmageddonParams =
@@ -117,7 +113,8 @@ withFreshDB action =
                         nullTracer
                         db
                         testPrisms
-                        testCSMTContext
+                        testFromKV
+                        testHashing
                         testSlotHash
                         (\_ _ -> pure ())
                         testArmageddonParams
@@ -241,7 +238,8 @@ spec = describe "E2E newRocksDBState" $ do
                             nullTracer
                             db
                             testPrisms
-                            testCSMTContext
+                            testFromKV
+                            testHashing
                             testSlotHash
                             (\_ _ -> pure ())
                             testArmageddonParams
