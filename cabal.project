@@ -21,34 +21,37 @@ source-repository-package
   type: git
   location: https://github.com/paolino/rocksdb-haskell.git
   tag: a3e86b39f9510fea54abf734ee84aec33d0d683f
+  --sha256: 1gjzqhf81fy3bpc79ndmx3s77x3s1gf0lsk762acbfnpfh6g1hd0
 
 source-repository-package
   type: git
   location: https://github.com/paolino/haskell-csmt
-  tag: ea0a2bcd835723f054647060dafb837c67cba557
+  tag: e46ef731076cf0884d5ed0f047d0dd74e622aea8
+  --sha256: 00rmqxffkdpr4jbbz3s9pw5bqmb97jgkxzg5m235n9l364m748c0
 
 source-repository-package
   type: git
   location: https://github.com/paolino/rocksdb-kv-transactions
   tag: 0888387a5de81711273ea9b1e9d160decc33c231
+  --sha256: 0ywi4p744sk688p50f6n69llvxa1fws27wqciyhj4b57cqcpam4m
 
 source-repository-package
   type: git
   location: https://github.com/paolino/cardano-read-ledger
   tag: 2a9521e9282e4955f5454847c3f87eb7e7ac1730
-  --sha256: sha256-g4pY67U7PqJ8DIKmhYImMs7FW3NmQFKPl4PYqMQT+sE=
+  --sha256: 1hgs2g2ain43jy7m4h36fddwbkij4s18b9l21iya4givnpmmi2l3
 
 source-repository-package
   type: git
   location: https://github.com/paolino/contra-tracer-contrib
   tag: 9c2555a5e6d72fdd55eb1e13cff812d72ea41913
-  --sha256: sha256-7kThad3EitpJukEUhzMZ/sUv+z9bfwQYLHWin1XCSQ8=
+  --sha256: 03s9q9arz8km5hc08zsv7zxjzigy34rqf521p94xm2n4vmly2i7f
 
 source-repository-package
   type: git
   location: https://github.com/paolino/cardano-node-clients
   tag: 7677065cbcadaa784e60e6974b552a9cd7ef0dc3
-  --sha256: sha256-ow/fxWxp6BvomeOQxnQO3j20YXCR1kJddYqOHsIX3l4=
+  --sha256: 0pny2z11x3lafmfl5mlif1hv8gfy1rscd473k7l1ps39dk2xy3x3
 
 -- Enable iohk flag for contra-tracer-contrib to use CHaP's simple API
 constraints: contra-tracer-contrib +iohk
