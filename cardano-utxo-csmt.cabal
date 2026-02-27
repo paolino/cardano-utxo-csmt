@@ -362,6 +362,7 @@ test-suite unit-tests
   type:               exitcode-stdio-1.0
   main-is:            main.hs
   other-modules:
+    Cardano.UTxOCSMT.Application.Database.E2ESpec
     Cardano.UTxOCSMT.Application.Database.RocksDBSpec
     Cardano.UTxOCSMT.Application.OptionsSpec
     Cardano.UTxOCSMT.HTTP.ServerSpec
