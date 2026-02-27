@@ -21,11 +21,11 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Columns
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
-    , RunCSMTTransaction (..)
+    , RunTransaction (..)
     , insertCSMT
     )
 import Cardano.UTxOCSMT.Application.Database.RocksDB
-    ( newRunRocksDBCSMTTransaction
+    ( newRunRocksDBTransaction
     )
 import Codec.Serialise (deserialise)
 import Control.Lens (prism')
@@ -65,28 +65,30 @@ spec = describe "Mithril Import" $ do
                     db <- r ask
 
                     -- Set up database with armageddon
-                    runner <- newRunRocksDBCSMTTransaction db prisms csmtContext
+                    let CSMTContext{fromKV = fkv, hashing = h} = csmtContext
+                    runner <- newRunRocksDBTransaction db prisms
                     setup nullTracer runner armageddonParams
 
-                    let RunCSMTTransaction{txRunTransaction} = runner
+                    let RunTransaction{transact} = runner
 
                     -- Insert all UTxOs from golden file
                     forM_ utxos $ \(k, v) ->
-                        txRunTransaction $ insertCSMT k v
+                        transact $ insertCSMT fkv h k v
 
         it "handles empty import gracefully" $ do
             withSystemTempDirectory "import-test-empty" $ \tmpDir ->
                 withRocksDB tmpDir $ \(RunRocksDB r) -> do
                     db <- r ask
-                    runner <- newRunRocksDBCSMTTransaction db prisms csmtContext
+                    let CSMTContext{fromKV = fkv, hashing = h} = csmtContext
+                    runner <- newRunRocksDBTransaction db prisms
                     setup nullTracer runner armageddonParams
 
-                    let RunCSMTTransaction{txRunTransaction} = runner
+                    let RunTransaction{transact} = runner
                         emptyUtxos :: [(ByteString, ByteString)]
                         emptyUtxos = []
 
                     forM_ emptyUtxos $ \(k, v) ->
-                        txRunTransaction $ insertCSMT k v
+                        transact $ insertCSMT fkv h k v
 
 -- | CSMT context for hashing
 csmtContext :: CSMTContext Hash ByteString ByteString

@@ -30,12 +30,13 @@ module Cardano.UTxOCSMT.Mithril.Streaming
     )
 where
 
+import CSMT (FromKV, Hashing)
 import Cardano.Ledger.Babbage.TxOut (BabbageTxOut)
 import Cardano.Ledger.Binary (natVersion, serialize)
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
-    ( RunCSMTTransaction (..)
+    ( RunTransaction (..)
     , insertCSMT
     )
 import Control.Monad (when)
@@ -108,7 +109,9 @@ The function:
 streamToCSMT
     :: Tracer IO StreamTrace
     -> StreamConfig
-    -> RunCSMTTransaction
+    -> FromKV ByteString ByteString hash
+    -> Hashing hash
+    -> RunTransaction
         ColumnFamily
         BatchOp
         slot
@@ -118,7 +121,7 @@ streamToCSMT
         IO
     -> Stream (Of (ByteString, ByteString)) IO ()
     -> IO Word64
-streamToCSMT tracer config runner stream = do
+streamToCSMT tracer config fkv h runner stream = do
     traceWith tracer StreamStarting
     startTime <- getCurrentTime
     count <- processStream startTime 0 0 stream
@@ -126,7 +129,7 @@ streamToCSMT tracer config runner stream = do
     pure count
   where
     StreamConfig{streamProgressInterval} = config
-    RunCSMTTransaction{txRunTransaction} = runner
+    RunTransaction{transact} = runner
 
     processStream
         :: UTCTime
@@ -148,7 +151,7 @@ streamToCSMT tracer config runner stream = do
                         processStream startTime count (skipped + 1) rest
                     Just (cborKey, cborValue) -> do
                         -- Insert CBOR-encoded bytes into CSMT
-                        txRunTransaction $ insertCSMT cborKey cborValue
+                        transact $ insertCSMT fkv h cborKey cborValue
 
                         let newCount = count + 1
 

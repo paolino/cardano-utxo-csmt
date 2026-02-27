@@ -11,11 +11,12 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     , putBaseCheckpoint
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
-    ( RunCSMTTransaction (..)
+    ( CSMTContext (..)
+    , RunTransaction (..)
     )
 import Cardano.UTxOCSMT.Application.Database.RocksDB
     ( createUpdateState
-    , newRunRocksDBCSMTTransaction
+    , newRunRocksDBTransaction
     )
 import Cardano.UTxOCSMT.Application.Metrics
     ( BootstrapPhase (..)
@@ -153,11 +154,11 @@ main = withUtf8 $ do
         trace Boot
         withRocksDB dbPath $ \db -> do
             -- Create runner first (no logging)
+            let CSMTContext{fromKV = fkv, hashing = h} = context
             runner <-
-                newRunRocksDBCSMTTransaction
+                newRunRocksDBTransaction
                     db
                     prisms
-                    context
 
             let getReadyResponse =
                     mkReadyResponse (syncThreshold options)
@@ -195,6 +196,8 @@ main = withUtf8 $ do
                     setupNodePort
                     setupSkipValidation
                     armageddonParams
+                    fkv
+                    h
                     runner
 
             -- Now create the Update state (logs "New update state")
@@ -207,6 +210,8 @@ main = withUtf8 $ do
             (state, slots) <-
                 createUpdateState
                     (contra Update)
+                    fkv
+                    h
                     slotHash
                     onForward
                     armageddonParams
@@ -219,7 +224,7 @@ main = withUtf8 $ do
 
             -- Create checkpoint action and skip configuration
             let setCheckpoint point =
-                    txRunTransaction runner $ do
+                    transact runner $ do
                         putBaseCheckpoint decodePoint encodePoint point
                         clearSkipSlot decodePoint encodePoint
                 mSkipTargetSlot = SlotNo <$> setupMithrilSlot
