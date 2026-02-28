@@ -118,7 +118,7 @@ e2e-build:
     echo "Loaded: $loaded"
     docker image tag "$loaded" cardano-utxo:e2e
 
-# Run N2C E2E test against Yaci DevKit
+# Run N2C E2E test against cardano-node devnet
 e2e:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -129,7 +129,7 @@ e2e:
         --exit-code-from e2e-test
     docker compose -f e2e/docker-compose.yml down -v
 
-# Run N2N E2E test against Yaci DevKit
+# Run N2N E2E test against cardano-node devnet
 e2e-n2n:
     #!/usr/bin/env bash
     set -euo pipefail

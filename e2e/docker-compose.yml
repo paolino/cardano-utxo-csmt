@@ -1,30 +1,25 @@
 services:
-  yaci-cli:
-    image: bloxbean/yaci-cli:0.11.0-beta1
-    ports:
-      - "10000:10000"
+  cardano-node:
+    image: ghcr.io/paolino/cardano-node-clients/devnet:10.5.4
     volumes:
-      - ./node.properties:/app/config/node.properties
-      - node-ipc:/clusters
-    entrypoint: ["/app/yaci-cli"]
-    command: ["create-node", "-o", "--start"]
+      - node-data:/data
     healthcheck:
-      test: ["CMD", "test", "-S", "/clusters/nodes/default/node/node.sock"]
+      test: ["CMD", "test", "-S", "/data/node.sock"]
       interval: 5s
       timeout: 5s
       retries: 60
-      start_period: 30s
+      start_period: 10s
 
   cardano-utxo:
     image: cardano-utxo:e2e
     depends_on:
-      yaci-cli:
+      cardano-node:
         condition: service_healthy
     volumes:
-      - node-ipc:/clusters:ro
+      - node-data:/data:ro
     command:
       - "--socket-path"
-      - "/clusters/nodes/default/node/node.sock"
+      - "/data/node.sock"
       - "--network"
       - "devnet"
       - "--db-path"
@@ -59,4 +54,4 @@ services:
         exit 1
 
 volumes:
-  node-ipc:
+  node-data:
