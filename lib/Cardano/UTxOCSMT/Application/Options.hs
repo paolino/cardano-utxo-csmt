@@ -134,6 +134,8 @@ data Options = Options
     -- ^ Number of slots behind chain tip to consider synced (default: 100)
     , skipNodeValidation :: Bool
     -- ^ Skip node connection validation before Mithril bootstrap
+    , genesisFile :: Maybe FilePath
+    -- ^ Path to shelley-genesis.json for bootstrap from genesis
     }
 
 -- | Get effective network magic from options
@@ -345,6 +347,21 @@ skipNodeValidationSwitch =
         , switch True
         ]
 
+genesisFileOption :: Parser (Maybe FilePath)
+genesisFileOption =
+    optional
+        $ setting
+            [ long "genesis-file"
+            , conf "genesis-file"
+            , help
+                "Path to shelley-genesis.json for bootstrapping \
+                \from genesis. Inserts initialFunds into the CSMT \
+                \before chain sync starts from Origin."
+            , metavar "FILE"
+            , reader str
+            , option
+            ]
+
 -- | Main options parser with YAML config file support
 optionsParser :: Parser Options
 optionsParser = withYamlConfig configFileOption optionsParserCore
@@ -365,6 +382,7 @@ optionsParserCore =
         <*> subConfig "mithril" mithrilOptionsParser'
         <*> syncThresholdOption
         <*> skipNodeValidationSwitch
+        <*> genesisFileOption
   where
     mkOptions
         net
@@ -378,7 +396,8 @@ optionsParserCore =
         metrics
         mithril
         threshold
-        skipValidation =
+        skipValidation
+        genesis =
             Options
                 { network = net
                 , connectionMode = connMode
@@ -396,4 +415,5 @@ optionsParserCore =
                         }
                 , syncThreshold = threshold
                 , skipNodeValidation = skipValidation
+                , genesisFile = genesis
                 }

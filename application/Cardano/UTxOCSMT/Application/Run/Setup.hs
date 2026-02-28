@@ -37,6 +37,7 @@ import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     )
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( RunTransaction (..)
+    , insertCSMT
     )
 import Cardano.UTxOCSMT.Application.Options (MithrilOptions (..))
 import Cardano.UTxOCSMT.Application.Run.Config
@@ -46,6 +47,10 @@ import Cardano.UTxOCSMT.Application.Run.Config
 import Cardano.UTxOCSMT.Application.Run.Traces
     ( MainTraces (..)
     , NodeValidationTrace (..)
+    )
+import Cardano.UTxOCSMT.Bootstrap.Genesis
+    ( genesisUtxoPairs
+    , readShelleyGenesis
     )
 import Cardano.UTxOCSMT.Mithril.AncillaryVerifier
     ( parseVerificationKey
@@ -63,7 +68,7 @@ import Cardano.UTxOCSMT.Ouroboros.Connection
     , validateNodeConnection
     )
 import Cardano.UTxOCSMT.Ouroboros.Types (Point)
-import Control.Monad (when)
+import Control.Monad (forM_, when)
 import Control.Tracer (Contravariant (..), Tracer)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.Maybe (isNothing)
@@ -81,7 +86,9 @@ import Database.RocksDB (BatchOp, ColumnFamily)
 import Network.HTTP.Client (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.Socket (PortNumber)
+import Ouroboros.Network.Block qualified as Network
 import Ouroboros.Network.Magic (NetworkMagic)
+import Ouroboros.Network.Point (WithOrigin (..))
 import System.IO.Temp (withSystemTempDirectory)
 
 {- | Result of database setup containing the starting point for chain sync
@@ -94,15 +101,14 @@ data SetupResult = SetupResult
     -- ^ If bootstrapped from Mithril, the slot to skip headers until
     }
 
-{- | Set up the database, potentially bootstrapping from Mithril.
+{- | Set up the database, potentially bootstrapping from Mithril or genesis.
 
-This function handles three scenarios:
+This function handles four scenarios:
 
   1. Existing database: Returns the stored checkpoint
-  2. New database with Mithril: Downloads and imports UTxO snapshot
-  3. New database without Mithril: Initializes empty database
-
-If Mithril bootstrap fails, falls back to regular setup.
+  2. New database with genesis file: Inserts genesis UTxOs, starts from Origin
+  3. New database with Mithril: Downloads and imports UTxO snapshot
+  4. New database without bootstrap: Initializes empty database
 
 When Mithril bootstrap is enabled, validates the node connection first
 to fail fast if the node is unreachable (rather than after a long import).
@@ -112,6 +118,8 @@ setupDB
     -- ^ Tracer for logging setup events
     -> Point
     -- ^ Default starting point (used if not bootstrapping)
+    -> Maybe FilePath
+    -- ^ Optional path to shelley-genesis.json for genesis bootstrap
     -> MithrilOptions
     -- ^ Mithril configuration options
     -> NetworkMagic
@@ -142,6 +150,7 @@ setupDB
 setupDB
     TraceWith{tracer, trace, contra}
     startingPoint
+    mGenesisFile
     mithrilOpts
     networkMagic
     nodeName
@@ -227,13 +236,38 @@ setupDB
         renderConnectionError NodeConnectionTimeout =
             "Connection timed out after 30 seconds"
 
-        regularSetup = do
+        originPoint :: Point
+        originPoint = Network.Point Origin
+
+        regularSetup = case mGenesisFile of
+            Just path -> genesisSetup path
+            Nothing -> do
+                setup (contra New) runner armageddonParams
+                transact
+                    $ putBaseCheckpoint
+                        decodePoint
+                        encodePoint
+                        startingPoint
+                return
+                    SetupResult
+                        { setupStartingPoint = startingPoint
+                        , setupMithrilSlot = Nothing
+                        }
+
+        genesisSetup path = do
             setup (contra New) runner armageddonParams
-            transact
-                $ putBaseCheckpoint decodePoint encodePoint startingPoint
+            genesis <- readShelleyGenesis path
+            let pairs = genesisUtxoPairs genesis
+            transact $ do
+                forM_ pairs $ \(k, v) -> insertCSMT fkv h k v
+                putBaseCheckpoint
+                    decodePoint
+                    encodePoint
+                    originPoint
+            trace $ GenesisBootstrap (length pairs)
             return
                 SetupResult
-                    { setupStartingPoint = startingPoint
+                    { setupStartingPoint = originPoint
                     , setupMithrilSlot = Nothing
                     }
 

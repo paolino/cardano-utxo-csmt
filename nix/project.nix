@@ -63,4 +63,6 @@ in {
     project.hsPkgs.cardano-utxo-csmt.components.exes.cardano-utxo-swagger;
   packages.integration-tests =
     project.hsPkgs.cardano-utxo-csmt.components.tests.cardano-utxo-csmt-integration-test;
+  packages.e2e-tests =
+    project.hsPkgs.cardano-utxo-csmt.components.tests.e2e-tests;
 }

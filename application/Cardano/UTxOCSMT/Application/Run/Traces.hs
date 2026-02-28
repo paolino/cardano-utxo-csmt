@@ -101,6 +101,8 @@ data MainTraces
       IncompleteBootstrapDetected
     | -- | Incomplete bootstrap cleanup completed
       IncompleteBootstrapCleaned
+    | -- | Genesis bootstrap: inserted N UTxOs from genesis file
+      GenesisBootstrap Int
     deriving (Show)
 
 -- | Render a 'MainTraces' value to a human-readable log string.
@@ -136,6 +138,10 @@ renderMainTraces IncompleteBootstrapDetected =
     "Incomplete bootstrap detected, cleaning up partial data..."
 renderMainTraces IncompleteBootstrapCleaned =
     "Incomplete bootstrap cleanup completed, retrying bootstrap..."
+renderMainTraces (GenesisBootstrap n) =
+    "Genesis bootstrap: inserted "
+        ++ show n
+        ++ " UTxOs from genesis file"
 
 -- | Render a 'NodeValidationTrace' value to a human-readable log string.
 renderNodeValidationTrace :: NodeValidationTrace -> String

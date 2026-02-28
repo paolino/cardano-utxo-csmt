@@ -190,6 +190,7 @@ main = withUtf8 $ do
                 setupDB
                     tracer
                     startingPoint
+                    (genesisFile options)
                     mithrilOptions
                     (networkMagic options)
                     setupNodeName
