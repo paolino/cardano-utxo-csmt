@@ -109,6 +109,13 @@ integration-all:
     cabal test cardano-utxo-csmt-integration-test \
         --test-show-details=direct
 
+# Run genesis E2E test (requires cardano-node in PATH)
+e2e-genesis:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cabal test cardano-utxo-csmt:e2e-tests -O0 \
+        --test-show-details=direct
+
 # Build docker image for E2E testing
 e2e-build:
     #!/usr/bin/env bash

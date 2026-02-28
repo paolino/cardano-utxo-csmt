@@ -15,15 +15,25 @@ module Cardano.UTxOCSMT.Application.UTxOs
     , Change (..)
     , mkShelleyTxIn
     , unsafeMkTxIn
+    , cborEncode
+    , byronTxIdToShelley
     )
 where
 
+import Cardano.Chain.Common (unsafeGetLovelace)
 import Cardano.Chain.UTxO qualified as Byron
 import Cardano.Crypto.Hash.Class (Hash (..))
+import Cardano.Crypto.Hashing (abstractHashToShort)
+import Cardano.Ledger.Address (Addr (..), BootstrapAddress (..))
 import Cardano.Ledger.Api.Tx.In (mkTxIxPartial)
 import Cardano.Ledger.Api.Tx.In qualified as Shelley
+import Cardano.Ledger.Api.Tx.Out (mkBasicTxOut, upgradeTxOut)
+import Cardano.Ledger.Babbage.TxOut (BabbageTxOut)
 import Cardano.Ledger.Binary (EncCBOR, natVersion, serialize)
+import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Hashes (unsafeMakeSafeHash)
+import Cardano.Ledger.Val (inject)
 import Cardano.Read.Ledger.Block.Block (fromConsensusBlock)
 import Cardano.Read.Ledger.Block.Txs (getEraTransactions)
 import Cardano.Read.Ledger.Eras.EraValue (applyEraFun)
@@ -78,10 +88,18 @@ unsafeMkTxId = Shelley.TxId . unsafeMakeSafeHash . UnsafeHash
 unsafeMkTxIn :: ShortByteString -> Word16 -> ByteString
 unsafeMkTxIn txId index = mkShelleyTxIn index (unsafeMkTxId txId)
 
+{- | Convert a Byron TxId to a Shelley TxId.
+Extracts the raw 32-byte Blake2b_256 hash and re-wraps it.
+-}
+byronTxIdToShelley :: Byron.TxId -> Shelley.TxId
+byronTxIdToShelley = unsafeMkTxId . abstractHashToShort
+
 {-# INLINEABLE mkTxIn #-}
 mkTxIn :: forall era. IsEra era => Tx era -> Word16 -> ByteString
 mkTxIn tx index = case theEra @era of
-    Byron -> cborEncode $ Byron.TxInUtxo (unTxId $ getEraTxId tx) index
+    Byron ->
+        mkShelleyTxIn index
+            $ byronTxIdToShelley (unTxId $ getEraTxId tx)
     Shelley -> mkShelleyTxIn index $ unTxId $ getEraTxId tx
     Allegra -> mkShelleyTxIn index $ unTxId $ getEraTxId tx
     Mary -> mkShelleyTxIn index $ unTxId $ getEraTxId tx
@@ -99,7 +117,13 @@ mkShelleyTxIn index h =
 {-# INLINEABLE extractInputs #-}
 extractInputs :: forall era. IsEra era => Inputs era -> [ByteString]
 extractInputs (Inputs ins) = case theEra @era of
-    Byron -> cborEncode <$> toList ins
+    Byron -> cborEncode . byronTxInToShelley <$> toList ins
+      where
+        byronTxInToShelley :: Byron.TxIn -> Shelley.TxIn
+        byronTxInToShelley (Byron.TxInUtxo txId idx) =
+            Shelley.TxIn
+                (byronTxIdToShelley txId)
+                (mkTxIxPartial (fromIntegral idx :: Integer))
     Shelley -> cborEncode <$> toList ins
     Allegra -> cborEncode <$> toList ins
     Mary -> cborEncode <$> toList ins
@@ -120,13 +144,56 @@ _txs (Tx tx) = case theEra @era of
     Babbage -> cborEncode tx
     Conway -> cborEncode tx
 
+{- | Extract outputs, projecting all eras to @BabbageTxOut ConwayEra@ before
+CBOR encoding. This ensures 'addressPrefix' in Config.hs always sees a
+Conway-era TxOut, regardless of the originating era.
+-}
 {-# INLINEABLE extractOutputs #-}
-extractOutputs :: forall era. IsEra era => Outputs era -> [ByteString]
+extractOutputs
+    :: forall era. IsEra era => Outputs era -> [ByteString]
 extractOutputs (Outputs outs) = case theEra @era of
-    Byron -> cborEncode <$> toList outs
-    Shelley -> cborEncode <$> toList outs
-    Allegra -> cborEncode <$> toList outs
-    Mary -> cborEncode <$> toList outs
-    Alonzo -> cborEncode <$> toList outs
-    Babbage -> cborEncode <$> toList outs
-    Conway -> cborEncode <$> toList outs
+    Byron ->
+        cborEncode . fromByronOutput <$> toList outs
+    Shelley ->
+        cborEncode
+            . upgradeTxOut
+            . upgradeTxOut
+            . upgradeTxOut
+            . upgradeTxOut
+            . upgradeTxOut
+            <$> toList outs
+    Allegra ->
+        cborEncode
+            . upgradeTxOut
+            . upgradeTxOut
+            . upgradeTxOut
+            . upgradeTxOut
+            <$> toList outs
+    Mary ->
+        cborEncode
+            . upgradeTxOut
+            . upgradeTxOut
+            . upgradeTxOut
+            <$> toList outs
+    Alonzo ->
+        cborEncode
+            . upgradeTxOut
+            . upgradeTxOut
+            <$> toList outs
+    Babbage ->
+        cborEncode
+            . upgradeTxOut
+            <$> toList outs
+    Conway ->
+        cborEncode <$> toList outs
+
+-- | Convert a Byron TxOut to a Conway-era TxOut.
+fromByronOutput :: Byron.TxOut -> BabbageTxOut ConwayEra
+fromByronOutput (Byron.TxOut addr lovelace) =
+    mkBasicTxOut @ConwayEra
+        (AddrBootstrap (BootstrapAddress addr))
+        ( inject
+            $ Coin
+            $ toInteger
+            $ unsafeGetLovelace lovelace
+        )

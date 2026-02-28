@@ -176,6 +176,7 @@ library library
     Cardano.UTxOCSMT.Application.Options
     Cardano.UTxOCSMT.Application.SampleList
     Cardano.UTxOCSMT.Application.UTxOs
+    Cardano.UTxOCSMT.Bootstrap.Genesis
     Cardano.UTxOCSMT.Mithril.AncillaryVerifier
     Cardano.UTxOCSMT.Mithril.Client
     Cardano.UTxOCSMT.Mithril.Extraction
@@ -198,12 +199,15 @@ library library
     , base16-bytestring
     , bytestring
     , cardano-crypto-class
+    , cardano-crypto-wrapper
+    , cardano-data
     , cardano-ledger-api
     , cardano-ledger-babbage
     , cardano-ledger-binary
     , cardano-ledger-byron
     , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-ledger-shelley
     , cardano-read-ledger
     , cborg
     , cereal
@@ -406,6 +410,33 @@ test-suite cardano-utxo-csmt-integration-test
     Cardano.Node.Client.E2E.Setup
     Cardano.Node.Client.E2E.SubmitterSpec
 
+test-suite e2e-tests
+  import:           warnings
+  ghc-options:      -Wno-unused-packages -Wno-orphans -threaded -rtsopts
+  default-language: Haskell2010
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   e2e-test
+  main-is:          main.hs
+  other-modules:
+    Cardano.UTxOCSMT.E2E.Devnet
+    Cardano.UTxOCSMT.E2E.GenesisChainSyncSpec
+
+  build-depends:
+    , base
+    , bytestring
+    , cardano-utxo-csmt:application
+    , cardano-utxo-csmt:library
+    , contra-tracer
+    , directory
+    , filepath
+    , hspec
+    , ouroboros-network-api
+    , process
+    , rocksdb-haskell-jprupp
+    , rocksdb-kv-transactions:kv-transactions
+    , temporary
+    , time
+    , unix
 benchmark bench
   import:           warnings
   default-language: Haskell2010

@@ -59,7 +59,7 @@
           in rec {
             packages = {
               inherit (project.packages)
-                bench unit-tests integration-tests cardano-utxo
+                bench unit-tests integration-tests e2e-tests cardano-utxo
                 cardano-utxo-swagger;
               inherit docker-image;
               default = packages.cardano-utxo;
