@@ -2,32 +2,55 @@
 Module      : Cardano.UTxOCSMT.Bootstrap.Genesis
 Description : Genesis UTxO bootstrap for from-genesis sync
 
-Parse a @shelley-genesis.json@ file and extract the @initialFunds@
-as CBOR-encoded (TxIn, TxOut) pairs ready for CSMT insertion.
-This allows syncing from genesis without Mithril by pre-populating
-the tree with genesis UTxOs before chain sync starts.
+Parse genesis files and extract UTxO pairs ready for CSMT insertion.
+Supports both Shelley genesis (@initialFunds@) and Byron genesis
+(@nonAvvmBalances@). This allows syncing from genesis without Mithril
+by pre-populating the tree with genesis UTxOs before chain sync starts.
 -}
 module Cardano.UTxOCSMT.Bootstrap.Genesis
     ( readShelleyGenesis
     , genesisUtxoPairs
+    , readByronGenesisUtxoPairs
     )
 where
 
-import Cardano.Ledger.Address (Addr)
+import Cardano.Chain.Common (unsafeGetLovelace)
+import Cardano.Chain.Genesis
+    ( GenesisData (..)
+    , GenesisDataError
+    , GenesisNonAvvmBalances (..)
+    )
+import Cardano.Chain.Genesis qualified as Byron
+import Cardano.Chain.UTxO qualified as Byron
+import Cardano.Crypto.Hashing (serializeCborHash)
+import Cardano.Ledger.Address
+    ( Addr (..)
+    , BootstrapAddress (..)
+    )
+import Cardano.Ledger.Api.Tx.In (mkTxIxPartial)
+import Cardano.Ledger.Api.Tx.In qualified as Shelley
 import Cardano.Ledger.Api.Tx.Out (mkBasicTxOut)
 import Cardano.Ledger.Binary (natVersion, serialize)
-import Cardano.Ledger.Coin (Coin)
+import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Shelley.Genesis
     ( ShelleyGenesis (..)
     , initialFundsPseudoTxIn
     )
 import Cardano.Ledger.Val (inject)
+import Cardano.UTxOCSMT.Application.UTxOs
+    ( byronTxIdToShelley
+    , cborEncode
+    )
+import Control.Exception (Exception, throwIO)
+import Control.Monad.Except (runExceptT)
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
+import Data.Coerce (coerce)
 import Data.ListMap (unListMap)
+import Data.Map.Strict qualified as Map
 
 {- | Read and parse a Shelley genesis JSON file.
 Patches @systemStart@ if set to @\"PLACEHOLDER\"@.
@@ -60,6 +83,60 @@ genesisUtxoPairs genesis =
             txOut =
                 mkBasicTxOut @ConwayEra addr (inject coin)
         in  (serialize ver txIn, serialize ver txOut)
+
+newtype GenesisDataException
+    = GenesisDataException GenesisDataError
+    deriving (Show)
+
+instance Exception GenesisDataException
+
+{- | Read a Byron genesis file and extract UTxO pairs as
+CBOR-encoded (TxIn, TxOut) using the same encoding as chain
+sync. Byron genesis UTxOs use
+@TxInUtxo (serializeCborHash address) 0@ as TxIn, converted
+to Shelley format for consistent CSMT keys.
+Zero-balance entries are filtered out.
+-}
+readByronGenesisUtxoPairs
+    :: FilePath -> IO [(ByteString, ByteString)]
+readByronGenesisUtxoPairs fp = do
+    r <- runExceptT . Byron.readGenesisData $ fp
+    case r of
+        Left err -> throwIO $ GenesisDataException err
+        Right (gd, _) ->
+            pure
+                $ byronUtxoPairs
+                $ gdNonAvvmBalances gd
+
+byronUtxoPairs
+    :: GenesisNonAvvmBalances
+    -> [(ByteString, ByteString)]
+byronUtxoPairs (GenesisNonAvvmBalances m) =
+    mkPair <$> filter nonZero (Map.toList m)
+  where
+    nonZero (_, lovelace) = unsafeGetLovelace lovelace > 0
+    mkPair (addr, lovelace) =
+        let
+            -- Byron genesis convention: TxId = hash(CBOR(address))
+            byronTxId :: Byron.TxId
+            byronTxId = coerce (serializeCborHash addr)
+            -- Convert to Shelley TxIn format
+            shelleyTxIn :: Shelley.TxIn
+            shelleyTxIn =
+                Shelley.TxIn
+                    (byronTxIdToShelley byronTxId)
+                    (mkTxIxPartial (0 :: Integer))
+            -- Convert Byron TxOut to Conway-era
+            txOut =
+                mkBasicTxOut @ConwayEra
+                    (AddrBootstrap (BootstrapAddress addr))
+                    ( inject
+                        $ Coin
+                        $ toInteger
+                        $ unsafeGetLovelace lovelace
+                    )
+        in
+            (cborEncode shelleyTxIn, cborEncode txOut)
 
 {- | Replace @\"PLACEHOLDER\"@ systemStart with a dummy UTC time
 so that 'FromJSON' succeeds.

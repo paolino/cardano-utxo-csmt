@@ -136,6 +136,8 @@ data Options = Options
     -- ^ Skip node connection validation before Mithril bootstrap
     , genesisFile :: Maybe FilePath
     -- ^ Path to shelley-genesis.json for bootstrap from genesis
+    , byronGenesisFile :: Maybe FilePath
+    -- ^ Path to byron-genesis.json for bootstrap from genesis
     }
 
 -- | Get effective network magic from options
@@ -362,6 +364,21 @@ genesisFileOption =
             , option
             ]
 
+byronGenesisFileOption :: Parser (Maybe FilePath)
+byronGenesisFileOption =
+    optional
+        $ setting
+            [ long "byron-genesis-file"
+            , conf "byron-genesis-file"
+            , help
+                "Path to byron-genesis.json for bootstrapping \
+                \from genesis. Inserts nonAvvmBalances into \
+                \the CSMT before chain sync starts from Origin."
+            , metavar "FILE"
+            , reader str
+            , option
+            ]
+
 -- | Main options parser with YAML config file support
 optionsParser :: Parser Options
 optionsParser = withYamlConfig configFileOption optionsParserCore
@@ -383,6 +400,7 @@ optionsParserCore =
         <*> syncThresholdOption
         <*> skipNodeValidationSwitch
         <*> genesisFileOption
+        <*> byronGenesisFileOption
   where
     mkOptions
         net
@@ -397,7 +415,8 @@ optionsParserCore =
         mithril
         threshold
         skipValidation
-        genesis =
+        genesis
+        byronGenesis =
             Options
                 { network = net
                 , connectionMode = connMode
@@ -416,4 +435,5 @@ optionsParserCore =
                 , syncThreshold = threshold
                 , skipNodeValidation = skipValidation
                 , genesisFile = genesis
+                , byronGenesisFile = byronGenesis
                 }
