@@ -50,6 +50,7 @@ import Cardano.UTxOCSMT.Application.Run.Traces
     )
 import Cardano.UTxOCSMT.Bootstrap.Genesis
     ( genesisUtxoPairs
+    , readByronGenesisUtxoPairs
     , readShelleyGenesis
     )
 import Cardano.UTxOCSMT.Mithril.AncillaryVerifier
@@ -120,6 +121,8 @@ setupDB
     -- ^ Default starting point (used if not bootstrapping)
     -> Maybe FilePath
     -- ^ Optional path to shelley-genesis.json for genesis bootstrap
+    -> Maybe FilePath
+    -- ^ Optional path to byron-genesis.json for genesis bootstrap
     -> MithrilOptions
     -- ^ Mithril configuration options
     -> NetworkMagic
@@ -151,6 +154,7 @@ setupDB
     TraceWith{tracer, trace, contra}
     startingPoint
     mGenesisFile
+    mByronGenesisFile
     mithrilOpts
     networkMagic
     nodeName
@@ -239,9 +243,10 @@ setupDB
         originPoint :: Point
         originPoint = Network.Point Origin
 
-        regularSetup = case mGenesisFile of
-            Just path -> genesisSetup path
-            Nothing -> do
+        regularSetup
+            | Just _ <- mGenesisFile = genesisSetup
+            | Just _ <- mByronGenesisFile = genesisSetup
+            | otherwise = do
                 setup (contra New) runner armageddonParams
                 transact
                     $ putBaseCheckpoint
@@ -254,10 +259,19 @@ setupDB
                         , setupMithrilSlot = Nothing
                         }
 
-        genesisSetup path = do
+        genesisSetup = do
             setup (contra New) runner armageddonParams
-            genesis <- readShelleyGenesis path
-            let pairs = genesisUtxoPairs genesis
+            -- Load Shelley genesis UTxOs
+            shelleyPairs <- case mGenesisFile of
+                Just path -> do
+                    genesis <- readShelleyGenesis path
+                    pure $ genesisUtxoPairs genesis
+                Nothing -> pure []
+            -- Load Byron genesis UTxOs
+            byronPairs <- case mByronGenesisFile of
+                Just path -> readByronGenesisUtxoPairs path
+                Nothing -> pure []
+            let pairs = byronPairs ++ shelleyPairs
             transact $ do
                 forM_ pairs $ \(k, v) -> insertCSMT fkv h k v
                 putBaseCheckpoint

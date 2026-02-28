@@ -110,6 +110,7 @@ spec = describe "Genesis chain sync" $ do
                                             nullTracer
                                             originPoint
                                             (Just shelleyGenesisPath)
+                                            Nothing
                                             disabledMithril
                                             devnetMagic
                                             "localhost"

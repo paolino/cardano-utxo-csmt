@@ -437,6 +437,7 @@ test-suite e2e-tests
     , temporary
     , time
     , unix
+
 benchmark bench
   import:           warnings
   default-language: Haskell2010

@@ -191,6 +191,7 @@ main = withUtf8 $ do
                     tracer
                     startingPoint
                     (genesisFile options)
+                    (byronGenesisFile options)
                     mithrilOptions
                     (networkMagic options)
                     setupNodeName
