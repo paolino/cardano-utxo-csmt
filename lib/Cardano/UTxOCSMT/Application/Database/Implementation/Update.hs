@@ -105,7 +105,7 @@ renderUpdateTrace (UpdateNewState slots) =
     "New update state with rollback points at: " ++ show slots
 
 newState
-    :: (Ord key, Ord slot, MonadFail m)
+    :: (Ord key, Ord slot, Show slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)
     -> FromKV key value hash
     -> Hashing hash
@@ -141,7 +141,7 @@ newState
 We compose csmt transactions for each operation with an updateRollbackPoint one
 -}
 forwardTip
-    :: (Ord key, Ord slot, MonadFail m)
+    :: (Ord key, Ord slot, Show slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)
     -> FromKV key value hash
     -> Hashing hash
@@ -159,18 +159,24 @@ forwardTip
     slot
     ops = do
         tip <- queryTip
-        when (At slot > tip) $ do
-            result <- forM ops $ \case
-                Insert k v -> do
+        -- TODO: #112 — use rollback point counter instead of
+        -- dropping all empty blocks unconditionally
+        when (At slot > tip && not (null ops)) $ do
+            result <- forM (zip [0 :: Int ..] ops) $ \case
+                (_, Insert k v) -> do
                     insertCSMT fkv h k v
                     pure (Sum 1, Sum 0, [Delete k])
-                Delete k -> do
+                (i, Delete k) -> do
                     mx <- query KVCol k
                     deleteCSMT fkv h k
                     case mx of
                         Nothing ->
                             error
-                                "forwardTip: cannot invert Delete operation, key not found"
+                                $ "forwardTip: cannot invert Delete"
+                                    <> " at slot "
+                                    <> show slot
+                                    <> " op #"
+                                    <> show i
                         Just x -> pure (Sum 0, Sum 1, [Insert k x])
             let (Sum nInserts, Sum nDeletes, invs) = mconcat result
             merkleRoot <- updateRollbackPoint h hash slot $ reverse invs
@@ -289,7 +295,7 @@ forwardFinality slot = do
 of continuations and so always propose itself as the next continuation
 -}
 mkUpdate
-    :: (Ord key, Ord slot, MonadFail m)
+    :: (Ord key, Ord slot, Show slot, MonadFail m)
     => Tracer m (UpdateTrace slot hash)
     -> FromKV key value hash
     -> Hashing hash
