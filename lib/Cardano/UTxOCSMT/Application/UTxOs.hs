@@ -8,10 +8,15 @@ across all eras (Byron through Conway). Each transaction produces:
 * 'Spend' entries for consumed inputs
 * 'Create' entries for new outputs
 
+For failed Plutus transactions ('isValid' = 'False'), collateral inputs are
+consumed and the collateral return output (if any) is created instead of the
+regular inputs\/outputs.
+
 UTxO references are CBOR-encoded for consistent storage and lookup.
 -}
 module Cardano.UTxOCSMT.Application.UTxOs
     ( uTxOs
+    , uTxOsWithTxCount
     , Change (..)
     , mkShelleyTxIn
     , unsafeMkTxIn
@@ -25,6 +30,7 @@ import Cardano.Chain.UTxO qualified as Byron
 import Cardano.Crypto.Hash.Class (Hash (..))
 import Cardano.Crypto.Hashing (abstractHashToShort)
 import Cardano.Ledger.Address (Addr (..), BootstrapAddress (..))
+import Cardano.Ledger.Alonzo.Tx (IsValid (..))
 import Cardano.Ledger.Api.Tx.In (mkTxIxPartial)
 import Cardano.Ledger.Api.Tx.In qualified as Shelley
 import Cardano.Ledger.Api.Tx.Out (mkBasicTxOut, upgradeTxOut)
@@ -42,8 +48,20 @@ import Cardano.Read.Ledger.Eras.KnownEras
     , IsEra
     , theEra
     )
+import Cardano.Read.Ledger.Tx.CollateralInputs
+    ( CollateralInputs (..)
+    , getEraCollateralInputs
+    )
+import Cardano.Read.Ledger.Tx.CollateralOutputs
+    ( CollateralOutputs (..)
+    , getEraCollateralOutputs
+    )
 import Cardano.Read.Ledger.Tx.Inputs (Inputs (..), getEraInputs)
 import Cardano.Read.Ledger.Tx.Outputs (Outputs (..), getEraOutputs)
+import Cardano.Read.Ledger.Tx.ScriptValidity
+    ( ScriptValidity (..)
+    , getEraScriptValidity
+    )
 import Cardano.Read.Ledger.Tx.Tx (Tx (..))
 import Cardano.Read.Ledger.Tx.TxId (TxId (..), getEraTxId)
 import Cardano.UTxOCSMT.Ouroboros.Types (Block)
@@ -53,6 +71,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BL
 import Data.ByteString.Short (ShortByteString)
 import Data.Foldable (toList)
+import Data.Maybe.Strict (StrictMaybe (..))
 import Data.Word (Word16)
 
 data Change = Spend ByteString | Create ByteString ByteString
@@ -73,11 +92,91 @@ uTxOs :: Block -> [Change]
 uTxOs bl =
     (changes . getEraTransactions) `applyEraFun` fromConsensusBlock bl
 
+-- | Like 'uTxOs' but also returns the transaction count for diagnostics
+uTxOsWithTxCount :: Block -> (Int, [Change])
+uTxOsWithTxCount bl =
+    ((\txs -> (length txs, changes txs)) . getEraTransactions)
+        `applyEraFun` fromConsensusBlock bl
+
 changes :: IsEra era => [Tx era] -> [Change]
 changes = concatMap $ \tx ->
-    let inputs = Spend <$> extractInputs (getEraInputs tx)
-        outputs = zipWith (mkCreate tx) [0 ..] (extractOutputs (getEraOutputs tx))
+    if scriptIsValid tx
+        then validChanges tx
+        else invalidChanges tx
+
+{- | Check if a transaction's scripts validated successfully.
+Pre-Alonzo transactions are always valid.
+-}
+scriptIsValid :: forall era. IsEra era => Tx era -> Bool
+scriptIsValid tx = case theEra @era of
+    Byron -> True
+    Shelley -> True
+    Allegra -> True
+    Mary -> True
+    Alonzo -> check tx
+    Babbage -> check tx
+    Conway -> check tx
+  where
+    check t = case getEraScriptValidity t of
+        ScriptValidity (IsValid v) -> v
+
+{- | UTxO changes for a valid transaction: regular inputs consumed,
+regular outputs created.
+-}
+validChanges :: IsEra era => Tx era -> [Change]
+validChanges tx =
+    let inputs =
+            Spend <$> extractInputs (getEraInputs tx)
+        outputs =
+            zipWith (mkCreate tx) [0 ..]
+                $ extractOutputs (getEraOutputs tx)
     in  inputs ++ outputs
+
+{- | UTxO changes for a failed Plutus transaction (@isValid = False@).
+Collateral inputs are consumed; the collateral return output (if
+present, Babbage+) is created at index = number of regular outputs.
+-}
+invalidChanges :: forall era. IsEra era => Tx era -> [Change]
+invalidChanges tx = case theEra @era of
+    -- Pre-Alonzo: impossible, but safe fallback
+    Byron -> validChanges tx
+    Shelley -> validChanges tx
+    Allegra -> validChanges tx
+    Mary -> validChanges tx
+    -- Alonzo: collateral consumed, no collateral return
+    Alonzo ->
+        let CollateralInputs colIns = getEraCollateralInputs tx
+        in  Spend . cborEncode <$> toList colIns
+    -- Babbage: collateral consumed, collateral return created
+    Babbage ->
+        let CollateralInputs colIns = getEraCollateralInputs tx
+            CollateralOutputs mReturn = getEraCollateralOutputs tx
+            Outputs outs = getEraOutputs tx
+            returnIdx = fromIntegral (length outs) :: Word16
+            inputs = Spend . cborEncode <$> toList colIns
+            outputs = case mReturn of
+                SJust returnOut ->
+                    [ Create
+                        (mkTxIn tx returnIdx)
+                        (cborEncode $ upgradeTxOut returnOut)
+                    ]
+                SNothing -> []
+        in  inputs ++ outputs
+    -- Conway: collateral consumed, collateral return created
+    Conway ->
+        let CollateralInputs colIns = getEraCollateralInputs tx
+            CollateralOutputs mReturn = getEraCollateralOutputs tx
+            Outputs outs = getEraOutputs tx
+            returnIdx = fromIntegral (length outs) :: Word16
+            inputs = Spend . cborEncode <$> toList colIns
+            outputs = case mReturn of
+                SJust returnOut ->
+                    [ Create
+                        (mkTxIn tx returnIdx)
+                        (cborEncode returnOut)
+                    ]
+                SNothing -> []
+        in  inputs ++ outputs
 
 mkCreate :: IsEra era => Tx era -> Word16 -> ByteString -> Change
 mkCreate tx index = Create (mkTxIn tx index)
