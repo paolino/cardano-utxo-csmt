@@ -32,10 +32,13 @@ import Cardano.UTxOCSMT.Application.Database.Interface
 import Cardano.UTxOCSMT.Application.Database.RocksDB
     ( newRocksDBState
     )
+import Cardano.UTxOCSMT.Application.UTxOs (unsafeMkTxIn)
 import Control.Lens (lazy, prism', strict, view)
 import Control.Tracer (nullTracer)
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Char8 qualified as BC
 import Data.ByteString.Lazy qualified as BL
+import Data.ByteString.Short (toShort)
 import Data.Serialize (getWord64be, putWord64be)
 import Data.Serialize.Extra (evalGetM, evalPutM)
 import Database.RocksDB (Config (..), withDBCF)
@@ -221,6 +224,65 @@ spec = describe "E2E newRocksDBState" $ do
                 Syncing _ -> pure ()
                 Intersecting _ _ -> pure ()
                 Truncating _ -> pure ()
+
+    it "preprod block 282639 + 283086 crash scenario" $ do
+        -- Reproduces the crash: d4bebf0c...#1 should be deletable
+        -- after being inserted in a prior block.
+        let hex s = case B16.decode (BC.pack s) of
+                Right bs -> bs
+                Left e -> error e
+            txIn txid ix =
+                unsafeMkTxIn (toShort $ hex txid) ix
+            -- Preprod tx hashes from Koios
+            key366b_0 =
+                txIn
+                    "366b3fa797964f629662812c15c1989a2b5aead30344f2d7ccf40bf4611c3c79"
+                    0
+            keyd4be_0 =
+                txIn
+                    "d4bebf0c9b57c3e7ae745b39337920b9d7dc2a2b61eb78e39d88bcc59ae7693a"
+                    0
+            keyd4be_1 =
+                txIn
+                    "d4bebf0c9b57c3e7ae745b39337920b9d7dc2a2b61eb78e39d88bcc59ae7693a"
+                    1
+            keyb768_0 =
+                txIn
+                    "b76811c33424b8cf7b61a285152715f5a7f40e89f68a7782c5df515146e2413f"
+                    0
+            keyb768_1 =
+                txIn
+                    "b76811c33424b8cf7b61a285152715f5a7f40e89f68a7782c5df515146e2413f"
+                    1
+        withFreshDB $ \update -> do
+            -- Bootstrap: insert what block 282639 needs
+            update1 <-
+                forwardTipApply
+                    update
+                    (SlotNo 1)
+                    (SlotNo 1)
+                    [Insert key366b_0 "out-366b-0"]
+            -- Block 282639: 1 delete + 2 inserts
+            update2 <-
+                forwardTipApply
+                    update1
+                    (SlotNo 12903843)
+                    (SlotNo 12903843)
+                    [ Delete key366b_0
+                    , Insert keyd4be_0 "out-d4be-0"
+                    , Insert keyd4be_1 "out-d4be-1"
+                    ]
+            -- Block 283086: delete d4be#1 (should NOT crash)
+            _ <-
+                forwardTipApply
+                    update2
+                    (SlotNo 12912634)
+                    (SlotNo 12912634)
+                    [ Delete keyd4be_1
+                    , Insert keyb768_0 "out-b768-0"
+                    , Insert keyb768_1 "out-b768-1"
+                    ]
+            pure ()
 
     it "rollback points are returned on fresh DB" $ do
         withSystemTempDirectory "e2e-rollback-points" $ \dir ->
