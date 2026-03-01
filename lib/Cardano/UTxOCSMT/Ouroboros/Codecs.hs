@@ -5,7 +5,7 @@ module Cardano.UTxOCSMT.Ouroboros.Codecs
     , codecChainSyncN2C
     ) where
 
-import Cardano.Chain.Slotting (EpochSlots (EpochSlots))
+import Cardano.Chain.Slotting (EpochSlots)
 import Cardano.UTxOCSMT.Ouroboros.Types
     ( Block
     , BlockFetch
@@ -61,36 +61,37 @@ import Ouroboros.Network.Protocol.KeepAlive.Type (KeepAlive)
 
 -- The ChainSync codec for our Block, Point, and Tip types
 codecChainSync
-    :: Codec
+    :: EpochSlots
+    -> Codec
         ChainSync
         DeserialiseFailure
         IO
         LBS.ByteString
-codecChainSync =
+codecChainSync es =
     ChainSync.codecChainSync
-        encHeader
-        decHeader
+        (encHeader es)
+        (decHeader es)
         encPoint
         decPoint
         encTip
         decTip
 
 ----- Encoding and Decoding Headers -----
-encHeader :: Header -> Encoding
-encHeader = encodeNodeToNode @Block ccfg version
+encHeader :: EpochSlots -> Header -> Encoding
+encHeader es = encodeNodeToNode @Block (ccfg es) version
 
-decHeader :: Decoder s Header
-decHeader = decodeNodeToNode @Block ccfg version
+decHeader :: EpochSlots -> Decoder s Header
+decHeader es = decodeNodeToNode @Block (ccfg es) version
 
 version
     :: HardForkNodeToNodeVersion
         (ByronBlock : Consensus.CardanoShelleyEras c)
 version = CardanoNodeToNodeVersion2
 
-ccfg :: Consensus.CardanoCodecConfig c
-ccfg =
+ccfg :: EpochSlots -> Consensus.CardanoCodecConfig c
+ccfg es =
     CardanoCodecConfig
-        (ByronCodecConfig $ EpochSlots 42)
+        (ByronCodecConfig es)
         ShelleyCodecConfig
         ShelleyCodecConfig
         ShelleyCodecConfig
@@ -112,20 +113,21 @@ decTip = decodeTip (decodeRawHash (Proxy @Block))
 
 -- | Real Cardano BlockFetch codec
 codecBlockFetch
-    :: Codec BlockFetch DeserialiseFailure IO LBS.ByteString
-codecBlockFetch =
+    :: EpochSlots
+    -> Codec BlockFetch DeserialiseFailure IO LBS.ByteString
+codecBlockFetch es =
     BlockFetch.codecBlockFetch
-        encBlock
-        decBlock
+        (encBlock es)
+        (decBlock es)
         encPoint
         decPoint
 
 -- ----- Encoding and Decoding Blocks -----
-encBlock :: Block -> Encoding
-encBlock = encodeNodeToNode @Block ccfg version
+encBlock :: EpochSlots -> Block -> Encoding
+encBlock es = encodeNodeToNode @Block (ccfg es) version
 
-decBlock :: Decoder s Block
-decBlock = decodeNodeToNode @Block ccfg version
+decBlock :: EpochSlots -> Decoder s Block
+decBlock es = decodeNodeToNode @Block (ccfg es) version
 
 codecKeepAlive
     :: Codec
@@ -144,25 +146,26 @@ n2cVersion = CardanoNodeToClientVersion16
 
 -- | N2C ChainSync codec — encodes/decodes full blocks (not headers)
 codecChainSyncN2C
-    :: Codec
+    :: EpochSlots
+    -> Codec
         N2CChainSync
         DeserialiseFailure
         IO
         LBS.ByteString
-codecChainSyncN2C =
+codecChainSyncN2C es =
     ChainSync.codecChainSync
-        encBlockN2C
-        decBlockN2C
+        (encBlockN2C es)
+        (decBlockN2C es)
         encPointBlock
         decPointBlock
         encTip
         decTip
 
-encBlockN2C :: Block -> Encoding
-encBlockN2C = encodeNodeToClient @Block ccfg n2cVersion
+encBlockN2C :: EpochSlots -> Block -> Encoding
+encBlockN2C es = encodeNodeToClient @Block (ccfg es) n2cVersion
 
-decBlockN2C :: Decoder s Block
-decBlockN2C = decodeNodeToClient @Block ccfg n2cVersion
+decBlockN2C :: EpochSlots -> Decoder s Block
+decBlockN2C es = decodeNodeToClient @Block (ccfg es) n2cVersion
 
 encPointBlock :: Network.Point Block -> Encoding
 encPointBlock = encode

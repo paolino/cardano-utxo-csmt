@@ -9,6 +9,7 @@ module Cardano.UTxOCSMT.E2E.GenesisChainSyncSpec
     ( spec
     ) where
 
+import Cardano.Chain.Slotting (EpochSlots (..))
 import Cardano.UTxOCSMT.Application.Database.Implementation.Transaction
     ( CSMTContext (..)
     )
@@ -133,6 +134,7 @@ spec = describe "Genesis chain sync" $ do
                                         timeout
                                             15_000_000
                                             $ applicationN2C
+                                                (EpochSlots 4320)
                                                 devnetMagic
                                                 socketPath
                                                 setupStartingPoint

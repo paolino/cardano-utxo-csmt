@@ -6,6 +6,7 @@ module Cardano.UTxOCSMT.Application.Run.Main
     )
 where
 
+import Cardano.Chain.Slotting (EpochSlots (..))
 import Cardano.UTxOCSMT.Application.Database.Implementation.Query
     ( clearSkipSlot
     , putBaseCheckpoint
@@ -27,6 +28,7 @@ import Cardano.UTxOCSMT.Application.Metrics
 import Cardano.UTxOCSMT.Application.Options
     ( ConnectionMode (..)
     , Options (..)
+    , epochSlotsFor
     , networkMagic
     , optionsParser
     )
@@ -241,10 +243,13 @@ main = withUtf8 $ do
                 Nothing ->
                     traceWith metricsEvent $ BootstrapPhaseEvent Synced
 
+            let epochSlots =
+                    EpochSlots $ epochSlotsFor $ network options
             result <-
                 ( case connectionMode options of
                     N2N{n2nHost, n2nPort} ->
                         application
+                            epochSlots
                             (networkMagic options)
                             n2nHost
                             n2nPort
@@ -259,6 +264,7 @@ main = withUtf8 $ do
                             (mFinality runner)
                     N2C{n2cSocket} ->
                         applicationN2C
+                            epochSlots
                             (networkMagic options)
                             n2cSocket
                             setupStartingPoint
