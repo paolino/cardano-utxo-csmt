@@ -29,7 +29,7 @@ import Cardano.UTxOCSMT.Application.Metrics
     ( BootstrapPhase (..)
     , MetricsEvent (..)
     )
-import Cardano.UTxOCSMT.Application.UTxOs (Change (..), uTxOs)
+import Cardano.UTxOCSMT.Application.UTxOs (Change (..), uTxOsWithTxCount)
 import Cardano.UTxOCSMT.Ouroboros.Connection (runNodeApplication)
 import Cardano.UTxOCSMT.Ouroboros.ConnectionN2C
     ( runLocalNodeApplication
@@ -70,8 +70,8 @@ data ApplicationTrace
     | ApplicationIntersectionFailed
     | -- | Rollback starting to the given point
       ApplicationRollingBack Point
-    | -- | Block processed at slot with UTxO change count
-      ApplicationBlockProcessed SlotNo Int
+    | -- | Block processed at slot with tx count and UTxO change count
+      ApplicationBlockProcessed SlotNo Int Int
     | -- | Header sync progress during Mithril catch-up
       ApplicationHeaderSkipProgress HeaderSkipProgress
     deriving (Show)
@@ -84,10 +84,12 @@ renderApplicationTrace ApplicationIntersectionFailed =
     "Intersection failed, resetting to origin"
 renderApplicationTrace (ApplicationRollingBack point) =
     "Rolling back to point: " ++ show point
-renderApplicationTrace (ApplicationBlockProcessed slot utxoCount) =
+renderApplicationTrace (ApplicationBlockProcessed slot txCount utxoCount) =
     "Block processed: slot "
         ++ show (unSlotNo slot)
         ++ ", "
+        ++ show txCount
+        ++ " txs, "
         ++ show utxoCount
         ++ " UTxO changes"
 renderApplicationTrace (ApplicationHeaderSkipProgress progress) =
@@ -152,15 +154,18 @@ follower
     db = ($ db) $ fix $ \go currentDB ->
         Follower
             { rollForward = \Fetched{fetchedPoint, fetchedBlock} tipSlot -> do
-                let ops = changeToOperation <$> uTxOs fetchedBlock
+                let (txCount, utxoChanges) = uTxOsWithTxCount fetchedBlock
+                    ops = changeToOperation <$> utxoChanges
                     opsCount = length ops
                 replicateM_ opsCount trUTxO
-                -- Log progress every 1000 slots
                 case Network.pointSlot fetchedPoint of
-                    At slot@(SlotNo s)
-                        | s `mod` 1000 == 0 ->
+                    At slot
+                        | txCount > 0 ->
                             trace
-                                $ ApplicationBlockProcessed slot opsCount
+                                $ ApplicationBlockProcessed
+                                    slot
+                                    txCount
+                                    opsCount
                     _ -> pure ()
                 newDB <- case currentDB of
                     Syncing update -> do

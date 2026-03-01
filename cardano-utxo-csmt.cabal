@@ -201,6 +201,7 @@ library library
     , cardano-crypto-class
     , cardano-crypto-wrapper
     , cardano-data
+    , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-babbage
     , cardano-ledger-binary
@@ -246,6 +247,7 @@ library library
     , serialise
     , streaming
     , streaming-bytestring
+    , cardano-strict-containers
     , strict-sop-core
     , strict-stm
     , swagger2
