@@ -88,7 +88,7 @@ newRunTransaction db prisms =
         $ codecs prisms
 
 newRocksDBState
-    :: (MonadUnliftIO m, MonadFail m, Ord key, Ord slot, MonadMask m)
+    :: (MonadUnliftIO m, MonadFail m, Ord key, Ord slot, Show slot, MonadMask m)
     => Tracer m (UpdateTrace slot hash)
     -> DB
     -> Prisms slot hash key value
@@ -118,7 +118,7 @@ newRocksDBState
 
 -- | Create Update state from an existing runner
 createUpdateState
-    :: (MonadFail m, Ord key, Ord slot)
+    :: (MonadFail m, Ord key, Ord slot, Show slot)
     => Tracer m (UpdateTrace slot hash)
     -> FromKV key value hash
     -> Hashing hash
