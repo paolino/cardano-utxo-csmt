@@ -4,6 +4,7 @@ module Cardano.UTxOCSMT.Ouroboros.Application
     )
 where
 
+import Cardano.Chain.Slotting (EpochSlots)
 import Cardano.UTxOCSMT.Application.BlockFetch
     ( BlockFetchApplication
     )
@@ -48,7 +49,9 @@ maximumMiniProtocolLimits =
         }
 
 mkOuroborosApplication
-    :: ChainSyncApplication
+    :: EpochSlots
+    -- ^ Byron epoch slots for codec configuration
+    -> ChainSyncApplication
     -- ^ chainSync
     -> BlockFetchApplication
     -- ^ blockFetch
@@ -61,7 +64,7 @@ mkOuroborosApplication
         IO
         ()
         Void
-mkOuroborosApplication chainSyncApp blockFetchApp keepAliveApp =
+mkOuroborosApplication epochSlots chainSyncApp blockFetchApp keepAliveApp =
     OuroborosApplication
         { getOuroborosApplication =
             [ MiniProtocol
@@ -89,14 +92,14 @@ mkOuroborosApplication chainSyncApp blockFetchApp keepAliveApp =
         $ mkMiniProtocolCbFromPeer
         $ \_ctx ->
             ( nullTracer
-            , codecChainSync
+            , codecChainSync epochSlots
             , ChainSync.chainSyncClientPeer chainSyncApp
             )
     runFetchBlocks = InitiatorProtocolOnly
         $ mkMiniProtocolCbFromPeer
         $ \_ctx ->
             ( nullTracer
-            , codecBlockFetch
+            , codecBlockFetch epochSlots
             , BlockFetch.blockFetchClientPeer blockFetchApp
             )
     runKeepAlive = InitiatorProtocolOnly

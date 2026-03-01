@@ -15,6 +15,7 @@ module Cardano.UTxOCSMT.Ouroboros.Connection
     )
 where
 
+import Cardano.Chain.Slotting (EpochSlots)
 import Cardano.UTxOCSMT.Application.BlockFetch
     ( BlockFetchApplication
     )
@@ -75,7 +76,9 @@ import System.Timeout (timeout)
 
 -- | Connect to a node-to-node chain sync server and run the given application
 runNodeApplication
-    :: NetworkMagic
+    :: EpochSlots
+    -- ^ Byron epoch slots for codec configuration
+    -> NetworkMagic
     -- ^ The network magic
     -> String
     -- ^ host
@@ -87,6 +90,7 @@ runNodeApplication
     -- ^ application
     -> IO (Either SomeException (Either () Void))
 runNodeApplication
+    epochSlots
     magic
     peerName
     peerPort
@@ -121,6 +125,7 @@ runNodeApplication
                 )
                 ( const
                     $ mkOuroborosApplication
+                        epochSlots
                         chainSyncApplication
                         blockFetchApplication
                         keepAliveApplication

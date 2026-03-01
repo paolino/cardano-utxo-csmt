@@ -12,6 +12,7 @@ module Cardano.UTxOCSMT.Ouroboros.ConnectionN2C
     , N2CChainSyncApplication
     ) where
 
+import Cardano.Chain.Slotting (EpochSlots)
 import Cardano.UTxOCSMT.Ouroboros.Codecs (codecChainSyncN2C)
 import Cardano.UTxOCSMT.Ouroboros.Types (N2CChainSyncApplication)
 import Control.Exception (SomeException)
@@ -51,14 +52,16 @@ import Ouroboros.Network.Snocket (LocalAddress)
 
 -- | Connect to a node via Unix socket and run the N2C ChainSync client
 runLocalNodeApplication
-    :: NetworkMagic
+    :: EpochSlots
+    -- ^ Byron epoch slots for codec configuration
+    -> NetworkMagic
     -- ^ The network magic
     -> FilePath
     -- ^ Path to the node's Unix socket
     -> N2CChainSyncApplication
     -- ^ N2C ChainSync client
     -> IO (Either SomeException ())
-runLocalNodeApplication magic socketPath chainSyncApp =
+runLocalNodeApplication epochSlots magic socketPath chainSyncApp =
     withIOManager $ \ioManager ->
         connectTo
             (localSnocket ioManager)
@@ -70,7 +73,7 @@ runLocalNodeApplication magic socketPath chainSyncApp =
                     , query = False
                     }
                 $ const
-                $ mkN2CApplication chainSyncApp
+                $ mkN2CApplication epochSlots chainSyncApp
             )
             socketPath
 
@@ -83,7 +86,8 @@ maximumMiniProtocolLimits =
 
 -- | Build the N2C application with only ChainSync active
 mkN2CApplication
-    :: N2CChainSyncApplication
+    :: EpochSlots
+    -> N2CChainSyncApplication
     -> OuroborosApplicationWithMinimalCtx
         Mx.InitiatorMode
         LocalAddress
@@ -91,7 +95,7 @@ mkN2CApplication
         IO
         ()
         Void
-mkN2CApplication chainSyncApp =
+mkN2CApplication epochSlots chainSyncApp =
     OuroborosApplication
         { getOuroborosApplication =
             [ MiniProtocol
@@ -108,6 +112,6 @@ mkN2CApplication chainSyncApp =
             $ mkMiniProtocolCbFromPeer
             $ const
                 ( nullTracer
-                , codecChainSyncN2C
+                , codecChainSyncN2C epochSlots
                 , ChainSync.chainSyncClientPeer chainSyncApp
                 )

@@ -9,6 +9,7 @@ module Cardano.UTxOCSMT.Application.Options
 
       -- * Derived option accessors
     , networkMagic
+    , epochSlotsFor
 
       -- * Re-exports for Mithril
     , MithrilOptions (..)
@@ -98,6 +99,13 @@ networkMagicFor Mainnet = NetworkMagic 764824073
 networkMagicFor Preprod = NetworkMagic 1
 networkMagicFor Preview = NetworkMagic 2
 networkMagicFor Devnet = NetworkMagic 42
+
+-- | Get Byron epoch slots for a Cardano network
+epochSlotsFor :: CardanoNetwork -> Word64
+epochSlotsFor Mainnet = 21600
+epochSlotsFor Preprod = 21600
+epochSlotsFor Preview = 4320
+epochSlotsFor Devnet = 4320
 
 -- | Get Mithril network for a Cardano network
 mithrilNetworkFor :: CardanoNetwork -> MithrilNetwork

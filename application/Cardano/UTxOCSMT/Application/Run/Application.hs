@@ -7,6 +7,7 @@ module Cardano.UTxOCSMT.Application.Run.Application
 where
 
 import CSMT ()
+import Cardano.Chain.Slotting (EpochSlots)
 import Cardano.UTxOCSMT.Application.BlockFetch
     ( EventQueueLength
     , Fetched (..)
@@ -210,7 +211,9 @@ rollingBack TraceWith{trace, tracer} trUTxO newFinalityTarget point follower' st
         _ -> error "rollingBack: cannot roll back while intersecting"
 
 application
-    :: NetworkMagic
+    :: EpochSlots
+    -- ^ Epoch slots for Byron codec
+    -> NetworkMagic
     -- ^ Network magic
     -> String
     -- ^ Node name
@@ -236,6 +239,7 @@ application
     -- ^ Finality target. TODO redesign the Update object to avoid this
     -> IO Void
 application
+    epochSlots
     networkMagic
     nodeName
     portNumber
@@ -289,6 +293,7 @@ application
                             else availablePoints
             result <-
                 runNodeApplication
+                    epochSlots
                     networkMagic
                     nodeName
                     portNumber
@@ -303,7 +308,9 @@ application
 
 -- | N2C variant: connects via Unix socket, no BlockFetch needed
 applicationN2C
-    :: NetworkMagic
+    :: EpochSlots
+    -- ^ Epoch slots for Byron codec
+    -> NetworkMagic
     -- ^ Network magic
     -> FilePath
     -- ^ Socket path
@@ -325,6 +332,7 @@ applicationN2C
     -- ^ Finality target
     -> IO Void
 applicationN2C
+    epochSlots
     networkMagic'
     socketPath
     startingPoint
@@ -376,6 +384,7 @@ applicationN2C
 
             result <-
                 runLocalNodeApplication
+                    epochSlots
                     networkMagic'
                     socketPath
                     chainSyncApp
