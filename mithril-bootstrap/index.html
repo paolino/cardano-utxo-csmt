@@ -1,0 +1,1648 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://paolino.github.io/cardano-utxo-csmt/mithril-bootstrap/">
+      
+      
+        <link rel="prev" href="../getting-started/">
+      
+      
+        <link rel="next" href="../architecture/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Mithril Bootstrap - Cardano UTXO CSMT</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../css/terminal-player.css">
+    
+      <link rel="stylesheet" href="../css/asciinema-player.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#mithril-bootstrap" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Cardano UTXO CSMT" class="md-header__button md-logo" aria-label="Cardano UTXO CSMT" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Cardano UTXO CSMT
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Mithril Bootstrap
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/paolino/cardano-utxo-csmt" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Cardano UTXO CSMT" class="md-nav__button md-logo" aria-label="Cardano UTXO CSMT" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Cardano UTXO CSMT
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/paolino/cardano-utxo-csmt" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mithril Bootstrap
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mithril Bootstrap
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation Status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bootstrap-time-estimates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bootstrap Time Estimates
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Bootstrap Time Estimates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#estimated-times-by-network" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estimated Times by Network
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-a-mithril-snapshot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Is a Mithril Snapshot?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#environment-variables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Environment Variables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#networks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Networks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bootstrap-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bootstrap Design
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Bootstrap Design">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bootstrap-phases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bootstrap Phases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#skip-mode-header-only-sync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skip Mode (Header-Only Sync)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#checkpoint-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checkpoint Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#database-state-during-bootstrap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Database State During Bootstrap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interrupted-bootstrap-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interrupted Bootstrap Recovery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#api-availability-during-bootstrap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API Availability During Bootstrap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#monitoring-bootstrap-progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Monitoring Bootstrap Progress
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Works
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How It Works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-fetch-snapshot-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Fetch Snapshot Metadata
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-download-and-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Download and Verify
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-ledger-state-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Ledger State Format
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-utxo-extraction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. UTxO Extraction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-stream-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Stream Processing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-chain-sync-continuation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Chain Sync Continuation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#alternative-direct-chain-sync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternative: Direct Chain Sync
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-considerations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security Considerations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Security Considerations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ed25519-ancillary-verification-implemented" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ed25519 Ancillary Verification (Implemented)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stm-certificate-chain-planned" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        STM Certificate Chain (Planned)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#snapshot-download-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Snapshot Download Fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ledger-state-not-found" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ledger State Not Found
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#large-download-size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Large Download Size
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extraction-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extraction Errors
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bootstrap-interrupted" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bootstrap Interrupted
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../swagger-ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Swagger UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="mithril-bootstrap">Mithril Bootstrap</h1>
+<p>Mithril enables fast bootstrapping of the Cardano UTxO CSMT database by downloading
+certified snapshots instead of syncing from genesis.</p>
+<h2 id="implementation-status">Implementation Status</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fetch snapshot metadata</td>
+<td>✅ Working</td>
+<td>All networks (mainnet, preprod, preview)</td>
+</tr>
+<tr>
+<td>HTTP download</td>
+<td>✅ Working</td>
+<td>Downloads ancillary data with ledger state</td>
+</tr>
+<tr>
+<td>Ed25519 ancillary verification</td>
+<td>✅ Working</td>
+<td>Verifies manifest signature for all networks</td>
+</tr>
+<tr>
+<td>Find ledger state files</td>
+<td>✅ Working</td>
+<td>Supports both old (.lstate) and new UTxO-HD formats</td>
+</tr>
+<tr>
+<td>CLI options</td>
+<td>✅ Working</td>
+<td><code>--network</code>, <code>--mithril-bootstrap</code>, etc.</td>
+</tr>
+<tr>
+<td>UTxO extraction from ledger state</td>
+<td>✅ Working</td>
+<td>Streams MemPack-encoded (TxIn, TxOut) pairs from tvar file</td>
+</tr>
+<tr>
+<td>TxIn/TxOut decoding</td>
+<td>✅ Verified</td>
+<td>Decodes as Conway-era <code>TxIn</code> and <code>BabbageTxOut</code></td>
+</tr>
+<tr>
+<td>CBOR re-encoding</td>
+<td>✅ Working</td>
+<td>Converts MemPack to CBOR for chain sync compatibility</td>
+</tr>
+<tr>
+<td>STM certificate verification</td>
+<td>🔮 Planned</td>
+<td>See <a href="mithril-stm-ffi-plan.md">FFI plan</a> on <code>feature/mithril-stm-ffi-plan</code> branch</td>
+</tr>
+</tbody>
+</table>
+<h2 id="overview">Overview</h2>
+<p>Mithril bootstrapping:</p>
+<ol>
+<li>Downloads the latest certified snapshot from Mithril aggregators</li>
+<li>Extracts the UTxO set from the InMemory backing store (<code>tables/tvar</code>)</li>
+<li>Decodes MemPack to Conway-era types, re-encodes to CBOR for chain sync compatibility</li>
+<li>Streams into CSMT database using the standard import interface</li>
+</ol>
+<p>This provides a fast way to obtain UTxO set data without syncing from genesis.</p>
+<h2 id="bootstrap-time-estimates">Bootstrap Time Estimates</h2>
+<p>Bootstrap time depends on three phases:</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Download</strong></td>
+<td>Download snapshot from Mithril CDN (~400MB for preview)</td>
+</tr>
+<tr>
+<td><strong>Extraction</strong></td>
+<td>Extract and import UTxOs into CSMT database</td>
+</tr>
+<tr>
+<td><strong>Header Sync</strong></td>
+<td>Sync headers from genesis to Mithril slot (skip mode)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="estimated-times-by-network">Estimated Times by Network</h3>
+<table>
+<thead>
+<tr>
+<th>Network</th>
+<th>UTxOs</th>
+<th>Slots</th>
+<th>Download</th>
+<th>Extraction</th>
+<th>Header Sync</th>
+<th><strong>Total</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Preview</td>
+<td>~2.9M</td>
+<td>~103M</td>
+<td>~5 min</td>
+<td>~1 hour</td>
+<td>~1.5 hours</td>
+<td><strong>~2.5 hours</strong></td>
+</tr>
+<tr>
+<td>Preprod</td>
+<td>~5M</td>
+<td>~75M</td>
+<td>~10 min</td>
+<td>~2 hours</td>
+<td>~1 hour</td>
+<td><strong>~3.5 hours</strong></td>
+</tr>
+<tr>
+<td>Mainnet</td>
+<td>~20M</td>
+<td>~140M</td>
+<td>~30 min</td>
+<td>~8 hours</td>
+<td>~2 hours</td>
+<td><strong>~10-12 hours</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Notes:</strong></p>
+<ul>
+<li>Times measured with a <strong>local cardano-node</strong> (same machine or LAN)</li>
+<li>Hardware: SSD storage, 100Mbps+ connection for Mithril download</li>
+<li>Extraction rate: ~800-1000 UTxOs/second</li>
+<li>Header sync rate: ~15,000-20,000 slots/second (depends on node proximity)</li>
+<li>Mainnet estimates are projections based on preview/preprod measurements</li>
+<li>Remote nodes will have slower header sync due to network latency</li>
+</ul>
+<h2 id="what-is-a-mithril-snapshot">What Is a Mithril Snapshot?</h2>
+<p>A Mithril snapshot captures the <strong>ledger state</strong> at a slot deep in the immutable
+history of the Cardano blockchain.</p>
+<p><strong>Key distinction:</strong></p>
+<ul>
+<li>The snapshot is <strong>not</strong> the immutable DB (blocks) itself</li>
+<li>It is the <strong>ledger state</strong> (UTxO set, stake distribution, etc.) that results
+  from processing those blocks</li>
+<li>The slot is past the security parameter (k=2160 blocks), making it final</li>
+</ul>
+<p>This is what makes Mithril useful: you get the final state without replaying
+all the blocks from genesis.</p>
+<p><strong>Trust model:</strong></p>
+<p>The ledger state is cryptographically signed by Cardano stake pool operators
+using Mithril's STM (Stake-based Threshold Multi-signatures). Verifying the
+certificate chain proves the snapshot was produced correctly by the network.</p>
+<h2 id="usage">Usage</h2>
+<p>Enable Mithril bootstrap with the <code>--mithril-bootstrap</code> flag:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>cardano-utxo<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span>--network<span class="w"> </span>preview<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span>--mithril-bootstrap<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span>--db-path<span class="w"> </span>/path/to/db
+</span></code></pre></div>
+<p>The <code>--network</code> option sets both the Cardano network (magic, default peer) and
+the Mithril network automatically.</p>
+<h2 id="environment-variables">Environment Variables</h2>
+<p>Set up environment variables for your network before running:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Preprod</label><label for="__tabbed_1_2">Preview</label><label for="__tabbed_1_3">Mainnet</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MITHRIL_AGGREGATOR_ENDPOINT</span><span class="o">=</span>https://aggregator.release-preprod.api.mithril.network/aggregator
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MITHRIL_GENESIS_VERIFICATION_KEY</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-s<span class="w"> </span>https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/genesis.vkey<span class="k">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MITHRIL_ANCILLARY_VERIFICATION_KEY</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-s<span class="w"> </span>https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-preprod/ancillary.vkey<span class="k">)</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MITHRIL_AGGREGATOR_ENDPOINT</span><span class="o">=</span>https://aggregator.pre-release-preview.api.mithril.network/aggregator
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MITHRIL_GENESIS_VERIFICATION_KEY</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-s<span class="w"> </span>https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/genesis.vkey<span class="k">)</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MITHRIL_ANCILLARY_VERIFICATION_KEY</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-s<span class="w"> </span>https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/pre-release-preview/ancillary.vkey<span class="k">)</span>
+</span></code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MITHRIL_AGGREGATOR_ENDPOINT</span><span class="o">=</span>https://aggregator.release-mainnet.api.mithril.network/aggregator
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MITHRIL_GENESIS_VERIFICATION_KEY</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-s<span class="w"> </span>https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/genesis.vkey<span class="k">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MITHRIL_ANCILLARY_VERIFICATION_KEY</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-s<span class="w"> </span>https://raw.githubusercontent.com/input-output-hk/mithril/main/mithril-infra/configuration/release-mainnet/ancillary.vkey<span class="k">)</span>
+</span></code></pre></div>
+</div>
+</div>
+</div>
+<p>Source: <a href="https://mithril.network/doc/manual/getting-started/network-configurations">Mithril Network Configurations</a></p>
+<blockquote>
+<p><strong>Note:</strong> Preview and Preprod currently share the same ancillary verification key. Mainnet has a distinct key.</p>
+</blockquote>
+<h2 id="cli-options">CLI Options</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--network NETWORK</code></td>
+<td>Network: <code>mainnet</code>, <code>preprod</code>, <code>preview</code></td>
+<td><code>mainnet</code></td>
+</tr>
+<tr>
+<td><code>--mithril-bootstrap</code></td>
+<td>Enable Mithril bootstrapping</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--mithril-bootstrap-only</code></td>
+<td>Exit after bootstrap (skip chain sync)</td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>--mithril-aggregator-endpoint URL</code></td>
+<td>Override aggregator URL</td>
+<td>From env var</td>
+</tr>
+<tr>
+<td><code>--mithril-genesis-verification-key KEY</code></td>
+<td>Genesis verification key (JSON-hex)</td>
+<td>From env var</td>
+</tr>
+<tr>
+<td><code>--mithril-ancillary-verification-key KEY</code></td>
+<td>Ancillary verification key (JSON-hex)</td>
+<td>From env var</td>
+</tr>
+<tr>
+<td><code>--mithril-download-dir DIR</code></td>
+<td>Directory for downloads</td>
+<td>Temp directory</td>
+</tr>
+<tr>
+<td><code>--mithril-skip-ancillary-verification</code></td>
+<td>Skip Ed25519 verification (not recommended)</td>
+<td><code>false</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Environment Variables:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MITHRIL_AGGREGATOR_ENDPOINT</code></td>
+<td>Mithril aggregator URL</td>
+</tr>
+<tr>
+<td><code>MITHRIL_GENESIS_VERIFICATION_KEY</code></td>
+<td>Genesis verification key for mithril-client CLI (JSON-hex)</td>
+</tr>
+<tr>
+<td><code>MITHRIL_ANCILLARY_VERIFICATION_KEY</code></td>
+<td>Ed25519 verification key for ancillary files (JSON-hex)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="networks">Networks</h2>
+<table>
+<thead>
+<tr>
+<th>Network</th>
+<th>Aggregator URL</th>
+<th>Ancillary Verification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mainnet</td>
+<td><code>https://aggregator.release-mainnet.api.mithril.network/aggregator</code></td>
+<td>✅ Ed25519</td>
+</tr>
+<tr>
+<td>Preprod</td>
+<td><code>https://aggregator.release-preprod.api.mithril.network/aggregator</code></td>
+<td>✅ Ed25519</td>
+</tr>
+<tr>
+<td>Preview</td>
+<td><code>https://aggregator.pre-release-preview.api.mithril.network/aggregator</code></td>
+<td>✅ Ed25519</td>
+</tr>
+</tbody>
+</table>
+<h2 id="bootstrap-design">Bootstrap Design</h2>
+<p>This section describes the complete bootstrap flow and the design decisions behind it.</p>
+<h3 id="bootstrap-phases">Bootstrap Phases</h3>
+<p>The bootstrap process consists of five phases, tracked via the <code>/metrics</code> endpoint:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>┌─────────────┐    ┌──────────┐    ┌────────────┐    ┌─────────────────┐    ┌────────┐
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>│ Downloading │───▶│ Counting │───▶│ Extracting │───▶│ Syncing Headers │───▶│ Synced │
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>└─────────────┘    └──────────┘    └────────────┘    └─────────────────┘    └────────┘
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Description</th>
+<th>Progress Tracking</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>downloading</code></td>
+<td>Fetching Mithril snapshot from CDN</td>
+<td><code>downloadedBytes</code></td>
+</tr>
+<tr>
+<td><code>counting</code></td>
+<td>Counting UTxOs in snapshot</td>
+<td><code>countingProgress</code></td>
+</tr>
+<tr>
+<td><code>extracting</code></td>
+<td>Importing UTxOs into CSMT</td>
+<td><code>extractionProgress</code> (current, total, rate, eta)</td>
+</tr>
+<tr>
+<td><code>syncing_headers</code></td>
+<td>Syncing headers to reach Mithril slot</td>
+<td><code>headerSyncProgress</code> (currentSlot, targetSlot)</td>
+</tr>
+<tr>
+<td><code>synced</code></td>
+<td>Ready to serve queries</td>
+<td><code>ready: true</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="skip-mode-header-only-sync">Skip Mode (Header-Only Sync)</h3>
+<p>After Mithril import, the database contains UTxOs at slot X (the Mithril snapshot slot).
+We cannot construct a proper chain sync checkpoint because Mithril doesn't provide the
+block hash for that slot.</p>
+<p><strong>The Problem:</strong></p>
+<ul>
+<li>Chain sync requires <code>Point(slot, blockHash)</code> for intersection</li>
+<li>Mithril provides only the slot number, not the block hash</li>
+<li>Without a valid Point, we must intersect at Origin</li>
+</ul>
+<p><strong>The Solution: Skip Mode</strong></p>
+<p>Instead of replaying all blocks from genesis (which would be slow and redundant),
+we use "skip mode":</p>
+<ol>
+<li><strong>Intersect at Origin</strong> - Start chain sync from genesis</li>
+<li><strong>Skip block fetching</strong> - Receive headers but don't fetch/process blocks</li>
+<li><strong>Track target slot</strong> - The Mithril snapshot slot is the target</li>
+<li><strong>Save checkpoint on arrival</strong> - When we reach the target slot, we have the block hash</li>
+<li><strong>Resume normal sync</strong> - Continue with block fetching from that point</li>
+</ol>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Genesis ──────────────────────────────────────── Mithril Slot ──── Tip
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>   │                                                   │            │
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>   │◀──────────── Skip Mode (headers only) ───────────▶│            │
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>   │              No block fetching                    │            │
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>   │                                                   │◀── Normal ─▶│
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>   │                                                   │   Sync      │
+</span></code></pre></div>
+<p>During skip mode:
+- Headers are received from the node at ~15,000-20,000 slots/second
+- Blocks are NOT fetched or processed
+- Progress is shown via <code>headerSyncProgress</code>
+- The database remains unchanged (already has Mithril UTxOs)</p>
+<h3 id="checkpoint-management">Checkpoint Management</h3>
+<p>The base checkpoint tracks where chain sync should resume after restart:</p>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Checkpoint</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fresh database</td>
+<td>None</td>
+<td>Start Mithril bootstrap</td>
+</tr>
+<tr>
+<td>After Mithril import</td>
+<td>Origin</td>
+<td>Start skip mode from genesis</td>
+</tr>
+<tr>
+<td>After skip mode completes</td>
+<td><code>Point(mithrilSlot, blockHash)</code></td>
+<td>Resume normal sync</td>
+</tr>
+<tr>
+<td>During normal operation</td>
+<td>Updated periodically</td>
+<td>Resume from last saved point</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Current Limitation:</strong> If the service restarts during skip mode (after Mithril import
+but before reaching the target slot), the skip mode state is lost. See issue #76.</p>
+<h3 id="database-state-during-bootstrap">Database State During Bootstrap</h3>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Database Contents</th>
+<th>Queryable?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Downloading</td>
+<td>Empty</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Extracting</td>
+<td>Partially populated</td>
+<td>No</td>
+</tr>
+<tr>
+<td>Syncing Headers</td>
+<td>Complete Mithril UTxOs</td>
+<td>Yes (but <code>/ready</code> returns false)</td>
+</tr>
+<tr>
+<td>Synced</td>
+<td>Up-to-date UTxOs</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interrupted-bootstrap-recovery">Interrupted Bootstrap Recovery</h3>
+<p>If the process is terminated during bootstrap (e.g., during UTxO extraction), partial
+data may remain in the database. On restart, the service detects this and automatically
+recovers:</p>
+<ol>
+<li><strong>Detection</strong>: A bootstrap-in-progress marker is set before streaming UTxOs</li>
+<li><strong>On restart</strong>: If the marker exists, incomplete bootstrap is detected</li>
+<li><strong>Cleanup</strong>: All database tables are wiped (including partial UTxO data)</li>
+<li><strong>Retry</strong>: Bootstrap restarts from the beginning</li>
+</ol>
+<p>You'll see these log messages when recovery occurs:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>Incomplete bootstrap detected, cleaning up partial data...
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>Armageddon cleanup started.
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>Armageddon cleanup completed.
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>Incomplete bootstrap cleanup completed, retrying bootstrap...
+</span></code></pre></div>
+<p>This ensures the database is never left in an inconsistent state after an interruption.</p>
+<p>The <code>/ready</code> endpoint returns <code>ready: true</code> only when:
+- <code>bootstrapPhase</code> is <code>synced</code>
+- <code>chainTipSlot - processedSlot &lt;= syncThreshold</code> (default: 100 slots)</p>
+<h3 id="api-availability-during-bootstrap">API Availability During Bootstrap</h3>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Downloading</th>
+<th>Extracting</th>
+<th>Syncing Headers</th>
+<th>Synced</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/metrics</code></td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>/ready</code></td>
+<td>✅ (false)</td>
+<td>✅ (false)</td>
+<td>✅ (false)</td>
+<td>✅ (true)</td>
+</tr>
+<tr>
+<td><code>/merkle-roots</code></td>
+<td>❌ 503</td>
+<td>❌ 503</td>
+<td>❌ 503</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>/proof/{txId}/{txIx}</code></td>
+<td>❌ 503</td>
+<td>❌ 503</td>
+<td>❌ 503</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<p>Data endpoints return 503 Service Unavailable until the service is fully synced.</p>
+<h3 id="monitoring-bootstrap-progress">Monitoring Bootstrap Progress</h3>
+<p>Use the <code>/metrics</code> endpoint to monitor progress:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Check current phase</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:8081/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.bootstrapPhase&#39;</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># During extraction</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:8081/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.extractionProgress&#39;</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="c1"># {&quot;current&quot;: 1500000, &quot;total&quot;: 2900000, &quot;percent&quot;: 51.7, &quot;rate&quot;: 850.5, &quot;eta&quot;: 1647.2}</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1"># During header sync</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:8081/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.headerSyncProgress&#39;</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># {&quot;currentSlot&quot;: 50000000, &quot;targetSlot&quot;: 103000000}</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="c1"># Check if ready</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:8081/ready<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">&#39;.ready&#39;</span>
+</span></code></pre></div>
+<h2 id="how-it-works">How It Works</h2>
+<h3 id="1-fetch-snapshot-metadata">1. Fetch Snapshot Metadata</h3>
+<p>The client queries the Mithril aggregator API for the latest snapshot:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>curl<span class="w"> </span>-s<span class="w"> </span><span class="s2">&quot;https://aggregator.pre-release-preview.api.mithril.network/aggregator/artifact/snapshots&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s2">&quot;.[0]&quot;</span>
+</span></code></pre></div>
+<p>Response includes:
+- <code>digest</code>: Unique snapshot identifier
+- <code>beacon</code>: Slot and epoch information
+- <code>locations</code>: Download URLs for immutable files
+- <code>ancillary_locations</code>: Download URLs for ledger state</p>
+<h3 id="2-download-and-verify">2. Download and Verify</h3>
+<p><strong>HTTP Download with Ed25519 Verification</strong></p>
+<ul>
+<li>Downloads ancillary archive directly from CDN URLs</li>
+<li>Verifies <code>ancillary_manifest.json</code> Ed25519 signature</li>
+<li>Verifies SHA256 hash of each file against manifest</li>
+<li>Fast, no external dependencies</li>
+</ul>
+<p>The ancillary archive contains a signed manifest (<code>ancillary_manifest.json</code>) that lists
+all files with their SHA256 hashes, plus an Ed25519 signature over the manifest data.
+Verification ensures:</p>
+<ol>
+<li>The manifest signature is valid (signed by IOG's ancillary key)</li>
+<li>Each extracted file matches its declared hash</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> Ed25519 verification protects the ancillary files (ledger state).
+Full STM certificate chain verification is still planned for the immutable files.
+See <a href="mithril-stm-ffi-plan.md">STM verification plan</a> for details.</p>
+</blockquote>
+<h3 id="3-ledger-state-format">3. Ledger State Format</h3>
+<p>The snapshot contains ledger state in the UTxO-HD format:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>ledger/
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>├── 102673454/
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>│   ├── meta
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>│   ├── state
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>│   └── tables/
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>│       └── tvar
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>└── 102672637/
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    ├── meta
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    ├── state
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    └── tables/
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>        └── tvar
+</span></code></pre></div>
+<p>Each directory is named by slot number and contains the serialized ledger state.</p>
+<h3 id="4-utxo-extraction">4. UTxO Extraction</h3>
+<p>The UTxO set is stored in the <code>tables/tvar</code> file within the ledger state directory.
+This file uses the InMemory backing store format:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>tvar file format:
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>├── List[1] - wrapper
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>└── Map (indefinite-length CBOR)
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    ├── (bytes: TxIn, bytes: TxOut)
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    ├── (bytes: TxIn, bytes: TxOut)
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    └── ...
+</span></code></pre></div>
+<p>Each key-value pair contains MemPack-encoded <code>TxIn</code> and <code>TxOut</code> (stored as CBOR bytes in the map).
+The extraction streams these pairs without full ledger state decoding, making it
+memory-efficient for large UTxO sets (preview: ~560MB, mainnet: much larger).</p>
+<h3 id="5-stream-processing">5. Stream Processing</h3>
+<p>The extraction yields a stream of <code>(ByteString, ByteString)</code> pairs:</p>
+<ul>
+<li>Key: MemPack-encoded <code>TxIn</code> (decodable via <code>Data.MemPack.unpack</code>)</li>
+<li>Value: MemPack-encoded <code>TxOut</code> (decodable via <code>Data.MemPack.unpack</code>)</li>
+</ul>
+<p>The E2E test verifies that extracted bytes decode successfully as
+Conway-era <code>Cardano.Ledger.TxIn.TxIn</code> and <code>Cardano.Ledger.Babbage.TxOut.BabbageTxOut</code>.</p>
+<p>Progress is reported every 10,000 entries during extraction.</p>
+<h3 id="6-chain-sync-continuation">6. Chain Sync Continuation</h3>
+<blockquote>
+<p><strong>Warning:</strong> The current implementation replays from genesis after Mithril import.
+This negates most of the bootstrap speed benefit. See issue #32 for the fix.</p>
+</blockquote>
+<p>After importing the UTxO set, chain sync needs to continue from where the
+snapshot left off. This requires a <code>Point(slot, block_hash)</code>.</p>
+<p><strong>The Problem:</strong></p>
+<ul>
+<li>Mithril provides the <strong>slot number</strong> (from ledger state directory name)</li>
+<li>Mithril does <strong>not</strong> provide the <strong>block hash</strong></li>
+<li>Without the hash, we cannot construct a valid <code>Point</code></li>
+</ul>
+<p><strong>Current Behavior:</strong></p>
+<p>The base checkpoint is set to <code>Origin</code>, causing chain sync to replay from
+genesis. This works correctly (CSMT operations are idempotent) but is slow.</p>
+<p><strong>Planned Fix (Issue #32):</strong></p>
+<p>After Mithril import, perform a header-only chain sync scan:</p>
+<ol>
+<li>Connect to node, find intersection at Origin</li>
+<li>Scan headers until reaching the Mithril slot</li>
+<li>Extract block hash from that header</li>
+<li>Save <code>Point(slot, hash)</code> as checkpoint</li>
+<li>Disconnect and reconnect with proper checkpoint</li>
+</ol>
+<p>This adds a few seconds of header scanning but avoids replaying all blocks.</p>
+<h2 id="alternative-direct-chain-sync">Alternative: Direct Chain Sync</h2>
+<p>For environments where Mithril is not available or not desired, a direct chain sync
+approach is planned that syncs the UTxO set from the node without external dependencies.</p>
+<p>See <a href="https://github.com/cardano-scaling/cardano-utxo-csmt/issues/58">issue #58</a> for details
+and <a href="../architecture/#direct-chain-sync-planned">architecture</a> for the data flow.</p>
+<p><strong>Planned optimizations:</strong></p>
+<ol>
+<li>
+<p><strong>Era projection</strong>: Project all TxOut to Conway era before storage, simplifying
+   era handling with a unified representation</p>
+</li>
+<li>
+<p><strong>Change reduction</strong>: Buffer UTxO changes in an intermediate database and reduce
+   them before loading into the CSMT. This eliminates transient UTxOs (created and
+   consumed during sync) from ever touching the CSMT</p>
+</li>
+</ol>
+<p>These optimizations should significantly reduce the work needed to build the initial
+CSMT compared to naive block-by-block replay.</p>
+<h2 id="security-considerations">Security Considerations</h2>
+<h3 id="ed25519-ancillary-verification-implemented">Ed25519 Ancillary Verification (Implemented)</h3>
+<p>Ancillary files (ledger state) are protected by Ed25519 signature verification:</p>
+<ul>
+<li><strong>Manifest signature</strong>: The <code>ancillary_manifest.json</code> is signed by IOG's Ed25519 key</li>
+<li><strong>File integrity</strong>: Each file's SHA256 hash is verified against the manifest</li>
+<li><strong>Environment variables</strong>: Verification keys are read from <code>MITHRIL_ANCILLARY_VERIFICATION_KEY</code></li>
+</ul>
+<p>This verification runs automatically when <code>MITHRIL_ANCILLARY_VERIFICATION_KEY</code> is set. To skip it (not recommended):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>cardano-utxo<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">    </span>--mithril-bootstrap<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span>--mithril-skip-ancillary-verification<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span>...
+</span></code></pre></div>
+<p>To use a custom verification key via CLI:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>cardano-utxo<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">    </span>--mithril-bootstrap<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span>--mithril-ancillary-verification-key<span class="w"> </span><span class="s2">&quot;5b32332c37312c...&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span>...
+</span></code></pre></div>
+<h3 id="stm-certificate-chain-planned">STM Certificate Chain (Planned)</h3>
+<p>Full STM certificate chain verification for immutable files is planned.
+This will verify that snapshots are correctly signed by Cardano stake pool operators.</p>
+<p>See the <a href="mithril-stm-ffi-plan.md">Mithril STM FFI plan</a> for the implementation roadmap.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="snapshot-download-fails">Snapshot Download Fails</h3>
+<p>Check network connectivity to the aggregator:
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>curl<span class="w"> </span>-I<span class="w"> </span><span class="s2">&quot;https://aggregator.pre-release-preview.api.mithril.network/aggregator/artifact/snapshots&quot;</span>
+</span></code></pre></div></p>
+<h3 id="ledger-state-not-found">Ledger State Not Found</h3>
+<p>Ensure <code>--include-ancillary</code> is used (automatic in this implementation).
+The ledger state is in the ancillary data, not the main snapshot.</p>
+<h3 id="large-download-size">Large Download Size</h3>
+<p>Preview network ancillary data is ~400MB (tvar file ~560MB after extraction).
+Mainnet is significantly larger.
+Ensure sufficient disk space and bandwidth.</p>
+<h3 id="extraction-errors">Extraction Errors</h3>
+<p>If extraction fails with "TablesNotFound":
+- Verify the ledger state directory contains <code>tables/tvar</code>
+- Ensure the download completed successfully</p>
+<p>If extraction fails with "TablesDecodeFailed":
+- The tvar file format may have changed
+- Check for updates to ouroboros-consensus</p>
+<h3 id="bootstrap-interrupted">Bootstrap Interrupted</h3>
+<p>If the process was killed during bootstrap and you see "Incomplete bootstrap detected"
+on restart, this is normal behavior. The service will:</p>
+<ol>
+<li>Clean up partial data from the previous attempt</li>
+<li>Automatically retry the bootstrap from scratch</li>
+</ol>
+<p>No manual intervention is required.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "toc.integrate", "content.code.copy", "navigation.path"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+        <script src="../js/asciinema-player.min.js"></script>
+      
+    
+  </body>
+</html>
